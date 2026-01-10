@@ -12,19 +12,18 @@ def process_fight(detection_results_file):
     # In future extract this from an input video
     INPUT_FPS = 50
 
-    # Mininum number of frames for which delta distance needs to hold value
-    # in order for grappling to start
+    # Mininum number of frames for which delta distance needs to hold value in order for grappling to start
     MIN_GRAPPLING_TRESHOLD = 20
 
-    # Grappling distance treshold
-    DISTANCE_TRESHOLD = 150
+    # Intersection over Union threshold to determine if fighters are grappling
+    IOU_GRAPPLING_TRESHOLD = 0.2
 
     data = json.load(open(detection_results_file))
 
     # Find first frame where both fighters are visible so that velocity can be calculated
-    first_frame = next((index for index, value in enumerate(data) if len(value["detections"]) == 3), None)
-    if first_frame is None:
-        raise ValueError("No frame found with 3 detections")
+    #first_frame = next((index for index, value in enumerate(data) if len(value["detections"]) == 3), None)
+    #if first_frame is None:
+    #    raise ValueError("No frame found with 3 detections")
 
     # Delta distance is change of the distance between centers of fighters accross two frames:
     # if 0 -> fighters at the same distance as in the previous frame
@@ -40,7 +39,9 @@ def process_fight(detection_results_file):
 
     frames_spent_grappling = 0
 
-    for frame in data[600:]:
+    for frame in data:
+        print(f"---{frame["frame"]}---")
+
         red_center, blue_center = calculate_fighter_centers(frame["detections"])
 
         if red_center == (None, None) or blue_center == (None, None):
@@ -51,31 +52,35 @@ def process_fight(detection_results_file):
             # This can occur mid fight due to bad camera angles/camera operators.
             print("Current frame is invalid, skipping.")
             continue
-
+        
+        # Currently distance is not used for anything other than debug prints.
+        # TODO: Use distance to detect who initiated the grappling.
         distance = calculate_distance_between_points(*red_center, *blue_center)
 
-        print(f"---{frame["frame"]}---")
         #print(f"Red center: {red_center}, Blue center: {blue_center}")
         print(f"Distance between fighters: {distance}")
 
         # Calculate delta distance
-        if previous_distance is None:
-            delta_distance = None  # No previous frame to compare with
-        else:
-            delta_distance = distance - previous_distance
+        #if previous_distance is None:
+        #    delta_distance = None  # No previous frame to compare with
+        #else:
+        #    delta_distance = distance - previous_distance
 
         # Update previous distance for the next iteration
         previous_distance = distance
 
         # Determine and update fight state
         current_fight_state, current_fight_state_frames = determine_fight_state(
-            distance,
+            frame["detections"],
             current_fight_state_frames,
             MIN_GRAPPLING_TRESHOLD,
-            DISTANCE_TRESHOLD
+            IOU_GRAPPLING_TRESHOLD
         )
 
         if current_fight_state == FightState.GRAPPLING:
             frames_spent_grappling += 1
+            print("Fighters are grappling")
+        else:
+            print("Fighters are striking")
 
     print(f"Frames spent grappling: {frames_spent_grappling}")
