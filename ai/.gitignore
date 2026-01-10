@@ -1,0 +1,20 @@
+# Pycache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE and editor files
+.vscode/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Generated data/results used for testing
+*.mp4
