@@ -1,6 +1,6 @@
 import math
 from models.constants import LABEL_ID
-from models.fight_state import FightState
+from models.FightState import FightState
 
 def calculate_rectangle_center(x1, y1, x2, y2):
     center_x = (x1 + x2) / 2

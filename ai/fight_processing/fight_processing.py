@@ -6,7 +6,7 @@ from fight_processing.fight_processing_util import (
     determine_fight_state
 )
 
-from models.fight_state import FightState
+from models.FightState import FightState
 
 def process_fight(detection_results_file):
     # In future extract this from an input video
