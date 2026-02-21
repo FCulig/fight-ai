@@ -19,5 +19,9 @@ Thumbs.db
 # Generated data/results used for testing
 *.mp4
 
+# Ignore all pre-trained models
+yolo26n-pose.pt
+
 # Ignore all model results
 runs/
+frames/

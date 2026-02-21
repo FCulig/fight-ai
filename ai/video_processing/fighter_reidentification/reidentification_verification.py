@@ -3,6 +3,28 @@ import json
 import cv2
 
 def verify_reidentification(reid_json_path: str):
+    """
+    [DEBUG FUNCTION] Create a visualization video with fighter reidentification overlays.
+    
+    This debugging utility reads a JSON file containing reidentification results and generates
+    an MP4 video with annotated bounding boxes for each detected person. It's useful for
+    visually inspecting how well the fighter reidentification (reid) system is tracking
+    individuals across frames.
+    
+    Args:
+        reid_json_path: Path to JSON file with structure {"fps": int, "frames": [...]}
+                       Each frame contains "image_name" and "detections" with bbox_xyxy, 
+                       reid_id, and class_id (2=referee, other=fighter).
+    
+    Output:
+        Generates "reid_overlay.mp4" with colored bounding boxes:
+        - Yellow: Fighter with reid_id=0
+        - Cyan: Fighter with reid_id=1
+        - Green: Referee (class_id=2)
+        - White: Unidentified fighter
+        
+    Each box includes a label with reid_id and similarity score (if available).
+    """
     OUTPUT_MP4 = "reid_overlay.mp4"
 
     # If your JSON is {"fps":..., "frames":[...]} this reads correctly.
@@ -27,7 +49,6 @@ def verify_reidentification(reid_json_path: str):
 
     # Find first readable frame to initialize writer
     first_img = None
-    first_path = None
     for fe in frames:
         img_name = fe.get("image_name")
         
@@ -37,7 +58,6 @@ def verify_reidentification(reid_json_path: str):
         im = cv2.imread(img_name)
         if im is not None:
             first_img = im
-            #first_path = p
             break
 
     if first_img is None:
