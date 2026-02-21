@@ -51,6 +51,22 @@ def compute_iou(box_a, box_b):
     return inter_area / union_area
 
 def determine_fight_state(detections, current_fight_state_frames, min_grappling_threshold, iou_grappling_threshold):
+    """
+    Determines the current fight state (GRAPPLING or STRIKING) based on the Intersection over Union (IoU) 
+    of the fighter bounding boxes. When fighters' bounding boxes overlap significantly, it indicates a grappling 
+    state. The function tracks consecutive frames where the IoU exceeds the threshold and transitions to GRAPPLING 
+    state only after a minimum number of consecutive frames (min_grappling_threshold) are met. Otherwise, 
+    the default state is STRIKING.
+    
+    Args:
+        detections: List of detected fighters with bounding boxes
+        current_fight_state_frames: Counter for consecutive frames in current fight state
+        min_grappling_threshold: Minimum consecutive frames required to transition to GRAPPLING state
+        iou_grappling_threshold: IoU threshold above which fighters are considered to be grappling
+    
+    Returns:
+        tuple: (current_fight_state, current_fight_state_frames) - The determined fight state and frame counter
+    """
     red_fighter_bbox, blue_fighter_bbox = (None, None), (None, None)
 
     for detection in detections:
@@ -60,7 +76,7 @@ def determine_fight_state(detections, current_fight_state_frames, min_grappling_
             blue_fighter_bbox = detection["bbox_xyxy"]
 
     iou = None
-    if red_fighter_bbox is None or blue_fighter_bbox is None:
+    if red_fighter_bbox is not None and blue_fighter_bbox is not None:
         iou = compute_iou(red_fighter_bbox, blue_fighter_bbox)
 
     if iou is not None and iou > iou_grappling_threshold:

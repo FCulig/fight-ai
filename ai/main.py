@@ -17,8 +17,8 @@ video_file = args.video_input
 
 #verify_reidentification("output_reidentification.json")
 
-track_poses("runs/output_reidentification.json")
+#track_poses("runs/output_reidentification.json")
 
 #results = "output_reidentification.json"
 
-#process_fight(results)
+process_fight("runs/pose_results.json")
