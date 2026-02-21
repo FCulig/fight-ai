@@ -59,9 +59,9 @@ def determine_fight_state(detections, current_fight_state_frames, min_grappling_
         elif detection["class_id"] == LABEL_ID["fighter_blue"]:
             blue_fighter_bbox = detection["bbox_xyxy"]
 
-    iou = compute_iou(red_fighter_bbox, blue_fighter_bbox)
-
-    print(f"Fighters IoU: {iou}")
+    iou = None
+    if red_fighter_bbox is None or blue_fighter_bbox is None:
+        iou = compute_iou(red_fighter_bbox, blue_fighter_bbox)
 
     if iou is not None and iou > iou_grappling_threshold:
         current_fight_state_frames += 1

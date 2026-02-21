@@ -12,7 +12,7 @@ video_file = args.video_input
 
 #results = process_video(video_file)
 
-# track_fighters("detection_results.json")
+#track_fighters("detection_results.json")
 
 verify_reidentification("output_reidentification.json")
 

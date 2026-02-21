@@ -2,12 +2,13 @@ import os
 import cv2
 import json
 import torchreid
+from models import constants
 from models.IdentityMemory import IdentityMemory
-#from torchreid.utils import FeatureExtractor
+from models.FightState import FightState
+from fight_processing.fight_processing_util import determine_fight_state
 
 FIGHTER_CLASSES = [0, 1]
 
-# Implement based on this https://chatgpt.com/s/t_69710290eeb88191b9e9c2a9fa778966
 def track_fighters(detection_results_path: str):
     frames = json.load(open(detection_results_path))
 
@@ -32,7 +33,7 @@ def track_fighters(detection_results_path: str):
             bbox = detection["bbox_xyxy"]
             if not bbox:
                 continue
-            crop = crop_fighter(frame, bbox)
+            crop = crop_fighter(frame_image, bbox)
             if crop is None:
                 continue
             cropped_detections.append(crop)
@@ -43,8 +44,18 @@ def track_fighters(detection_results_path: str):
 
         out_frame = {"image_name": image_name, "detections": []}
         for i, d in enumerate(fighter_detections):
-            emb = features[i]
-            reid_id, sim = id_mem.assign(emb)
+            # TODO: Figure out how to transfer this data to fight processing so that same calculation
+            # is not done twice.
+            current_fight_state, _ = determine_fight_state(
+                frame["detections"],
+                0,
+                constants.MIN_GRAPPLING_TRESHOLD,
+                constants.IOU_GRAPPLING_TRESHOLD
+            )
+
+            # TODO: This is not doing much better for grappling frames
+            if current_fight_state == FightState.STRIKING:
+                reid_id, sim = id_mem.assign(features[i])
 
             out_frame["detections"].append({
                 "bbox_xyxy": d.get("bbox_xyxy"),

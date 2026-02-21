@@ -12,12 +12,6 @@ def process_fight(detection_results_file):
     # In future extract this from an input video
     INPUT_FPS = 50
 
-    # Mininum number of frames for which delta distance needs to hold value in order for grappling to start
-    MIN_GRAPPLING_TRESHOLD = 20
-
-    # Intersection over Union threshold to determine if fighters are grappling
-    IOU_GRAPPLING_TRESHOLD = 0.2
-
     data = json.load(open(detection_results_file))
 
     # Find first frame where both fighters are visible so that velocity can be calculated
