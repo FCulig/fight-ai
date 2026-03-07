@@ -1,5 +1,5 @@
-// src/pages/Player.tsx
 import { useRef, useState } from "react";
+import { useEvents } from "../hooks/useEvents";
 
 const VIDEO_PATH = "./fight.mp4";
 const FPS = 50;
@@ -9,6 +9,7 @@ export default function Player() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const { events, loading, error } = useEvents();
 
   const currentFrame = Math.floor(currentTime * FPS);
   const currentMs = Math.floor(currentTime * 1000);
@@ -91,6 +92,22 @@ export default function Player() {
         <span>Time: <strong>{currentMs}ms</strong></span>
         <span>FPS: <strong>{FPS}</strong></span>
       </div>
+
+      {/* Events */}
+      {loading && <p>Loading events...</p>}
+      {error && <p>Error: {error}</p>}
+      {events.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <h3>Events:</h3>
+          <ul>
+            {events.map(event => (
+              <li key={event.id}>
+                <strong>Frame {event.frame}</strong>: {event.description}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
