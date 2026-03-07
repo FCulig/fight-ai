@@ -1,5 +1,9 @@
 import { useRef, useState } from "react";
 import { useEvents } from "../hooks/useEvents";
+import VideoPlayer from "../components/VideoPlayer";
+import VideoControls from "../components/VideoControls";
+import FrameInfo from "../components/FrameInfo";
+import EventFeed from "../components/EventFeed";
 
 const VIDEO_PATH = "./fight.mp4";
 const FPS = 50;
@@ -33,81 +37,48 @@ export default function Player() {
     setDuration(video.duration);
   };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSeek = (time: number) => {
     const video = videoRef.current;
     if (!video) return;
-    video.currentTime = Number(e.target.value);
-    setCurrentTime(Number(e.target.value));
-  };
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${s.toString().padStart(2, "0")}`;
+    video.currentTime = time;
+    setCurrentTime(time);
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: "40px auto", padding: "0 20px" }}>
-      <video
-        ref={videoRef}
-        src={VIDEO_PATH}
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleLoadedMetadata}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        style={{ width: "100%", borderRadius: 8, background: "#000" }}
-      />
+    <div style={{ padding: "40px 20px" }}>
+      <div style={{ display: "flex", gap: "20px", maxWidth: "1400px", margin: "0 auto" }}>
+        {/* Left side - Video and controls */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <VideoPlayer
+            ref={videoRef}
+            src={VIDEO_PATH}
+            onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={handleLoadedMetadata}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+          />
 
-      {/* Controls */}
-      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
-        <button onClick={togglePlay} style={{ padding: "6px 16px" }}>
-          {isPlaying ? "Pause" : "Play"}
-        </button>
+          <VideoControls
+            isPlaying={isPlaying}
+            currentTime={currentTime}
+            duration={duration}
+            onTogglePlay={togglePlay}
+            onSeek={handleSeek}
+          />
 
-        <span style={{ fontSize: 13 }}>{formatTime(currentTime)}</span>
-
-        <input
-          type="range"
-          min={0}
-          max={duration}
-          step={0.1}
-          value={currentTime}
-          onChange={handleSeek}
-          style={{ flex: 1 }}
-        />
-
-        <span style={{ fontSize: 13 }}>{formatTime(duration)}</span>
-      </div>
-
-      {/* Frame info */}
-      <div style={{ 
-        marginTop: 8, 
-        display: "flex", 
-        gap: 20, 
-        fontSize: 12, 
-        color: "#888",
-        fontFamily: "monospace"
-      }}>
-        <span>Frame: <strong>{currentFrame}</strong></span>
-        <span>Time: <strong>{currentMs}ms</strong></span>
-        <span>FPS: <strong>{FPS}</strong></span>
-      </div>
-
-      {/* Events */}
-      {loading && <p>Loading events...</p>}
-      {error && <p>Error: {error}</p>}
-      {events.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <h3>Events:</h3>
-          <ul>
-            {events.map(event => (
-              <li key={event.id}>
-                <strong>Frame {event.frame}</strong>: {event.description}
-              </li>
-            ))}
-          </ul>
+          <FrameInfo currentFrame={currentFrame} currentMs={currentMs} fps={FPS} />
         </div>
-      )}
+
+        {/* Right side - Event feed */}
+        <div style={{ width: "320px", flexShrink: 0 }}>
+          <EventFeed
+            events={events}
+            currentFrame={currentFrame}
+            loading={loading}
+            error={error}
+          />
+        </div>
+      </div>
     </div>
   );
 }
