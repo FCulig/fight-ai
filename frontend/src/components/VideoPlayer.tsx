@@ -16,6 +16,7 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>((
     <video
       ref={ref}
       src={src}
+      type="video/mp4"
       onTimeUpdate={onTimeUpdate}
       onLoadedMetadata={onLoadedMetadata}
       onPlay={onPlay}

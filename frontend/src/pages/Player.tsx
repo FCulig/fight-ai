@@ -5,7 +5,7 @@ import VideoControls from "../components/VideoControls";
 import FrameInfo from "../components/FrameInfo";
 import EventFeed from "../components/EventFeed";
 
-const VIDEO_PATH = "./fight.mp4";
+const VIDEO_PATH = "/fight.mp4";
 const FPS = 50;
 
 export default function Player() {
