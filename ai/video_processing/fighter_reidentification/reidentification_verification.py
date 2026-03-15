@@ -32,7 +32,6 @@ def verify_reidentification(reid_json_path: str):
     fps = int(data.get("fps", 50))
     frames = data["frames"]
 
-    # Colors (BGR). Change if you want.
     COLOR_FIGHTER_0 = (0, 255, 255)   # id 0
     COLOR_FIGHTER_1 = (255, 255, 0)   # id 1
     COLOR_REFEREE   = (0, 255, 0)
@@ -40,7 +39,7 @@ def verify_reidentification(reid_json_path: str):
     def color_for(det):
         if det.get("class_id") == 2:   # referee
             return COLOR_REFEREE
-        rid = det.get("reid_id", None)
+        rid = det.get("class_id", None)
         if rid == 0:
             return COLOR_FIGHTER_0
         if rid == 1:
@@ -87,7 +86,7 @@ def verify_reidentification(reid_json_path: str):
         if cls == 2:
             label = "ref"
         else:
-            rid = det.get("reid_id", None)
+            rid = det.get("class_id", None)
             sim = det.get("sim", None)
             if rid is None:
                 label = "fighter"

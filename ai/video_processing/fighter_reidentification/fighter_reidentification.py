@@ -44,30 +44,29 @@ def track_fighters(detection_results_path: str):
 
         out_frame = {"image_name": image_name, "detections": []}
         for i, d in enumerate(fighter_detections):
-            # TODO: Figure out how to transfer this data to fight processing so that same calculation
-            # is not done twice.
-            current_fight_state, _ = determine_fight_state(
-                frame["detections"],
-                0,
-                constants.MIN_GRAPPLING_TRESHOLD,
-                constants.IOU_GRAPPLING_TRESHOLD
-            )
+            # TODO: Figure out how to not track fighters for reidentification when they are grappling
+            #current_fight_state, _ = determine_fight_state(
+            #    frame["detections"],
+            #    0,
+            #    constants.MIN_GRAPPLING_TRESHOLD,
+            #    constants.DISTANCE_GRAPPLING_TRESHOLD
+            #)
 
             # TODO: This is not doing much better for grappling frames
-            if current_fight_state == FightState.STRIKING:
-                reid_id, sim = id_mem.assign(features[i])
+            #if current_fight_state == FightState.STRIKING:
+            #    reid_id, sim = id_mem.assign(features[i])
 
+            reid_id, sim = id_mem.assign(features[i])
             out_frame["detections"].append({
                 "bbox_xyxy": d.get("bbox_xyxy"),
                 "confidence": d.get("confidence"),
-                "class_id": d.get("class_id"),
-                "reid_id": int(reid_id),
+                "class_id": int(reid_id),
                 "sim": float(sim)
             })
         
         output["frames"].append(out_frame)
 
-        with open("output_reidentification.json", "w") as f:
+        with open("runs/output_reidentification.json", "w") as f:
             json.dump(output, f, indent=2)
 
 

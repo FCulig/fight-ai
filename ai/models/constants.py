@@ -5,7 +5,7 @@ LABEL_ID = {
 }
 
 # Mininum number of frames for which delta distance needs to hold value in order for grappling to start
-MIN_GRAPPLING_TRESHOLD = 20
+MIN_GRAPPLING_THRESHOLD = 3
 
-# Intersection over Union threshold to determine if fighters are grappling
-IOU_GRAPPLING_TRESHOLD = 0.2
+# Distance threshold to determine if fighters are grappling
+DISTANCE_GRAPPLING_THRESHOLD = 20

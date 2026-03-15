@@ -24,7 +24,7 @@ def save_results_to_json(results):
             frame_data["detections"].append(detection)
         output.append(frame_data)
     
-    OUTPUT_JSON = "detection_results.json"
+    OUTPUT_JSON = "runs/detection_results.json"
     with open(OUTPUT_JSON, "w") as f:
         json.dump(output, f)
 

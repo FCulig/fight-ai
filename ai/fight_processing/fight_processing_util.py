@@ -1,25 +1,46 @@
-import math
+import numpy as np
 from models.constants import LABEL_ID
 from models.FightState import FightState
 
-def calculate_rectangle_center(x1, y1, x2, y2):
-    center_x = (x1 + x2) / 2
-    center_y = (y1 + y2) / 2
-    return center_x, center_y
+def is_frame_valid(detections):
+    has_red_fighter = any(d.get('class_id') == 0 for d in detections)
+    has_blue_fighter = any(d.get('class_id') == 1 for d in detections)
+    has_all_keypoints = all(d["keypoints"] is not None and len(d["keypoints"]) >= 17 for d in detections)
 
-def calculate_distance_between_points(x1, y1, x2, y2):
-    return math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+    #print(f"Frame validation: has_red_fighter={has_red_fighter}, has_blue_fighter={has_blue_fighter}, has_all_keypoints={has_all_keypoints}")
 
-def calculate_fighter_centers(detections):
-  red_center, blue_center = (None, None), (None, None)
+    return has_red_fighter and has_blue_fighter and has_all_keypoints
 
-  for detection in detections:
-    if detection["class_id"] == LABEL_ID["fighter_red"]:
-      red_center = calculate_rectangle_center(*detection["bbox_xyxy"])
-    elif detection["class_id"] == LABEL_ID["fighter_blue"]:
-      blue_center = calculate_rectangle_center(*detection["bbox_xyxy"])
+def get_torso_rectangle(keypoints):
+    """Returns (x1, y1, x2, y2) torso rectangle from shoulders and hips"""
+    indices = [5, 6, 11, 12]  # left shoulder, right shoulder, left hip, right hip
+    
+    valid_points = [keypoints[i] for i in indices]
+    
+    if len(valid_points) < 2:  # need at least 2 points to form a rectangle
+        return None
+    
+    points = np.array(valid_points)
+    x1 = points[:, 0].min()
+    y1 = points[:, 1].min()
+    x2 = points[:, 0].max()
+    y2 = points[:, 1].max()
+    
+    return (x1, y1, x2, y2)
 
-  return red_center, blue_center
+def calculate_distance_between_fighters(rect1, rect2):
+    if not rect1 or not rect2:
+        print("One or both fighters are missing bounding boxes, cannot calculate distance.")
+        return float('inf')
+    
+    x1_min, y1_min, x1_max, y1_max = rect1
+    x2_min, y2_min, x2_max, y2_max = rect2
+    
+    # distance in x and y axes separately
+    dx = max(0, max(x1_min, x2_min) - min(x1_max, x2_max))
+    dy = max(0, max(y1_min, y2_min) - min(y1_max, y2_max))
+    
+    return np.sqrt(dx**2 + dy**2)  # 0 if rectangles overlap
 
 def compute_iou(box_a, box_b):
     """
@@ -50,7 +71,7 @@ def compute_iou(box_a, box_b):
 
     return inter_area / union_area
 
-def determine_fight_state(detections, current_fight_state_frames, min_grappling_threshold, iou_grappling_threshold):
+def determine_fight_state(detections, grappling_frames, striking_frames, current_fight_state, min_frames_threshold, distance_grappling_threshold):
     """
     Determines the current fight state (GRAPPLING or STRIKING) based on the Intersection over Union (IoU) 
     of the fighter bounding boxes. When fighters' bounding boxes overlap significantly, it indicates a grappling 
@@ -67,26 +88,33 @@ def determine_fight_state(detections, current_fight_state_frames, min_grappling_
     Returns:
         tuple: (current_fight_state, current_fight_state_frames) - The determined fight state and frame counter
     """
-    red_fighter_bbox, blue_fighter_bbox = (None, None), (None, None)
+    red_fighter_keypoints, blue_fighter_keypoints = None, None
 
     for detection in detections:
         if detection["class_id"] == LABEL_ID["fighter_red"]:
-            red_fighter_bbox = detection["bbox_xyxy"]
+            red_fighter_keypoints = detection["keypoints"]
         elif detection["class_id"] == LABEL_ID["fighter_blue"]:
-            blue_fighter_bbox = detection["bbox_xyxy"]
+            blue_fighter_keypoints = detection["keypoints"]
 
-    iou = None
-    if red_fighter_bbox is not None and blue_fighter_bbox is not None:
-        iou = compute_iou(red_fighter_bbox, blue_fighter_bbox)
+    distance_between_fighters = None
+    if red_fighter_keypoints is not None and blue_fighter_keypoints is not None:
+        red_torso = get_torso_rectangle(red_fighter_keypoints)
+        blue_torso = get_torso_rectangle(blue_fighter_keypoints)
+        distance_between_fighters = calculate_distance_between_fighters(red_torso, blue_torso)
 
-    if iou is not None and iou > iou_grappling_threshold:
-        current_fight_state_frames += 1
-    else:
-        current_fight_state_frames = 0
+    if distance_between_fighters is not None:
+        print(f"Distance between fighters: {distance_between_fighters:.2f}")
+        if distance_between_fighters < distance_grappling_threshold:
+            grappling_frames += 1
+            striking_frames = 0
+        else:
+            striking_frames += 1
+            grappling_frames = 0
+    # if None, leave both counters unchanged
 
-    # In order to change the fight state, fighters need to be in that frame for a min_grappling_threshold number of frames
-    if current_fight_state_frames >= min_grappling_threshold:
+    if grappling_frames >= min_frames_threshold:
         current_fight_state = FightState.GRAPPLING
-    else:
+    elif striking_frames >= min_frames_threshold:
         current_fight_state = FightState.STRIKING
-    return current_fight_state, current_fight_state_frames
+
+    return current_fight_state, grappling_frames, striking_frames
