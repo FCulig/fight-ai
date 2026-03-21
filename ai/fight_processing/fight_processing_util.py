@@ -1,5 +1,6 @@
 import numpy as np
-from models.constants import LABEL_ID
+from collections import deque
+from models.constants import LABEL_ID, MIN_HIP_DROP_THRESHOLD
 from models.FightState import FightState
 
 def is_frame_valid(detections):
@@ -71,6 +72,43 @@ def compute_iou(box_a, box_b):
 
     return inter_area / union_area
 
+def get_hip_height(keypoints):
+    """Returns average y-coordinate of left and right hips (kp 11, 12). Higher value = lower on screen."""
+    left_hip = keypoints[11]
+    right_hip = keypoints[12]
+    return (left_hip[1] + right_hip[1]) / 2.0
+
+
+def determine_takedown_initiator(hip_history):
+    """
+    Determines which fighter initiated a takedown by comparing hip height change
+    over the buffered frames leading up to grappling state entry.
+
+    Args:
+        hip_history: deque of dicts with keys 'red' and 'blue', each a hip y-coordinate.
+                     Most recent frame is last.
+
+    Returns:
+        'fighter_red', 'fighter_blue', or None if inconclusive.
+    """
+    if len(hip_history) < 2:
+        return None
+
+    oldest = hip_history[0]
+    newest = hip_history[-1]
+
+    red_drop = newest["red"] - oldest["red"]   # positive = hips moved down (being taken down)
+    blue_drop = newest["blue"] - oldest["blue"]
+
+    # The fighter with the larger hip drop is the one being taken down — the other initiated
+    if red_drop - blue_drop > MIN_HIP_DROP_THRESHOLD:
+        return "fighter_blue"  # red was taken down, blue initiated
+    elif blue_drop - red_drop > MIN_HIP_DROP_THRESHOLD:
+        return "fighter_red"   # blue was taken down, red initiated
+
+    return None  # inconclusive — could be a clinch or both dropped
+
+
 def determine_fight_state(detections, grappling_frames, striking_frames, current_fight_state, min_frames_threshold, distance_grappling_threshold):
     """
     Determines the current fight state (GRAPPLING or STRIKING) based on the Intersection over Union (IoU) 
@@ -103,7 +141,6 @@ def determine_fight_state(detections, grappling_frames, striking_frames, current
         distance_between_fighters = calculate_distance_between_fighters(red_torso, blue_torso)
 
     if distance_between_fighters is not None:
-        print(f"Distance between fighters: {distance_between_fighters:.2f}")
         if distance_between_fighters < distance_grappling_threshold:
             grappling_frames += 1
             striking_frames = 0

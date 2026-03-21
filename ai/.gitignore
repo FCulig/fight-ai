@@ -26,3 +26,5 @@ yolo26n-pose.pt
 # Ignore all model results
 runs/
 frames/
+
+.claude/

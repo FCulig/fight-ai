@@ -9,3 +9,9 @@ MIN_GRAPPLING_THRESHOLD = 3
 
 # Distance threshold to determine if fighters are grappling
 DISTANCE_GRAPPLING_THRESHOLD = 20
+
+# Number of frames to look back when determining takedown initiator
+TAKEDOWN_LOOKBACK_FRAMES = 15
+
+# Minimum hip drop (pixels) for a fighter to be considered the one being taken down
+MIN_HIP_DROP_THRESHOLD = 30
