@@ -109,3 +109,7 @@ CREATE TABLE fight_events (
 - Transitions to `GRAPPLING` when torso distance < threshold for N consecutive frames
 - If a fighter is not visible (missing keypoints), the current state is held — no reset
 - State changes are written to the DB with the frame number
+
+## TODO
+
+- [ ] **Automate model weight distribution** — model weights (`weights.pt`, `yolo26x-pose.pt`) are currently uploaded manually on each deployment. Implement a download script (e.g. `download_models.py`) that fetches weights from cloud storage (S3, HuggingFace Hub, etc.) so setup can be fully automated. Add `*.pt` to `.gitignore` once this is in place.

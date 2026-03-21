@@ -21,7 +21,7 @@ Thumbs.db
 *.mp4
 
 # Ignore all pre-trained models
-yolo26n-pose.pt
+yolo26x-pose.pt
 
 # Ignore all model results
 runs/
