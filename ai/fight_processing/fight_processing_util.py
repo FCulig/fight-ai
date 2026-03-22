@@ -1,6 +1,18 @@
 import numpy as np
 from collections import deque
-from models.constants import LABEL_ID, MIN_HIP_DROP_THRESHOLD
+from models.constants import (
+    LABEL_ID,
+    MIN_HIP_DROP_THRESHOLD,
+    PUNCH_VELOCITY_THRESHOLD,
+    KICK_VELOCITY_THRESHOLD,
+    ARM_EXTENSION_THRESHOLD,
+    LEG_EXTENSION_THRESHOLD,
+    STRIKE_COOLDOWN_FRAMES,
+    STRIKE_EXTENSION_FRAMES,
+    HEAD_CONTACT_THRESHOLD,
+    TORSO_CONTACT_THRESHOLD,
+    LEG_CONTACT_THRESHOLD,
+)
 from models.FightState import FightState
 
 def is_frame_valid(detections):
@@ -107,6 +119,152 @@ def determine_takedown_initiator(hip_history):
         return "fighter_red"   # blue was taken down, red initiated
 
     return None  # inconclusive — could be a clinch or both dropped
+
+
+def get_head_center(keypoints):
+    """Returns the average position of nose (0), left ear (3), right ear (4)."""
+    pts = np.array([keypoints[0][:2], keypoints[3][:2], keypoints[4][:2]])
+    return pts.mean(axis=0)
+
+
+def point_to_segment_distance(p, a, b):
+    """Returns the shortest distance from point p to the line segment a-b."""
+    p, a, b = np.array(p[:2]), np.array(a[:2]), np.array(b[:2])
+    ab = b - a
+    t = np.clip(np.dot(p - a, ab) / (np.dot(ab, ab) + 1e-6), 0.0, 1.0)
+    return np.linalg.norm(p - (a + t * ab))
+
+
+def distance_to_rect(p, rect):
+    """Returns distance from point p to the rectangle. Returns 0 if p is inside."""
+    x, y = p[0], p[1]
+    x1, y1, x2, y2 = rect
+    dx = max(x1 - x, 0, x - x2)
+    dy = max(y1 - y, 0, y - y2)
+    return np.sqrt(dx**2 + dy**2)
+
+
+def compute_angle(a, b, c):
+    """Returns the angle in degrees at point b, formed by the a-b-c triplet."""
+    a, b, c = np.array(a[:2]), np.array(b[:2]), np.array(c[:2])
+    ba = a - b
+    bc = c - b
+    cos_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-6)
+    return np.degrees(np.arccos(np.clip(cos_angle, -1.0, 1.0)))
+
+
+def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state):
+    """
+    Detects landed strikes by combining three filters:
+      1. Limb extension angle above threshold (strike is being thrown)
+      2. Torso-relative limb velocity above threshold (removes locomotion)
+      3. End-effector proximity to an opponent body zone (confirms contact)
+
+    Contact zones checked per limb type (in priority order):
+      Wrist  → head (punch_head), torso (punch_body)
+      Ankle  → head (head_kick),  torso (middle_kick), thigh segment (low_kick)
+
+    strike_state is updated in place. Structure:
+        {
+            "red":  { "left_punch": {"cooldown": 0, "extension_frames": 0}, ... },
+            "blue": { ... }
+        }
+
+    Args:
+        red_kp / blue_kp:           Current frame keypoints (17-pt COCO, [x, y, conf])
+        prev_red_kp / prev_blue_kp: Previous frame keypoints
+        strike_state:               Per-fighter, per-limb state dict (mutated in place)
+
+    Returns:
+        List of dicts: [{"fighter": "fighter_red"|"fighter_blue", "type": <event_type>}, ...]
+    """
+    strikes = []
+
+    red_center       = np.array([(red_kp[5][0]       + red_kp[6][0])       / 2, (red_kp[5][1]       + red_kp[6][1])       / 2])
+    blue_center      = np.array([(blue_kp[5][0]      + blue_kp[6][0])      / 2, (blue_kp[5][1]      + blue_kp[6][1])      / 2])
+    prev_red_center  = np.array([(prev_red_kp[5][0]  + prev_red_kp[6][0])  / 2, (prev_red_kp[5][1]  + prev_red_kp[6][1])  / 2])
+    prev_blue_center = np.array([(prev_blue_kp[5][0] + prev_blue_kp[6][0]) / 2, (prev_blue_kp[5][1] + prev_blue_kp[6][1]) / 2])
+
+    red_torso_vel  = red_center  - prev_red_center
+    blue_torso_vel = blue_center - prev_blue_center
+
+    red_torso_rect  = get_torso_rectangle(red_kp)
+    blue_torso_rect = get_torso_rectangle(blue_kp)
+    red_head        = get_head_center(red_kp)
+    blue_head       = get_head_center(blue_kp)
+
+    checks = [
+        ("fighter_red",  red_kp,  prev_red_kp,  red_torso_vel,  blue_head, blue_torso_rect, blue_kp,  strike_state["red"]),
+        ("fighter_blue", blue_kp, prev_blue_kp, blue_torso_vel, red_head,  red_torso_rect,  red_kp,   strike_state["blue"]),
+    ]
+
+    for fighter_label, kp, prev_kp, torso_vel, opp_head, opp_torso_rect, opp_kp, limb_state in checks:
+
+        # (proximal, mid, distal, limb_key, vel_thresh, angle_thresh, is_kick)
+        limb_checks = [
+            (5,  7,  9,  "left_punch",  PUNCH_VELOCITY_THRESHOLD, ARM_EXTENSION_THRESHOLD, False),
+            (6,  8,  10, "right_punch", PUNCH_VELOCITY_THRESHOLD, ARM_EXTENSION_THRESHOLD, False),
+            (11, 13, 15, "left_kick",   KICK_VELOCITY_THRESHOLD,  LEG_EXTENSION_THRESHOLD,  True),
+            (12, 14, 16, "right_kick",  KICK_VELOCITY_THRESHOLD,  LEG_EXTENSION_THRESHOLD,  True),
+        ]
+
+        for proximal, mid, distal, limb_key, vel_thresh, angle_thresh, is_kick in limb_checks:
+            state = limb_state[limb_key]
+
+            if state["cooldown"] > 0:
+                state["cooldown"] -= 1
+                state["extension_frames"] = 0
+                continue
+
+            # Pre-filter: extension angle + torso-relative velocity
+            angle = compute_angle(kp[proximal], kp[mid], kp[distal])
+            abs_vel = np.array(kp[distal][:2]) - np.array(prev_kp[distal][:2])
+            relative_vel = abs_vel - torso_vel
+            speed = np.linalg.norm(relative_vel)
+
+            if angle > angle_thresh and speed > vel_thresh:
+                state["extension_frames"] += 1
+            else:
+                state["extension_frames"] = 0
+                continue
+
+            if state["extension_frames"] < STRIKE_EXTENSION_FRAMES:
+                continue
+
+            # Contact check: find which zone the end-effector is closest to
+            end = np.array(kp[distal][:2])
+            strike_type = None
+
+            if is_kick:
+                # Left and right thigh segments of the opponent
+                left_thigh_dist  = point_to_segment_distance(end, opp_kp[11], opp_kp[13])
+                right_thigh_dist = point_to_segment_distance(end, opp_kp[12], opp_kp[14])
+                thigh_dist = min(left_thigh_dist, right_thigh_dist)
+
+                head_dist  = np.linalg.norm(end - opp_head)
+                torso_dist = distance_to_rect(end, opp_torso_rect) if opp_torso_rect else float('inf')
+
+                if head_dist < HEAD_CONTACT_THRESHOLD:
+                    strike_type = "head_kick"
+                elif torso_dist < TORSO_CONTACT_THRESHOLD:
+                    strike_type = "middle_kick"
+                elif thigh_dist < LEG_CONTACT_THRESHOLD:
+                    strike_type = "low_kick"
+            else:
+                head_dist  = np.linalg.norm(end - opp_head)
+                torso_dist = distance_to_rect(end, opp_torso_rect) if opp_torso_rect else float('inf')
+
+                if head_dist < HEAD_CONTACT_THRESHOLD:
+                    strike_type = "punch_head"
+                elif torso_dist < TORSO_CONTACT_THRESHOLD:
+                    strike_type = "punch_body"
+
+            if strike_type:
+                strikes.append({"fighter": fighter_label, "type": strike_type})
+                state["cooldown"] = STRIKE_COOLDOWN_FRAMES
+                state["extension_frames"] = 0
+
+    return strikes
 
 
 def determine_fight_state(detections, grappling_frames, striking_frames, current_fight_state, min_frames_threshold, distance_grappling_threshold):

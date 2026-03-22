@@ -5,6 +5,7 @@ from sqlalchemy import text
 from database import SessionLocal
 
 from fight_processing.fight_processing_util import (
+    detect_strikes,
     determine_fight_state,
     determine_takedown_initiator,
     get_hip_height,
@@ -36,13 +37,24 @@ def process_fight(detection_results_file):
     # Rolling buffer of hip heights for takedown initiator detection
     hip_history = deque(maxlen=TAKEDOWN_LOOKBACK_FRAMES)
 
+    # Previous frame keypoints for velocity-based strike detection
+    prev_red_kp, prev_blue_kp = None, None
+
+    # Per-fighter, per-limb state for strike detection (cooldown + extension frame counter)
+    def _limb_state():
+        return {"cooldown": 0, "extension_frames": 0}
+
+    strike_state = {
+        "red":  {"left_punch": _limb_state(), "right_punch": _limb_state(), "left_kick": _limb_state(), "right_kick": _limb_state()},
+        "blue": {"left_punch": _limb_state(), "right_punch": _limb_state(), "left_kick": _limb_state(), "right_kick": _limb_state()},
+    }
+
     for (index, frame) in enumerate(data["frames"]):
         if not is_frame_valid(frame["detections"]):
             if current_fight_state == FightState.GRAPPLING:
                 frames_spent_grappling += 1
             continue
 
-        # Track hip heights each valid frame for takedown detection
         red_kp, blue_kp = None, None
         for d in frame["detections"]:
             if d["class_id"] == 0:
@@ -55,6 +67,18 @@ def process_fight(detection_results_file):
                 "red": get_hip_height(red_kp),
                 "blue": get_hip_height(blue_kp)
             })
+
+            if current_fight_state == FightState.STRIKING and prev_red_kp and prev_blue_kp:
+                for strike in detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state):
+                    description = f"{strike['fighter']} threw a {strike['type']}"
+                    db.execute(
+                        text("INSERT INTO fight_events (frame, description) VALUES (:frame, :description)"),
+                        {"frame": index + 1, "description": description}
+                    )
+                    print(description + f" at frame {index + 1}")
+
+            prev_red_kp  = red_kp
+            prev_blue_kp = blue_kp
 
         current_fight_state, grappling_frames, striking_frames = determine_fight_state(
             frame["detections"],
@@ -77,13 +101,13 @@ def process_fight(detection_results_file):
                     description += f", takedown initiated by {initiator}"
 
             # TODO: use db file/class to insert via function, do not hard code SQL query here
-            #db.execute(
-            #    text("""
-            #    INSERT INTO fight_events (frame, description)
-            #    VALUES (:frame, :description)
-            #    """),
-            #    {"frame": index + 1, "description": description}
-            #)
+            db.execute(
+                text("""
+                INSERT INTO fight_events (frame, description)
+                VALUES (:frame, :description)
+                """),
+                {"frame": index + 1, "description": description}
+            )
             print(description + f" at frame {index + 1}")
             previous_fight_state = current_fight_state
 
