@@ -37,6 +37,16 @@ export default function Player() {
     setDuration(video.duration);
   };
 
+  const stepFrame = (delta: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.pause();
+    setIsPlaying(false);
+    const newTime = Math.min(Math.max(video.currentTime + delta / FPS, 0), video.duration);
+    video.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
   const handleSeek = (time: number) => {
     const video = videoRef.current;
     if (!video) return;
@@ -64,6 +74,8 @@ export default function Player() {
             duration={duration}
             onTogglePlay={togglePlay}
             onSeek={handleSeek}
+            onStepBackward={() => stepFrame(-1)}
+            onStepForward={() => stepFrame(1)}
           />
 
           <FrameInfo currentFrame={currentFrame} currentMs={currentMs} fps={FPS} />
