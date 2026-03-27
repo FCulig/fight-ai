@@ -113,3 +113,5 @@ CREATE TABLE fight_events (
 ## TODO
 
 - [ ] **Automate model weight distribution** — model weights (`weights.pt`, `yolo26x-pose.pt`) are currently uploaded manually on each deployment. Implement a download script (e.g. `download_models.py`) that fetches weights from cloud storage (S3, HuggingFace Hub, etc.) so setup can be fully automated. Add `*.pt` to `.gitignore` once this is in place.
+
+- [ ] **Allow for filtering of fight events** - implement event category or something like that in order to allow for filter events on the event feed. This could also be used for easier statistics.

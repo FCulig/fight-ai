@@ -8,12 +8,12 @@ export default function FrameInfo({ currentFrame, currentMs, fps }: FrameInfoPro
   return (
     <div
       style={{
-        marginTop: 8,
         display: 'flex',
         gap: 20,
-        fontSize: 12,
-        color: '#888',
-        fontFamily: 'monospace',
+        fontSize: 11,
+        color: 'rgba(255,255,255,0.22)',
+        fontVariantNumeric: 'tabular-nums',
+        padding: '2px 4px',
       }}
     >
       <span>
