@@ -2,10 +2,7 @@ import os
 import cv2
 import json
 import torchreid
-from models import constants
 from models.IdentityMemory import IdentityMemory
-from models.FightState import FightState
-from fight_processing.fight_processing_util import determine_fight_state
 
 FIGHTER_CLASSES = [0, 1]
 

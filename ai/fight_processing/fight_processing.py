@@ -19,8 +19,8 @@ from models.constants import (
     TAKEDOWN_LOOKBACK_FRAMES
 )
 
-def process_fight(detection_results_file):
-    db = SessionLocal()
+def process_fight(detection_results_file, save_to_db: bool = True):
+    db = SessionLocal() if save_to_db else None
     data = json.load(open(detection_results_file))
 
     # Each fight/round starts in standup
@@ -71,10 +71,11 @@ def process_fight(detection_results_file):
             if current_fight_state == FightState.STRIKING and prev_red_kp and prev_blue_kp:
                 for strike in detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state):
                     description = f"{strike['fighter']} threw a {strike['type']}"
-                    db.execute(
-                        text("INSERT INTO fight_events (frame, description) VALUES (:frame, :description)"),
-                        {"frame": index + 1, "description": description}
-                    )
+                    if db is not None:
+                        db.execute(
+                            text("INSERT INTO fight_events (frame, description) VALUES (:frame, :description)"),
+                            {"frame": index + 1, "description": description}
+                        )
                     print(description + f" at frame {index + 1}")
 
             prev_red_kp  = red_kp
@@ -100,17 +101,19 @@ def process_fight(detection_results_file):
                 if initiator:
                     description += f", takedown initiated by {initiator}"
 
-            # TODO: use db file/class to insert via function, do not hard code SQL query here
-            db.execute(
-                text("""
-                INSERT INTO fight_events (frame, description)
-                VALUES (:frame, :description)
-                """),
-                {"frame": index + 1, "description": description}
-            )
+            if db is not None:
+                # TODO: use db file/class to insert via function, do not hard code SQL query here
+                db.execute(
+                    text("""
+                    INSERT INTO fight_events (frame, description)
+                    VALUES (:frame, :description)
+                    """),
+                    {"frame": index + 1, "description": description}
+                )
             print(description + f" at frame {index + 1}")
             previous_fight_state = current_fight_state
 
     print(f"Frames spent grappling: {frames_spent_grappling}")
-    db.commit()
-    db.close()
+    if db is not None:
+        db.commit()
+        db.close()
