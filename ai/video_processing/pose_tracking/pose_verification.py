@@ -1,5 +1,9 @@
 import json
 import cv2
+from fight_processing.fight_processing_util import determine_fight_state
+from fight_processing.fight_processing_util import is_frame_valid
+from models.FightState import FightState
+from models.constants import MIN_GRAPPLING_THRESHOLD, DISTANCE_GRAPPLING_THRESHOLD
 
 
 def verify_pose_tracking(pose_json_path: str):
@@ -108,11 +112,11 @@ def verify_pose_tracking(pose_json_path: str):
             if 0 <= x < w and 0 <= y < h:
                 cv2.circle(frame_bgr, (x, y), 3, color_for(det), -1)
 
-        # Label
-        cid = det.get("class_id")
-        label = f"id={cid}" if cid is not None else "person"
-        ty = max(15, int(round(keypoints[0][1])) - 6) if keypoints and len(keypoints) > 0 else 15
-        cv2.putText(frame_bgr, label, (10, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_for(det), 1, cv2.LINE_AA)
+    COLOR_GRAPPLING = (255, 0, 255)  # purple in BGR
+
+    current_fight_state = FightState.STRIKING
+    grappling_frames = 0
+    striking_frames = 0
 
     written = 0
     missing = 0
@@ -123,15 +127,41 @@ def verify_pose_tracking(pose_json_path: str):
             missing += 1
             continue
 
-        frame = cv2.imread(img_name)
-        if frame is None:
+        frame_img = cv2.imread(img_name)
+        if frame_img is None:
             missing += 1
             continue
 
-        for det in fe.get("detections", []):
-            draw_pose(frame, det)
+        detections = fe.get("detections", [])
 
-        writer.write(frame)
+        if is_frame_valid(detections):
+            current_fight_state, grappling_frames, striking_frames = determine_fight_state(
+                detections,
+                grappling_frames,
+                striking_frames,
+                current_fight_state,
+                MIN_GRAPPLING_THRESHOLD,
+                DISTANCE_GRAPPLING_THRESHOLD,
+            )
+
+        if current_fight_state == FightState.GRAPPLING:
+            # Compute union bbox over both fighters (class_id 0 and 1 only)
+            fighter_dets = [d for d in detections if d.get("class_id") in (0, 1) and d.get("bbox_xyxy")]
+            if fighter_dets:
+                xs1 = [d["bbox_xyxy"][0] for d in fighter_dets]
+                ys1 = [d["bbox_xyxy"][1] for d in fighter_dets]
+                xs2 = [d["bbox_xyxy"][2] for d in fighter_dets]
+                ys2 = [d["bbox_xyxy"][3] for d in fighter_dets]
+                ux1, uy1 = int(min(xs1)), int(min(ys1))
+                ux2, uy2 = int(max(xs2)), int(max(ys2))
+                cv2.rectangle(frame_img, (ux1, uy1), (ux2, uy2), COLOR_GRAPPLING, 3)
+                cv2.putText(frame_img, "GRAPPLING", (ux1, max(15, uy1 - 8)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_GRAPPLING, 2, cv2.LINE_AA)
+        else:
+            for det in detections:
+                draw_pose(frame_img, det)
+
+        writer.write(frame_img)
         written += 1
 
     writer.release()

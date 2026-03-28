@@ -21,6 +21,6 @@ video_file = args.video_input
 
 #track_poses("runs/output_reidentification.json")
 
-#verify_pose_tracking("runs/pose_results.json")
+verify_pose_tracking("runs/pose_results.json")
 
-process_fight("runs/pose_results.json", save_to_db=not args.no_db)
+#process_fight("runs/pose_results.json", save_to_db=not args.no_db)
