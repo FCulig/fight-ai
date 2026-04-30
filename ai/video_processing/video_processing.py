@@ -3,7 +3,7 @@ from ultralytics import YOLO
 
 def process_video(input_path: str):
     model = YOLO("./video_processing/weights.pt")
-    results = model.predict(source=input_path, conf=0.25, save=False, stream=True)
+    results = model.predict(source=input_path, conf=0.25, save=False, stream=True, device='cuda', batch=16)
     return save_results_to_json(results)
 
 def save_results_to_json(results):

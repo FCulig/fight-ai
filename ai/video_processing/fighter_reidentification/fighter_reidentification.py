@@ -11,7 +11,7 @@ def track_fighters(detection_results_path: str):
 
     extractor = torchreid.utils.FeatureExtractor(
         model_name='osnet_x1_0',
-        device='cpu'
+        device='cuda'
     )
 
     id_mem = IdentityMemory()
@@ -63,8 +63,8 @@ def track_fighters(detection_results_path: str):
         
         output["frames"].append(out_frame)
 
-        with open("runs/output_reidentification.json", "w") as f:
-            json.dump(output, f, indent=2)
+    with open("runs/output_reidentification.json", "w") as f:
+        json.dump(output, f, indent=2)
 
 
 def crop_fighter(frame_bgr, bbox_xyxy, pad=0.1):
