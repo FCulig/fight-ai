@@ -20,6 +20,28 @@ Raw video → YOLO fighter detection → ReID tracking → Pose estimation → G
 4. **Fight State Detection** (`fight_processing/`)
    Torso rectangles (built from shoulder/hip keypoints) are compared per frame. When fighters' torsos are within a distance threshold for 3+ consecutive frames, the state transitions to `GRAPPLING`. State changes are written to PostgreSQL.
 
+## Full-Fight Upload Processing
+
+For end-user uploads of complete fight videos (including walkouts and multiple rounds), the system can automatically detect fight start/end and split into rounds.
+
+### New Pipeline Steps
+
+1. **Fight Segmentation** (`video_processing/fight_segmentation.py`)
+   Analyzes detection results to identify stable fight segments and split into rounds. Rejects trash uploads based on quality metrics.
+
+2. Then proceed with the existing ReID, Pose, and Fight Processing per round.
+
+### Usage
+
+```bash
+# Segment a full fight video
+python main.py your_fight.mp4 --segment
+
+# This outputs round frame ranges and quality check
+```
+
+Trim each round manually or automatically, then process each as a trimmed round clip.
+
 ## Project Structure
 
 ```

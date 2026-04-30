@@ -28,3 +28,12 @@ STRIKE_EXTENSION_FRAMES = 2    # consecutive frames angle must be held to confir
 HEAD_CONTACT_THRESHOLD = 50
 TORSO_CONTACT_THRESHOLD = 60
 LEG_CONTACT_THRESHOLD = 50
+
+# Fight segmentation thresholds
+MIN_FIGHT_START_FRAMES = 10      # consecutive frames with both fighters to start fight
+MIN_FIGHT_END_GAP_FRAMES = 450   # consecutive invalid frames to end fight
+MIN_ROUND_GAP_FRAMES = 450       # consecutive frames of low engagement to split rounds
+ROUND_ENGAGEMENT_DISTANCE = 800  # horizontal center distance threshold for engagement
+MIN_ROUND_LENGTH_FRAMES = 60     # minimum frames per round
+MIN_VALID_FRAME_RATIO = 0.2      # minimum fraction of valid frames
+MIN_FIGHT_DURATION_FRAMES = 120  # minimum total fight duration in frames
