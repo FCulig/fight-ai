@@ -22,42 +22,102 @@ Raw video → YOLO fighter detection → ReID tracking → Pose estimation → G
 
 ## Full-Fight Upload Processing
 
-For end-user uploads of complete fight videos (including walkouts and multiple rounds), the system can automatically detect fight start/end and split into rounds.
+For end-user uploads of complete fight videos (including walkouts and multiple rounds), the system automatically detects fight start/end and splits into rounds using two fused signals:
 
-### New Pipeline Steps
+1. **Scoreboard overlay OCR** — reads the round number and countdown timer directly from the broadcast graphic. Primary signal; works for any TV broadcast regardless of organisation.
+2. **YOLO fighter presence + engagement** — fallback when the overlay is unavailable or unreadable.
 
-1. **Fight Segmentation** (`video_processing/fight_segmentation.py`)
-   Analyzes detection results to identify stable fight segments and split into rounds. Rejects trash uploads based on quality metrics.
+### Pipeline Steps
 
-2. Then proceed with the existing ReID, Pose, and Fight Processing per round.
+1. **YOLO detection** — detects fighters and referee in every frame.
+2. **Scoreboard calibration** — auto-detects the overlay region by OCR-scanning the bottom 38 % of sampled frames and finding where the timer (`M:SS`) appears consistently.
+3. **Scoreboard OCR extraction** — samples at 2 fps, parses round number and timer, smooths results.
+4. **Fight segmentation** — fuses OCR + detection signals through hysteresis state machines; snaps round boundaries to OCR-detected round transitions.
+
+Then process each detected round through the ReID → Pose → Fight State pipeline.
 
 ### Usage
 
 ```bash
-# Segment a full fight video
-python main.py your_fight.mp4 --segment
-
-# This outputs round frame ranges and quality check
+# Standard run — full auto, no arguments needed
+python main.py fight.mp4 --segment
 ```
 
-Trim each round manually or automatically, then process each as a trimmed round clip.
+#### All flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--segment` | off | Run fight segmentation instead of full round processing |
+| `--detection-file PATH` | — | Reuse an existing `detection_results.json` (skips YOLO re-run) |
+| `--scoreboard-samples PATH` | — | Reuse existing OCR samples JSON (skips OCR re-run) |
+| `--scoreboard-roi x,y,w,h` | — | Manually specify the scoreboard overlay region (skips auto-detect) |
+| `--skip-scoreboard` | off | Disable OCR entirely; use detection signals only |
+| `--recalibrate` | off | Delete the cached ROI and re-run overlay auto-detection |
+| `--verify-scoreboard` | off | Render a short annotated verification video to inspect OCR quality |
+| `--no-db` | off | Skip PostgreSQL writes (full pipeline mode only) |
+| `--debug-level` | `verbose` | `none` / `normal` / `verbose` — controls debug image and JSON output |
+
+#### Debug outputs
+
+All debug artefacts are written under `runs/` and `runs/scoreboard_overlay/`:
+
+| File | What it shows |
+|---|---|
+| `runs/scoreboard_overlay/calibration_debug/strip_frame_*.jpg` | Each sampled strip with OCR detections drawn — first place to check if calibration fails |
+| `runs/scoreboard_overlay/calibration_debug/selected_roi.jpg` | Reference frame with the winning ROI highlighted |
+| `runs/scoreboard_overlay/calibration_debug/calibration_log.txt` | Per-box match log from calibration |
+| `runs/scoreboard_overlay/samples.json` | Smoothed per-sample round + timer readings |
+| `runs/scoreboard_overlay/timer_plot.png` | Round/timer series over time — visual sanity check |
+| `runs/scoreboard_overlay/verification.mp4` | 1 fps annotated video showing OCR readings per frame (`--verify-scoreboard`) |
+| `runs/segmentation_debug/timeline.png` | Fused in-round probability + detected round bands |
+| `runs/segmentation_debug/signal_series.csv` | Per-frame OCR and detection signals |
+| `runs/manifest.json` | Full run record: video metadata, step timings, output paths, quality summary |
+
+#### Typical developer iteration flow
+
+```bash
+# First run — auto-detects overlay, runs full OCR, segments
+python main.py fight.mp4 --segment --verify-scoreboard
+
+# Inspect runs/scoreboard_overlay/calibration_debug/strip_frame_*.jpg
+# and runs/scoreboard_overlay/timer_plot.png
+
+# Re-run segmentation reusing cached detection + OCR (fast)
+python main.py fight.mp4 --segment \
+  --detection-file runs/detection_results.json \
+  --scoreboard-samples runs/scoreboard_overlay/samples.json
+
+# Force fresh overlay detection (e.g. after tuning constants)
+python main.py fight.mp4 --segment --recalibrate
+```
 
 ## Project Structure
 
 ```
 ai/
+├── main.py                        # Argument parser + dispatcher (no business logic)
+├── pipeline.py                    # Orchestration for both pipeline modes
+├── debug.py                       # DebugContext — centralised debug output
+├── manifest.py                    # Writes runs/manifest.json per run
 ├── video_processing/
-│   ├── video_processing.py
+│   ├── video_processing.py        # YOLO detection → runs/detection_results.json
+│   ├── fight_segmentation.py      # Fuses OCR + detection signals → round list
+│   ├── scoreboard_overlay/        # Scoreboard OCR package
+│   │   ├── calibration.py         # Auto-detects overlay ROI via bottom-strip OCR
+│   │   ├── extraction.py          # Per-frame OCR sampling + smoothing
+│   │   ├── parsers.py             # Org-agnostic round/timer regexes
+│   │   ├── debug.py               # Visualisation helpers
+│   │   └── scoreboard_verification.py
 │   ├── fighter_reidentification/
 │   └── pose_tracking/
 ├── fight_processing/
 │   ├── fight_processing.py
 │   └── fight_processing_util.py
 ├── models/
-│   ├── FightState.py        # Enum: STRIKING, GRAPPLING
-│   ├── IdentityMemory.py    # ReID tracker
-│   └── constants.py         # Thresholds and label IDs
-└── databse.py               # SQLAlchemy session
+│   ├── FightState.py              # Enum: STRIKING=1, GRAPPLING=2
+│   ├── IdentityMemory.py          # EMA cosine-similarity ReID tracker
+│   └── constants.py               # All thresholds and label IDs
+└── database.py                    # SQLAlchemy SessionLocal
 ```
 
 ## Setup

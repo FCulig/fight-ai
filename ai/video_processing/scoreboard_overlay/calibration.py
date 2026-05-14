@@ -41,6 +41,7 @@ from models.constants import (
 def calibrate_scoreboard_overlay(
     video_path: str,
     override_roi: Optional[tuple[int, int, int, int]] = None,
+    recalibrate: bool = False,
     debug_ctx: Optional[DebugContext] = None,
 ) -> Optional[dict]:
     """
@@ -49,12 +50,20 @@ def calibrate_scoreboard_overlay(
     Args:
         video_path:   Path to the source video.
         override_roi: (x, y, w, h) — skips auto-detection when provided.
+        recalibrate:  Delete the cached roi.json and re-run detection.
         debug_ctx:    DebugContext rooted at runs/scoreboard_overlay/.
 
     Returns:
         {"x", "y", "w", "h", "frame_dims": [W, H]} or None on failure.
     """
     ctx = debug_ctx or DebugContext.disabled()
+
+    # --- Recalibrate: wipe the cache before the cache-check below ---
+    if recalibrate:
+        roi_cache = str(ctx.path("roi.json"))
+        if os.path.exists(roi_cache):
+            os.remove(roi_cache)
+            ctx.log("calibration", "Cleared cached ROI — recalibrating")
 
     # --- Manual override ---
     if override_roi is not None:
