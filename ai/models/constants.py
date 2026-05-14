@@ -29,11 +29,39 @@ HEAD_CONTACT_THRESHOLD = 50
 TORSO_CONTACT_THRESHOLD = 60
 LEG_CONTACT_THRESHOLD = 50
 
-# Fight segmentation thresholds
-MIN_FIGHT_START_FRAMES = 10      # consecutive frames with both fighters to start fight
-MIN_FIGHT_END_GAP_FRAMES = 450   # consecutive invalid frames to end fight
-MIN_ROUND_GAP_FRAMES = 450       # consecutive frames of low engagement to split rounds
+# Fight segmentation thresholds (tuned for 50fps)
+MIN_FIGHT_END_GAP_FRAMES = 2250  # ~45s of low fighter presence to end fight
+MIN_ROUND_GAP_FRAMES = 1000      # ~20s of low engagement to split rounds
 ROUND_ENGAGEMENT_DISTANCE = 800  # horizontal center distance threshold for engagement
 MIN_ROUND_LENGTH_FRAMES = 60     # minimum frames per round
 MIN_VALID_FRAME_RATIO = 0.2      # minimum fraction of valid frames
 MIN_FIGHT_DURATION_FRAMES = 120  # minimum total fight duration in frames
+
+# Hysteresis windows for fight/round state machines (tuned for 50fps)
+FIGHT_PRESENCE_WINDOW = 250      # ~5s sliding window for fight presence ratio
+FIGHT_ENTER_RATIO = 0.7          # ratio of both-present frames in window to enter fight
+FIGHT_EXIT_RATIO = 0.3           # ratio below which we begin counting fight-end gap
+ROUND_ENGAGEMENT_WINDOW = 150    # ~3s sliding window for round engagement ratio
+ROUND_ENGAGED_RATIO = 0.6        # ratio of engaged frames in window to be in a round
+ROUND_DISENGAGED_RATIO = 0.2     # ratio below which we begin counting round-break gap
+
+# Scoreboard overlay — ROI calibration (bottom-strip OCR)
+SCOREBOARD_STRIP_Y_START = 0.62          # top of the bottom search strip (fraction of frame height)
+SCOREBOARD_STRIP_SEARCH_FRAMES = 10      # frames sampled during strip OCR calibration
+SCOREBOARD_ROI_PADDING = 20             # padding added around the detected ROI (px)
+
+# Scoreboard overlay — OCR extraction
+SCOREBOARD_OCR_SAMPLE_RATE_HZ = 2        # OCR samples per second
+SCOREBOARD_OCR_MIN_CONFIDENCE = 0.7      # PaddleOCR line-level confidence floor
+SCOREBOARD_OCR_UPSCALE = 3               # crop upscale factor before OCR
+SCOREBOARD_SMOOTHING_WINDOW = 5          # sample window for round-number mode smoothing
+SCOREBOARD_TIMER_MAX_BACKWARD_JUMP = 2   # max allowed timer increase (s) before rejection
+SCOREBOARD_DEBUG_CROP_INTERVAL = 20      # save a debug crop every Nth sample
+
+# Signal fusion weights (must sum to 1.0)
+FUSION_WEIGHT_OCR = 0.70
+FUSION_WEIGHT_DETECTION = 0.20
+FUSION_WEIGHT_ENGAGEMENT = 0.10
+
+# OCR signal snap: snap round boundary if within this many frames of an OCR transition
+OCR_BOUNDARY_SNAP_FRAMES = 75   # ~1.5s at 50fps

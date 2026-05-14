@@ -1,65 +1,108 @@
+"""
+Fight segmentation — splits a full fight video into rounds.
+
+Primary signal: scoreboard overlay OCR (round number + timer).
+Fallback signals: YOLO fighter presence + engagement (used when OCR unavailable).
+
+Single streaming pass over the detection JSON; two deque-based sliding-window
+state machines (fight-level and round-level) with hysteresis. OCR-derived
+round transitions are used to snap boundaries to exact frames.
+"""
+
+import bisect
 import json
+from collections import deque
+from pathlib import Path
+from typing import Optional
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+
 from models.constants import (
     LABEL_ID,
-    MIN_FIGHT_START_FRAMES,
     MIN_FIGHT_END_GAP_FRAMES,
     MIN_ROUND_GAP_FRAMES,
     MIN_ROUND_LENGTH_FRAMES,
     MIN_VALID_FRAME_RATIO,
     MIN_FIGHT_DURATION_FRAMES,
     ROUND_ENGAGEMENT_DISTANCE,
+    FIGHT_PRESENCE_WINDOW,
+    FIGHT_ENTER_RATIO,
+    FIGHT_EXIT_RATIO,
+    ROUND_ENGAGEMENT_WINDOW,
+    ROUND_ENGAGED_RATIO,
+    ROUND_DISENGAGED_RATIO,
+    FUSION_WEIGHT_OCR,
+    FUSION_WEIGHT_DETECTION,
+    FUSION_WEIGHT_ENGAGEMENT,
+    OCR_BOUNDARY_SNAP_FRAMES,
 )
+from debug import DebugContext
 
 
-def segment_fights(detection_results_file):
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def segment_fights(
+    detection_results_file: str,
+    scoreboard_samples_file: Optional[str] = None,
+    debug_ctx: Optional[DebugContext] = None,
+) -> dict:
     """
-    Segments a full fight video into rounds based on detection results.
-    Memory-optimized: processes frames iteratively without loading entire file.
+    Segment a full fight video into rounds.
 
     Args:
-        detection_results_file: Path to the JSON file with detection results.
+        detection_results_file:  Path to runs/detection_results.json.
+        scoreboard_samples_file: Path to runs/scoreboard_overlay/samples.json
+                                 (optional; falls back to detection-only when absent).
+        debug_ctx:               DebugContext for debug output.
 
     Returns:
-        dict: {
-            "rounds": [(start_frame, end_frame), ...],
-            "quality": {
-                "is_valid": bool,
-                "reason": str,
-                "metrics": {...}
-            }
+        {
+          "rounds":  [(start_frame, end_frame), ...],
+          "quality": {"is_valid": bool, "reason": str, "metrics": {...}}
         }
     """
-    fight_segments, total_frames, valid_frames = find_fight_segments_iterative(detection_results_file)
+    ctx = debug_ctx or DebugContext.disabled()
 
-    if not fight_segments:
-        return {
-            "rounds": [],
-            "quality": {
-                "is_valid": False,
-                "reason": "No valid fight segments found",
-                "metrics": {
-                    "total_frames": total_frames,
-                    "valid_frame_ratio": valid_frames / total_frames if total_frames > 0 else 0,
-                    "round_count": 0,
-                    "total_fight_duration_frames": 0,
-                }
-            }
-        }
+    # Load OCR samples
+    ocr_samples: list[dict] = []
+    if scoreboard_samples_file:
+        try:
+            with open(scoreboard_samples_file, "r", encoding="utf-8") as f:
+                ocr_samples = json.load(f)
+            ctx.log("segmentation", f"Loaded {len(ocr_samples)} OCR samples")
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            ctx.log("segmentation", f"WARNING: could not load OCR samples — {e}")
 
-    all_rounds = []
-    for fight_start, fight_end in fight_segments:
-        rounds = split_rounds_in_segment_iterative(detection_results_file, fight_start, fight_end)
-        all_rounds.extend(rounds)
+    ocr_index  = _build_ocr_index(ocr_samples)
+    ocr_bounds = _extract_ocr_boundaries(ocr_samples)   # hard round-transition frames
 
-    total_fight_duration = sum(end - start + 1 for start, end in all_rounds)
-    valid_ratio = valid_frames / total_frames if total_frames > 0 else 0
-    round_count = len(all_rounds)
+    ctx.log("segmentation",
+            f"OCR index: {len(ocr_index)} entries  "
+            f"hard boundaries: {len(ocr_bounds)}")
+
+    rounds, total_frames, valid_frames, debug_series = _segment_streaming(
+        detection_results_file, ocr_index, ctx
+    )
+
+    # Snap boundaries to nearest OCR round transition
+    rounds = _snap_to_ocr_boundaries(rounds, ocr_bounds, ctx)
+
+    # Quality metrics
+    total_fight_duration = sum(e - s + 1 for s, e in rounds)
+    valid_ratio          = valid_frames / total_frames if total_frames > 0 else 0.0
+    round_count          = len(rounds)
 
     metrics = {
-        "total_frames": total_frames,
-        "valid_frame_ratio": valid_ratio,
-        "round_count": round_count,
+        "total_frames":              total_frames,
+        "valid_frame_ratio":         valid_ratio,
+        "round_count":               round_count,
         "total_fight_duration_frames": total_fight_duration,
+        "ocr_samples_used":          len(ocr_samples),
     }
 
     is_valid = (
@@ -70,124 +113,433 @@ def segment_fights(detection_results_file):
 
     reason = ""
     if not is_valid:
-        if valid_ratio < MIN_VALID_FRAME_RATIO:
-            reason = f"Valid frame ratio too low: {valid_ratio:.2f} < {MIN_VALID_FRAME_RATIO}"
+        if round_count == 0:
+            reason = "No valid fight segments found" if total_frames > 0 else "Empty video"
+        elif valid_ratio < MIN_VALID_FRAME_RATIO:
+            reason = (f"Valid frame ratio too low: "
+                      f"{valid_ratio:.2f} < {MIN_VALID_FRAME_RATIO}")
         elif total_fight_duration < MIN_FIGHT_DURATION_FRAMES:
-            reason = f"Fight duration too short: {total_fight_duration} < {MIN_FIGHT_DURATION_FRAMES}"
-        elif round_count == 0:
-            reason = "No valid rounds detected"
+            reason = (f"Fight duration too short: "
+                      f"{total_fight_duration} < {MIN_FIGHT_DURATION_FRAMES}")
+
+    ctx.log("segmentation",
+            f"Result: {round_count} round(s)  valid={is_valid}  {reason or 'OK'}")
+
+    # Debug outputs
+    _save_debug_outputs(debug_series, rounds, ctx)
 
     return {
-        "rounds": all_rounds,
-        "quality": {
-            "is_valid": is_valid,
-            "reason": reason,
-            "metrics": metrics
-        }
+        "rounds":  rounds,
+        "quality": {"is_valid": is_valid, "reason": reason, "metrics": metrics},
     }
 
 
-def iter_detection_frames(detection_results_file):
-    """Stream frames from compact JSON format {"frames":[...]}."""
-    import json
-    with open(detection_results_file, 'r', encoding='utf-8') as f:
-        # Read the file content
-        content = f.read()
+# ---------------------------------------------------------------------------
+# OCR index helpers
+# ---------------------------------------------------------------------------
 
-        # Parse the JSON
-        data = json.loads(content)
-
-        # Yield each frame
-        for frame in data["frames"]:
-            yield frame
+def _build_ocr_index(samples: list[dict]) -> dict[int, dict]:
+    """Map frame_num → sample for O(1) lookup. Sorted frames for bisect."""
+    return {s["frame"]: s for s in samples}
 
 
-def find_fight_segments_iterative(detection_results_file):
-    fight_segments = []
+def _extract_ocr_boundaries(samples: list[dict]) -> list[int]:
+    """
+    Return frames where the round number changes in the smoothed sample list.
+    These are used later to snap detected round edges.
+    """
+    boundaries: list[int] = []
+    prev_round: Optional[int] = None
+    for s in samples:
+        r = s.get("round_num")
+        if r is not None and prev_round is not None and r != prev_round:
+            boundaries.append(s["frame"])
+        if r is not None:
+            prev_round = r
+    return boundaries
+
+
+def _ocr_signal_at(frame_num: int, ocr_index: dict[int, dict], stride: int) -> float:
+    """
+    Return OCR in-round probability [0.0, 1.0] for *frame_num*.
+
+    1.0  — sample within half a stride, valid round + timer
+    0.6  — sample within half a stride, valid round only
+    0.0  — low confidence
+    -1.0 — no nearby sample (caller should fall back to detection signal)
+    """
+    if not ocr_index:
+        return -1.0
+
+    # Find nearest sample frame by key proximity
+    frames = sorted(ocr_index.keys())
+    idx    = bisect.bisect_left(frames, frame_num)
+
+    nearest: Optional[dict] = None
+    best_dist = stride         # only consider samples within one stride
+    for cand_idx in [idx - 1, idx]:
+        if 0 <= cand_idx < len(frames):
+            dist = abs(frames[cand_idx] - frame_num)
+            if dist < best_dist:
+                best_dist = dist
+                nearest   = ocr_index[frames[cand_idx]]
+
+    if nearest is None:
+        return -1.0
+
+    err = nearest.get("parse_error")
+    if err == "low_confidence":
+        return 0.0
+    if nearest.get("round_num") is None:
+        return -1.0
+    if nearest.get("seconds_remaining") is not None:
+        return 1.0
+    return 0.6   # round found, timer missing
+
+
+# ---------------------------------------------------------------------------
+# Streaming segmenter
+# ---------------------------------------------------------------------------
+
+def _segment_streaming(
+    detection_results_file: str,
+    ocr_index: dict[int, dict],
+    ctx: DebugContext,
+) -> tuple[list[tuple[int, int]], int, int, list[dict]]:
+    """
+    One-pass streaming segmenter.
+
+    Returns (rounds, total_frames, valid_frames, debug_series).
+    debug_series is a list of per-sampled-frame dicts for plotting.
+    """
+    # Estimate OCR stride for signal lookup
+    frames_list = sorted(ocr_index.keys())
+    ocr_stride  = (
+        int(np.median(np.diff(frames_list))) if len(frames_list) >= 2 else 25
+    )
+
+    presence_window  = deque()
+    presence_sum     = 0
+    engagement_window = deque()
+    engagement_sum   = 0
+
     total_frames = 0
     valid_frames = 0
-    in_segment = False
-    segment_start = 0
-    valid_count = 0
-    invalid_count = 0
-    last_valid_frame = 0
 
-    for frame in iter_detection_frames(detection_results_file):
+    in_fight          = False
+    fight_start       = None
+    fight_exit_cand   = None
+    fight_exit_streak = 0
+
+    in_round           = False
+    round_start        = None
+    break_cand         = None
+    break_streak       = 0
+
+    rounds:       list[tuple[int, int]] = []
+    last_frame    = None
+    debug_series: list[dict] = []
+
+    for frame in _iter_detection_frames(detection_results_file):
+        frame_num  = frame["frame"]
+        last_frame = frame_num
         total_frames += 1
-        frame_num = frame["frame"]
-        detections = frame["detections"]
 
-        has_red = any(d.get('class_id') == LABEL_ID['fighter_red'] for d in detections)
-        has_blue = any(d.get('class_id') == LABEL_ID['fighter_blue'] for d in detections)
-
-        if has_red and has_blue:
+        both_present, engaged = _frame_signals(frame["detections"])
+        if both_present:
             valid_frames += 1
-            valid_count += 1
-            invalid_count = 0
-            last_valid_frame = frame_num
-            if not in_segment and valid_count >= MIN_FIGHT_START_FRAMES:
-                in_segment = True
-                segment_start = frame_num
+
+        # --- OCR signal ---
+        ocr_sig = _ocr_signal_at(frame_num, ocr_index, ocr_stride)
+
+        # --- Fused in-round probability ---
+        det_sig = 1.0 if both_present else 0.0
+        eng_sig = 1.0 if engaged      else 0.0
+
+        if ocr_sig >= 0:                          # OCR available
+            prob = (FUSION_WEIGHT_OCR        * ocr_sig +
+                    FUSION_WEIGHT_DETECTION  * det_sig +
+                    FUSION_WEIGHT_ENGAGEMENT * eng_sig)
+        else:                                     # OCR absent — redistribute
+            det_w = FUSION_WEIGHT_DETECTION  / (FUSION_WEIGHT_DETECTION + FUSION_WEIGHT_ENGAGEMENT)
+            eng_w = FUSION_WEIGHT_ENGAGEMENT / (FUSION_WEIGHT_DETECTION + FUSION_WEIGHT_ENGAGEMENT)
+            prob  = det_w * det_sig + eng_w * eng_sig
+
+        # Debug series (sample every 25 frames to keep file small)
+        if total_frames % 25 == 0:
+            nearest_sample = (
+                ocr_index.get(min(frames_list, key=lambda f: abs(f - frame_num)))
+                if frames_list else None
+            )
+            debug_series.append({
+                "frame":        frame_num,
+                "both_present": both_present,
+                "engaged":      engaged,
+                "ocr_signal":   ocr_sig,
+                "fused_prob":   round(prob, 3),
+                "in_fight":     in_fight,
+                "in_round":     in_round,
+                "ocr_round":    nearest_sample.get("round_num")    if nearest_sample else None,
+                "ocr_timer":    nearest_sample.get("seconds_remaining") if nearest_sample else None,
+            })
+
+        # --- Update fight presence window ---
+        presence_window.append(prob >= 0.5)
+        presence_sum += int(prob >= 0.5)
+        if len(presence_window) > FIGHT_PRESENCE_WINDOW:
+            presence_sum -= int(presence_window.popleft())
+        presence_ratio = presence_sum / len(presence_window)
+
+        # ---- Fight state machine ----
+        if not in_fight:
+            if (len(presence_window) >= FIGHT_PRESENCE_WINDOW and
+                    presence_ratio >= FIGHT_ENTER_RATIO):
+                in_fight         = True
+                fight_start      = frame_num - len(presence_window) + 1
+                fight_exit_cand  = None
+                fight_exit_streak = 0
+                in_round         = True
+                round_start      = fight_start
+                break_cand       = None
+                break_streak     = 0
+                engagement_window.clear()
+                engagement_sum   = 0
+                ctx.log("segmentation",
+                        f"frame={frame_num}  FIGHT START (back-dated to {fight_start})")
         else:
-            invalid_count += 1
-            valid_count = 0
-            if in_segment and invalid_count >= MIN_FIGHT_END_GAP_FRAMES:
-                fight_segments.append((segment_start, frame_num - invalid_count))
-                in_segment = False
-
-    if in_segment and total_frames > 0:
-        fight_segments.append((segment_start, last_valid_frame))
-
-    return fight_segments, total_frames, valid_frames
-
-
-def split_rounds_in_segment_iterative(detection_results_file, fight_start, fight_end):
-    rounds = []
-    current_round_start = fight_start
-    gap_count = 0
-    in_gap = False
-    last_frame_num = None
-
-    for frame in iter_detection_frames(detection_results_file):
-        frame_num = frame["frame"]
-        if frame_num < fight_start:
-            continue
-        if frame_num > fight_end:
-            break
-
-        last_frame_num = frame_num
-        detections = frame["detections"]
-
-        # Simple engagement check: both fighters present and close in bounding boxes
-        red_bbox = next((d["bbox_xyxy"] for d in detections if d["class_id"] == LABEL_ID['fighter_red']), None)
-        blue_bbox = next((d["bbox_xyxy"] for d in detections if d["class_id"] == LABEL_ID['fighter_blue']), None)
-
-        engaged = False
-        if red_bbox and blue_bbox:
-            # Check if bounding boxes are close enough to indicate sustained engagement.
-            red_center_x = (red_bbox[0] + red_bbox[2]) / 2
-            blue_center_x = (blue_bbox[0] + blue_bbox[2]) / 2
-            distance = abs(red_center_x - blue_center_x)
-            if distance < ROUND_ENGAGEMENT_DISTANCE:
-                engaged = True
-
-        if not engaged:
-            if not in_gap:
-                in_gap = True
-                gap_count = 1
+            if presence_ratio <= FIGHT_EXIT_RATIO:
+                if fight_exit_cand is None:
+                    fight_exit_cand = frame_num
+                fight_exit_streak += 1
             else:
-                gap_count += 1
+                fight_exit_cand   = None
+                fight_exit_streak = 0
+
+            if fight_exit_streak >= MIN_FIGHT_END_GAP_FRAMES:
+                fight_end = fight_exit_cand
+                if in_round and round_start is not None and fight_end >= round_start:
+                    rounds.append((round_start, fight_end))
+                    ctx.log("segmentation",
+                            f"frame={frame_num}  ROUND END (fight end): "
+                            f"{round_start}–{fight_end}")
+                in_fight = False
+                fight_start = fight_exit_cand = None
+                fight_exit_streak = 0
+                in_round = False
+                round_start = break_cand = None
+                break_streak = 0
+                engagement_window.clear()
+                engagement_sum = 0
+                ctx.log("segmentation", f"frame={frame_num}  FIGHT END")
+                continue
+
+        if not in_fight:
+            continue
+
+        # ---- Round state machine ----
+        engagement_window.append(prob >= 0.5)
+        engagement_sum += int(prob >= 0.5)
+        if len(engagement_window) > ROUND_ENGAGEMENT_WINDOW:
+            engagement_sum -= int(engagement_window.popleft())
+        eng_ratio = (engagement_sum / len(engagement_window)
+                     if engagement_window else 0.0)
+
+        if in_round:
+            if eng_ratio <= ROUND_DISENGAGED_RATIO:
+                if break_cand is None:
+                    break_cand = frame_num
+                break_streak += 1
+            else:
+                break_cand   = None
+                break_streak = 0
+
+            if break_streak >= MIN_ROUND_GAP_FRAMES:
+                round_end = break_cand
+                if round_start is not None and round_end >= round_start:
+                    rounds.append((round_start, round_end))
+                    ctx.log("segmentation",
+                            f"frame={frame_num}  ROUND SPLIT: {round_start}–{round_end}")
+                in_round     = False
+                round_start  = None
+                break_cand   = None
+                break_streak = 0
         else:
-            if in_gap and gap_count >= MIN_ROUND_GAP_FRAMES:
-                end_frame = frame_num - gap_count - 1
-                if end_frame >= current_round_start:
-                    rounds.append((current_round_start, end_frame))
-                current_round_start = frame_num
-            in_gap = False
-            gap_count = 0
+            if (len(engagement_window) >= ROUND_ENGAGEMENT_WINDOW and
+                    eng_ratio >= ROUND_ENGAGED_RATIO):
+                in_round    = True
+                round_start = frame_num - len(engagement_window) + 1
+                break_cand  = None
+                break_streak = 0
+                ctx.log("segmentation",
+                        f"frame={frame_num}  ROUND START (back-dated to {round_start})")
 
-    if last_frame_num is not None and last_frame_num >= current_round_start:
-        rounds.append((current_round_start, last_frame_num))
+    # End of stream
+    if in_fight and last_frame is not None:
+        if in_round and round_start is not None and last_frame >= round_start:
+            rounds.append((round_start, last_frame))
+            ctx.log("segmentation",
+                    f"End of stream: closed final round {round_start}–{last_frame}")
 
-    rounds = [r for r in rounds if r[1] - r[0] + 1 >= MIN_ROUND_LENGTH_FRAMES]
-    return rounds
+    rounds = [(s, e) for s, e in rounds if e - s + 1 >= MIN_ROUND_LENGTH_FRAMES]
+    return rounds, total_frames, valid_frames, debug_series
+
+
+# ---------------------------------------------------------------------------
+# OCR boundary snapping
+# ---------------------------------------------------------------------------
+
+def _snap_to_ocr_boundaries(
+    rounds: list[tuple[int, int]],
+    ocr_bounds: list[int],
+    ctx: DebugContext,
+) -> list[tuple[int, int]]:
+    """
+    For each detected round boundary, snap to the nearest OCR-derived
+    round-transition frame if within OCR_BOUNDARY_SNAP_FRAMES.
+    """
+    if not ocr_bounds or not rounds:
+        return rounds
+
+    snapped: list[tuple[int, int]] = []
+    for i, (start, end) in enumerate(rounds):
+        new_start = start
+        new_end   = end
+
+        if i > 0:
+            nearest = min(ocr_bounds, key=lambda b: abs(b - start))
+            if abs(nearest - start) <= OCR_BOUNDARY_SNAP_FRAMES:
+                ctx.log("segmentation",
+                        f"Snap round {i+1} start {start} → {nearest} (OCR transition)")
+                new_start = nearest
+
+        nearest_end = min(ocr_bounds, key=lambda b: abs(b - end))
+        if abs(nearest_end - end) <= OCR_BOUNDARY_SNAP_FRAMES:
+            ctx.log("segmentation",
+                    f"Snap round {i+1} end {end} → {nearest_end} (OCR transition)")
+            new_end = nearest_end
+
+        if new_end > new_start:
+            snapped.append((new_start, new_end))
+        else:
+            snapped.append((start, end))
+
+    return snapped
+
+
+# ---------------------------------------------------------------------------
+# Per-frame signal helpers
+# ---------------------------------------------------------------------------
+
+def _frame_signals(detections: list[dict]) -> tuple[bool, bool]:
+    """Return (both_present, engaged) for one frame's detections."""
+    red_bbox  = None
+    blue_bbox = None
+    for d in detections:
+        cls = d.get("class_id")
+        if cls == LABEL_ID["fighter_red"]  and red_bbox  is None:
+            red_bbox  = d["bbox_xyxy"]
+        elif cls == LABEL_ID["fighter_blue"] and blue_bbox is None:
+            blue_bbox = d["bbox_xyxy"]
+
+    both_present = red_bbox is not None and blue_bbox is not None
+    if not both_present:
+        return False, False
+
+    red_cx  = (red_bbox[0]  + red_bbox[2])  / 2
+    blue_cx = (blue_bbox[0] + blue_bbox[2]) / 2
+    engaged = abs(red_cx - blue_cx) < ROUND_ENGAGEMENT_DISTANCE
+    return True, engaged
+
+
+def _iter_detection_frames(detection_results_file: str):
+    """Stream frames from {"frames":[...]} JSON without loading the whole file."""
+    with open(detection_results_file, "r", encoding="utf-8") as f:
+        data = json.loads(f.read())
+    for frame in data["frames"]:
+        yield frame
+
+
+# ---------------------------------------------------------------------------
+# Debug output writers
+# ---------------------------------------------------------------------------
+
+def _save_debug_outputs(
+    debug_series: list[dict],
+    rounds: list[tuple[int, int]],
+    ctx: DebugContext,
+) -> None:
+    if not ctx.verbose or not debug_series:
+        return
+
+    seg_ctx = ctx.subdir("segmentation_debug")
+
+    # CSV
+    csv_path = seg_ctx.path("signal_series.csv")
+    header   = "frame,both_present,engaged,ocr_signal,fused_prob,in_fight,in_round,ocr_round,ocr_timer"
+    rows     = [
+        ",".join(str(s.get(k, "")) for k in
+                 ["frame","both_present","engaged","ocr_signal","fused_prob",
+                  "in_fight","in_round","ocr_round","ocr_timer"])
+        for s in debug_series
+    ]
+    with open(csv_path, "w", encoding="utf-8") as f:
+        f.write(header + "\n" + "\n".join(rows))
+    ctx.log("segmentation", f"Signal series CSV → {csv_path}")
+
+    # Timeline plot
+    _plot_timeline(debug_series, rounds,
+                   seg_ctx.path("timeline.png"))
+    ctx.log("segmentation", f"Timeline plot → {seg_ctx.path('timeline.png')}")
+
+
+def _plot_timeline(
+    series: list[dict],
+    rounds: list[tuple[int, int]],
+    path: Path,
+) -> None:
+    frames    = [s["frame"]       for s in series]
+    fused     = [s["fused_prob"]  for s in series]
+    ocr_sigs  = [s["ocr_signal"]  for s in series]
+    det_sigs  = [1.0 if s["both_present"] else 0.0 for s in series]
+    ocr_rounds = [s.get("ocr_round") for s in series]
+
+    fig, axes = plt.subplots(3, 1, figsize=(18, 10), sharex=True)
+    fig.suptitle("Fight segmentation — signal series", fontsize=13)
+
+    # Panel 1 — fused probability + round bands
+    ax = axes[0]
+    ax.set_ylabel("Fused in-round prob")
+    ax.set_ylim(-0.05, 1.1)
+    ax.plot(frames, fused, color="steelblue", linewidth=0.8, label="fused prob")
+    ax.axhline(0.5, color="grey", linestyle="--", linewidth=0.6)
+    palette = plt.cm.tab10([0, 1, 2, 3, 4])
+    for i, (s, e) in enumerate(rounds):
+        ax.axvspan(s, e, alpha=0.15, color=palette[i % 5],
+                   label=f"Round {i+1} ({s}–{e})")
+    ax.legend(fontsize=7, loc="upper right")
+
+    # Panel 2 — individual signals
+    ax2 = axes[1]
+    ax2.set_ylabel("Individual signals")
+    ax2.set_ylim(-0.1, 1.2)
+    ax2.plot(frames, det_sigs, color="orange", linewidth=0.6,
+             alpha=0.7, label="detection (both present)")
+    ocr_valid = [s if s >= 0 else None for s in ocr_sigs]
+    ax2.plot(frames, [s if s is not None else 0 for s in ocr_valid],
+             color="green", linewidth=0.8, alpha=0.8, label="OCR signal")
+    ax2.legend(fontsize=7)
+
+    # Panel 3 — OCR round number
+    ax3 = axes[2]
+    ax3.set_ylabel("OCR round")
+    ax3.set_xlabel("Frame number")
+    ax3.set_yticks([1, 2, 3, 4, 5])
+    ax3.set_ylim(0.5, 5.5)
+    valid_r = [(f, r) for f, r in zip(frames, ocr_rounds) if r is not None]
+    if valid_r:
+        fs, rs = zip(*valid_r)
+        ax3.scatter(fs, rs, c="purple", s=8, zorder=5)
+
+    plt.tight_layout()
+    plt.savefig(str(path), dpi=150)
+    plt.close(fig)

@@ -1,5 +1,9 @@
 # Fight AI — Python Video Processing Library
 
+## Workflow
+- Always apply changes directly to the local working directory
+- Never open PRs or suggest creating pull requests
+
 ## What it does
 Accepts MMA fight videos, runs ML inference to detect fight events (grappling, state transitions), and writes results to PostgreSQL. Data is later served to the backend for video playback.
 
