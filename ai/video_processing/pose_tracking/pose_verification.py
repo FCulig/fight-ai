@@ -1,38 +1,148 @@
 import json
+import re
+import time
 import cv2
-from fight_processing.fight_processing_util import determine_fight_state
-from fight_processing.fight_processing_util import is_frame_valid
+import numpy as np
+from fight_processing.fight_processing_util import determine_fight_state, is_frame_valid
 from models.FightState import FightState
 from models.constants import MIN_GRAPPLING_THRESHOLD, DISTANCE_GRAPPLING_THRESHOLD
 
 
-def verify_pose_tracking(pose_json_path: str):
-    """[DEBUG FUNCTION] Create a visualization video with pose tracking overlays.
+# ---------------------------------------------------------------------------
+# Round helpers
+# ---------------------------------------------------------------------------
 
-    Reads a JSON file produced by :func:`track_poses` ("runs/pose_results.json") and generates an
-    MP4 video with annotated bounding boxes + pose keypoints/skeletons for each detected person.
+def _frame_number_from_name(image_name: str) -> int | None:
+    """Extract the integer frame index from a path like 'frames/frame_1234.jpg'."""
+    m = re.search(r"frame_(\d+)", image_name)
+    return int(m.group(1)) if m else None
+
+
+def _is_in_round(frame_num: int, rounds: list[tuple[int, int]]) -> bool:
+    return any(start <= frame_num <= end for start, end in rounds)
+
+
+def _next_round_start(frame_num: int, rounds: list[tuple[int, int]]) -> int | None:
+    """Return the start frame of the nearest upcoming round, or None."""
+    upcoming = [start for start, end in rounds if start > frame_num]
+    return min(upcoming) if upcoming else None
+
+
+def _draw_between_rounds(frame_bgr: np.ndarray, frame_num: int,
+                         rounds: list[tuple[int, int]]) -> None:
+    """Dim the frame and overlay a 'BETWEEN ROUNDS' label."""
+    h, w = frame_bgr.shape[:2]
+
+    overlay = frame_bgr.copy()
+    cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.55, frame_bgr, 0.45, 0, frame_bgr)
+
+    label      = "BETWEEN ROUNDS"
+    font       = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 1.6
+    thickness  = 3
+    (tw, th), _ = cv2.getTextSize(label, font, font_scale, thickness)
+    cx = (w - tw) // 2
+    cy = (h + th) // 2
+
+    cv2.putText(frame_bgr, label, (cx, cy),
+                font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
+    nxt = _next_round_start(frame_num, rounds)
+    sub = f"Next round starts at frame {nxt}" if nxt is not None else "Fight over"
+    (sw, _), _ = cv2.getTextSize(sub, font, 0.6, 1)
+    cv2.putText(frame_bgr, sub, ((w - sw) // 2, cy + th + 20),
+                font, 0.6, (180, 180, 180), 1, cv2.LINE_AA)
+
+
+# ---------------------------------------------------------------------------
+# Frame reader
+# ---------------------------------------------------------------------------
+
+def _read_frame(
+    frame_num: int,
+    image_name: str,
+    cap: cv2.VideoCapture | None,
+) -> np.ndarray | None:
+    """
+    Read a single frame either from the supplied VideoCapture or from disk.
+
+    When cap is provided (video_path was given), seek to frame_num and decode.
+    Falls back to cv2.imread(image_name) when cap is None.
+    """
+    if cap is not None:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num - 1)
+        ret, frame = cap.read()
+        return frame if ret else None
+    return cv2.imread(image_name)
+
+
+# ---------------------------------------------------------------------------
+# Main function
+# ---------------------------------------------------------------------------
+
+def verify_pose_tracking(
+    pose_json_path: str,
+    rounds: list[tuple[int, int]],
+    video_path: str | None = None,
+    start_frame: int | None = None,
+    end_frame: int | None = None,
+):
+    """[DEBUG] Create a visualisation video with pose tracking and round awareness.
+
+    Reads the JSON produced by track_poses() and renders an annotated MP4.
+
+    When a frame falls within a known round (as detected by segment_fights):
+      - Bounding boxes and pose skeletons are drawn.
+      - Grappling state is evaluated; a unified purple bbox is drawn when grappling.
+
+    When a frame is between rounds:
+      - No bounding boxes or skeletons are drawn.
+      - The frame is dimmed and a centred "BETWEEN ROUNDS" label is shown,
+        along with the start frame of the next round.
 
     Args:
-        pose_json_path: Path to JSON file with structure {"fps": int, "frames": [...]}
-            Each frame contains "image_name" and "detections" with bbox_xyxy, class_id, and
-            keypoints (list of [x, y] coordinates).
+        pose_json_path: Path to 'runs/pose_results.json'.
+        rounds:         List of (start_frame, end_frame) tuples from segment_fights().
+        video_path:     Path to the source .mp4. When supplied, frames are read
+                        directly from the video (no dependency on frames/ directory).
+                        When None, frames are read from the image_name paths in the JSON.
+        start_frame:    First frame to render (inclusive). None = beginning of video.
+        end_frame:      Last frame to render (inclusive). None = end of video.
 
     Output:
-        Generates "pose_overlay.mp4" with colored skeletons by class_id:
-        - Red: class_id=0
-        - Blue: class_id=1
-        - Green: class_id=2 (referee)
-        - White: unknown
+        Writes 'pose_overlay.mp4' to the working directory.
     """
+    LOG_INTERVAL = 500   # print a progress line every N frames
+    TAG          = "[pose_verify]"
+
+    def log(msg: str) -> None:
+        print(f"{TAG} {msg}")
 
     OUTPUT_MP4 = "pose_overlay.mp4"
 
-    data = json.load(open(pose_json_path, "r"))
-    fps = int(data.get("fps", 50))
+    log(f"Loading pose data: {pose_json_path}")
+    data   = json.load(open(pose_json_path, "r"))
+    fps    = int(data.get("fps", 50))
     frames = data.get("frames", [])
+    log(f"{len(frames)} frames in pose JSON  |  fps={fps}")
 
-    # COCO-like skeleton edges (connect keypoints by index)
-    # Reference: https://github.com/ultralytics/ultralytics/blob/main/ultralytics/pose/models/common.py
+    # --- Apply time-range filter ---
+    if start_frame is not None or end_frame is not None:
+        sf = start_frame or 0
+        ef = end_frame   or float("inf")
+        frames_before = len(frames)
+        frames = [
+            fe for fe in frames
+            if (fn := _frame_number_from_name(fe.get("image_name", ""))) is not None
+            and sf <= fn <= ef
+        ]
+        log(
+            f"Time range filter: frames {sf}–{ef}  "
+            f"({sf/fps:.1f}s–{ef/fps:.1f}s)  "
+            f"{frames_before} → {len(frames)} frames"
+        )
+
     SKELETON_EDGES = [
         (0, 1), (0, 2), (1, 3), (2, 4),
         (0, 5), (0, 6),
@@ -47,93 +157,172 @@ def verify_pose_tracking(pose_json_path: str):
 
     COLOR_FIGHTER_0 = (0, 0, 255)
     COLOR_FIGHTER_1 = (255, 0, 0)
-    COLOR_REFEREE = (0, 255, 0)
+    COLOR_REFEREE   = (0, 255, 0)
+    COLOR_GRAPPLING = (255, 0, 255)
+
+    # Scale factors from frames/ coordinate space → display frame coordinate space.
+    # Computed after the first frame is read; draw_pose reads them by closure reference.
+    sx = sy = 1.0
 
     def color_for(det):
         cid = det.get("class_id")
-        if cid == 2:
-            return COLOR_REFEREE
-        if cid == 0:
-            return COLOR_FIGHTER_0
-        if cid == 1:
-            return COLOR_FIGHTER_1
+        if cid == 0: return COLOR_FIGHTER_0
+        if cid == 1: return COLOR_FIGHTER_1
+        if cid == 2: return COLOR_REFEREE
         return (255, 255, 255)
-
-    # Find first readable frame to initialize writer
-    first_img = None
-    for fe in frames:
-        img_name = fe.get("image_name")
-        if not img_name:
-            continue
-        im = cv2.imread(img_name)
-        if im is not None:
-            first_img = im
-            break
-
-    if first_img is None:
-        raise FileNotFoundError("No readable frames found. Check FRAMES_DIR and image_name mapping.")
-
-    h, w = first_img.shape[:2]
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(OUTPUT_MP4, fourcc, fps, (w, h))
 
     def draw_pose(frame_bgr, det):
         bbox = det.get("bbox_xyxy")
         if bbox and len(bbox) == 4:
-            x1, y1, x2, y2 = [int(round(v)) for v in bbox]
-            x1 = max(0, min(w - 1, x1))
-            y1 = max(0, min(h - 1, y1))
-            x2 = max(0, min(w - 1, x2))
-            y2 = max(0, min(h - 1, y2))
+            x1 = int(round(bbox[0] * sx))
+            y1 = int(round(bbox[1] * sy))
+            x2 = int(round(bbox[2] * sx))
+            y2 = int(round(bbox[3] * sy))
+            x1, y1 = max(0, min(w - 1, x1)), max(0, min(h - 1, y1))
+            x2, y2 = max(0, min(w - 1, x2)), max(0, min(h - 1, y2))
             if x2 > x1 and y2 > y1:
                 cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), color_for(det), 2)
 
         keypoints = det.get("keypoints")
-        if not keypoints or len(keypoints) == 0:
+        if not keypoints:
             return
 
-        # Draw skeleton edges
         for a, b in SKELETON_EDGES:
             if a < len(keypoints) and b < len(keypoints):
-                pt_a = keypoints[a]
-                pt_b = keypoints[b]
-                if pt_a is None or pt_b is None:
+                pa, pb = keypoints[a], keypoints[b]
+                if pa is None or pb is None:
                     continue
-                xa, ya = int(round(pt_a[0])), int(round(pt_a[1]))
-                xb, yb = int(round(pt_b[0])), int(round(pt_b[1]))
+                xa = int(round(pa[0] * sx))
+                ya = int(round(pa[1] * sy))
+                xb = int(round(pb[0] * sx))
+                yb = int(round(pb[1] * sy))
                 if 0 <= xa < w and 0 <= ya < h and 0 <= xb < w and 0 <= yb < h:
                     cv2.line(frame_bgr, (xa, ya), (xb, yb), color_for(det), 2)
 
-        # Draw points
         for k in keypoints:
             if k is None or len(k) < 2:
                 continue
-            x, y = int(round(k[0])), int(round(k[1]))
+            x = int(round(k[0] * sx))
+            y = int(round(k[1] * sy))
             if 0 <= x < w and 0 <= y < h:
                 cv2.circle(frame_bgr, (x, y), 3, color_for(det), -1)
 
-    COLOR_GRAPPLING = (255, 0, 255)  # purple in BGR
+    # --- Open video capture if a video path was supplied ---
+    cap: cv2.VideoCapture | None = None
+    if video_path:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise FileNotFoundError(f"Cannot open video: {video_path}")
+        # Seek once to the first frame in the (possibly filtered) range,
+        # then read sequentially from there to avoid H.264 decode errors.
+        if frames:
+            first_fn = _frame_number_from_name(frames[0].get("image_name", ""))
+            if first_fn and first_fn > 1:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, first_fn - 1)
+                log(f"Video source : {video_path}  (seeked to frame {first_fn})")
+            else:
+                log(f"Video source : {video_path}")
+    else:
+        log("Video source : frames/ directory")
+
+    # --- Locate first readable frame to initialise the VideoWriter ---
+    first_img = None
+    for fe in frames:
+        img_name  = fe.get("image_name", "")
+        frame_num = _frame_number_from_name(img_name)
+        if frame_num is None and cap is None:
+            continue
+        img = _read_frame(frame_num or 1, img_name, cap)
+        if img is not None:
+            first_img = img
+            break
+
+    if first_img is None:
+        if cap:
+            cap.release()
+        raise FileNotFoundError(
+            "No readable frames found. "
+            + ("Check the video path." if video_path else "Check the frames/ directory.")
+        )
+
+    h, w = first_img.shape[:2]
+    log(f"Frame size   : {w}×{h}")
+
+    # --- Detect coordinate mismatch between frames/ and video resolution ---
+    # Keypoints were computed on the frames/ images; if those are a different
+    # resolution from the video, every coordinate must be scaled before drawing.
+    if cap is not None:
+        src_img_name = next(
+            (fe.get("image_name") for fe in frames if fe.get("image_name")), None
+        )
+        if src_img_name:
+            src_sample = cv2.imread(src_img_name)
+            if src_sample is not None:
+                h_src, w_src = src_sample.shape[:2]
+                if w_src != w or h_src != h:
+                    sx = w / w_src   # update the closure variables
+                    sy = h / h_src
+                    log(f"Resolution mismatch: frames/={w_src}×{h_src}  "
+                        f"video={w}×{h}  scale=({sx:.4f}, {sy:.4f})")
+                else:
+                    log(f"Resolution match: frames/ and video both {w}×{h} — no scaling")
+            else:
+                log("WARNING: Could not read a frames/ image to check resolution "
+                    "— keypoint scaling disabled (sx=sy=1.0)")
+        else:
+            log("WARNING: No image_name entries in pose JSON — "
+                "keypoint scaling disabled (sx=sy=1.0)")
+
+    log(f"Output       : {OUTPUT_MP4}")
+    log(f"Rounds       : {rounds}")
+    log("Starting render …")
+
+    writer = cv2.VideoWriter(OUTPUT_MP4, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
 
     current_fight_state = FightState.STRIKING
-    grappling_frames = 0
-    striking_frames = 0
-
-    written = 0
-    missing = 0
+    grappling_frames    = 0
+    striking_frames     = 0
+    written = missing   = 0
+    total               = len(frames)
+    t_start             = time.perf_counter()
 
     for fe in frames:
-        img_name = fe.get("image_name")
-        if not img_name:
+        img_name  = fe.get("image_name", "")
+        frame_num = _frame_number_from_name(img_name)
+
+        if frame_num is None and cap is None:
             missing += 1
             continue
 
-        frame_img = cv2.imread(img_name)
+        frame_img = _read_frame(frame_num or 0, img_name, cap)
         if frame_img is None:
             missing += 1
             continue
 
         detections = fe.get("detections", [])
 
+        # ---- Progress log ----
+        if written > 0 and written % LOG_INTERVAL == 0:
+            pct    = 100 * written / total if total else 0
+            in_rnd = frame_num is not None and _is_in_round(frame_num, rounds)
+            if in_rnd:
+                state_label = (
+                    "GRAPPLING" if current_fight_state == FightState.GRAPPLING
+                    else "STRIKING"
+                )
+                phase = f"round in progress | state: {state_label}"
+            else:
+                phase = "between rounds"
+            log(f"{written:>6} / {total}  ({pct:5.1f}%)  — {phase}")
+
+        # ---- Between-rounds frame ----
+        if frame_num is not None and not _is_in_round(frame_num, rounds):
+            _draw_between_rounds(frame_img, frame_num, rounds)
+            writer.write(frame_img)
+            written += 1
+            continue
+
+        # ---- In-round frame: pose + grappling logic ----
         if is_frame_valid(detections):
             current_fight_state, grappling_frames, striking_frames = determine_fight_state(
                 detections,
@@ -145,13 +334,15 @@ def verify_pose_tracking(pose_json_path: str):
             )
 
         if current_fight_state == FightState.GRAPPLING:
-            # Compute union bbox over both fighters (class_id 0 and 1 only)
-            fighter_dets = [d for d in detections if d.get("class_id") in (0, 1) and d.get("bbox_xyxy")]
+            fighter_dets = [
+                d for d in detections
+                if d.get("class_id") in (0, 1) and d.get("bbox_xyxy")
+            ]
             if fighter_dets:
-                xs1 = [d["bbox_xyxy"][0] for d in fighter_dets]
-                ys1 = [d["bbox_xyxy"][1] for d in fighter_dets]
-                xs2 = [d["bbox_xyxy"][2] for d in fighter_dets]
-                ys2 = [d["bbox_xyxy"][3] for d in fighter_dets]
+                xs1 = [d["bbox_xyxy"][0] * sx for d in fighter_dets]
+                ys1 = [d["bbox_xyxy"][1] * sy for d in fighter_dets]
+                xs2 = [d["bbox_xyxy"][2] * sx for d in fighter_dets]
+                ys2 = [d["bbox_xyxy"][3] * sy for d in fighter_dets]
                 ux1, uy1 = int(min(xs1)), int(min(ys1))
                 ux2, uy2 = int(max(xs2)), int(max(ys2))
                 cv2.rectangle(frame_img, (ux1, uy1), (ux2, uy2), COLOR_GRAPPLING, 3)
@@ -165,6 +356,9 @@ def verify_pose_tracking(pose_json_path: str):
         written += 1
 
     writer.release()
+    if cap:
+        cap.release()
 
-    print("Wrote:", OUTPUT_MP4)
-    print("Frames written:", written, "Missing frames:", missing)
+    elapsed = time.perf_counter() - t_start
+    log(f"Finished in {elapsed:.1f}s — wrote {OUTPUT_MP4} "
+        f"({written} frames rendered, {missing} missing)")

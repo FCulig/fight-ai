@@ -29,21 +29,21 @@ HEAD_CONTACT_THRESHOLD = 50
 TORSO_CONTACT_THRESHOLD = 60
 LEG_CONTACT_THRESHOLD = 50
 
-# Fight segmentation thresholds (tuned for 50fps)
-MIN_FIGHT_END_GAP_FRAMES = 2250  # ~45s of low fighter presence to end fight
-MIN_ROUND_GAP_FRAMES = 1000      # ~20s of low engagement to split rounds
-ROUND_ENGAGEMENT_DISTANCE = 800  # horizontal center distance threshold for engagement
-MIN_ROUND_LENGTH_FRAMES = 60     # minimum frames per round
-MIN_VALID_FRAME_RATIO = 0.2      # minimum fraction of valid frames
-MIN_FIGHT_DURATION_FRAMES = 120  # minimum total fight duration in frames
+# Fight segmentation thresholds (in seconds — converted to frames at runtime using detected fps)
+MIN_FIGHT_END_GAP_SECS    = 45.0   # seconds of low fighter presence to end fight
+MIN_ROUND_GAP_SECS        = 20.0   # seconds of low engagement to split rounds
+ROUND_ENGAGEMENT_DISTANCE = 800    # horizontal center distance threshold for engagement (px)
+MIN_ROUND_LENGTH_SECS     = 1.2    # minimum round duration in seconds
+MIN_VALID_FRAME_RATIO     = 0.2    # minimum fraction of valid frames (ratio, not time)
+MIN_FIGHT_DURATION_SECS   = 2.4    # minimum total fight duration in seconds
 
-# Hysteresis windows for fight/round state machines (tuned for 50fps)
-FIGHT_PRESENCE_WINDOW = 250      # ~5s sliding window for fight presence ratio
-FIGHT_ENTER_RATIO = 0.7          # ratio of both-present frames in window to enter fight
-FIGHT_EXIT_RATIO = 0.3           # ratio below which we begin counting fight-end gap
-ROUND_ENGAGEMENT_WINDOW = 150    # ~3s sliding window for round engagement ratio
-ROUND_ENGAGED_RATIO = 0.6        # ratio of engaged frames in window to be in a round
-ROUND_DISENGAGED_RATIO = 0.2     # ratio below which we begin counting round-break gap
+# Hysteresis windows for fight/round state machines (in seconds — converted at runtime)
+FIGHT_PRESENCE_WINDOW_SECS  = 5.0  # sliding window for fight presence ratio
+FIGHT_ENTER_RATIO           = 0.7  # ratio of both-present frames in window to enter fight
+FIGHT_EXIT_RATIO            = 0.3  # ratio below which we begin counting fight-end gap
+ROUND_ENGAGEMENT_WINDOW_SECS = 3.0 # sliding window for round engagement ratio
+ROUND_ENGAGED_RATIO         = 0.6  # ratio of engaged frames in window to be in a round
+ROUND_DISENGAGED_RATIO      = 0.2  # ratio below which we begin counting round-break gap
 
 # Scoreboard overlay — ROI calibration (bottom-strip OCR)
 SCOREBOARD_STRIP_Y_START = 0.62          # top of the bottom search strip (fraction of frame height)
@@ -63,5 +63,5 @@ FUSION_WEIGHT_OCR = 0.70
 FUSION_WEIGHT_DETECTION = 0.20
 FUSION_WEIGHT_ENGAGEMENT = 0.10
 
-# OCR signal snap: snap round boundary if within this many frames of an OCR transition
-OCR_BOUNDARY_SNAP_FRAMES = 75   # ~1.5s at 50fps
+# OCR signal snap: snap round boundary if within this many seconds of an OCR transition
+OCR_BOUNDARY_SNAP_SECS = 1.5   # converted to frames at runtime using detected fps

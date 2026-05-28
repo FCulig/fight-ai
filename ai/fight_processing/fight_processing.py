@@ -1,5 +1,6 @@
 import json
 from collections import deque
+from typing import Optional
 
 from sqlalchemy import text
 from database import SessionLocal
@@ -19,9 +20,29 @@ from models.constants import (
     TAKEDOWN_LOOKBACK_FRAMES
 )
 
-def process_fight(detection_results_file, save_to_db: bool = True):
+
+def _insert_event(db, frame: int, description: str) -> None:
+    db.execute(
+        text("INSERT INTO fight_events (frame, description) VALUES (:frame, :description)"),
+        {"frame": frame, "description": description},
+    )
+
+
+def process_fight(
+    detection_results_file: str,
+    rounds: Optional[list[tuple[int, int]]] = None,
+    save_to_db: bool = True,
+):
     db = SessionLocal() if save_to_db else None
-    data = json.load(open(detection_results_file))
+    with open(detection_results_file) as f:
+        data = json.load(f)
+
+    round_starts = {}
+    round_ends   = {}
+    if rounds:
+        for i, (start, end) in enumerate(rounds, 1):
+            round_starts[start] = i
+            round_ends[end]     = i
 
     # Each fight/round starts in standup
     current_fight_state = FightState.STRIKING
@@ -50,6 +71,20 @@ def process_fight(detection_results_file, save_to_db: bool = True):
     }
 
     for (index, frame) in enumerate(data["frames"]):
+        frame_number = index + 1
+
+        if frame_number in round_starts:
+            description = f"Round {round_starts[frame_number]} started"
+            if db is not None:
+                _insert_event(db, frame_number, description)
+            print(description + f" at frame {frame_number}")
+
+        if frame_number in round_ends:
+            description = f"Round {round_ends[frame_number]} ended"
+            if db is not None:
+                _insert_event(db, frame_number, description)
+            print(description + f" at frame {frame_number}")
+
         if not is_frame_valid(frame["detections"]):
             if current_fight_state == FightState.GRAPPLING:
                 frames_spent_grappling += 1
@@ -72,11 +107,8 @@ def process_fight(detection_results_file, save_to_db: bool = True):
                 for strike in detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state):
                     description = f"{strike['fighter']} threw a {strike['type']}"
                     if db is not None:
-                        db.execute(
-                            text("INSERT INTO fight_events (frame, description) VALUES (:frame, :description)"),
-                            {"frame": index + 1, "description": description}
-                        )
-                    print(description + f" at frame {index + 1}")
+                        _insert_event(db, frame_number, description)
+                    print(description + f" at frame {frame_number}")
 
             prev_red_kp  = red_kp
             prev_blue_kp = blue_kp
@@ -102,15 +134,8 @@ def process_fight(detection_results_file, save_to_db: bool = True):
                     description += f", takedown initiated by {initiator}"
 
             if db is not None:
-                # TODO: use db file/class to insert via function, do not hard code SQL query here
-                db.execute(
-                    text("""
-                    INSERT INTO fight_events (frame, description)
-                    VALUES (:frame, :description)
-                    """),
-                    {"frame": index + 1, "description": description}
-                )
-            print(description + f" at frame {index + 1}")
+                _insert_event(db, frame_number, description)
+            print(description + f" at frame {frame_number}")
             previous_fight_state = current_fight_state
 
     print(f"Frames spent grappling: {frames_spent_grappling}")

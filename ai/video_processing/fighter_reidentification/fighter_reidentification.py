@@ -1,4 +1,3 @@
-import os
 import cv2
 import json
 import torchreid
@@ -6,27 +5,79 @@ from models.IdentityMemory import IdentityMemory
 
 FIGHTER_CLASSES = [0, 1]
 
-def track_fighters(detection_results_path: str):
-    frames = json.load(open(detection_results_path))
+
+def track_fighters(
+    detection_results_path: str,
+    video_path: str | None = None,
+):
+    """
+    Assign stable red/blue identities to fighters across frames.
+
+    Args:
+        detection_results_path: Path to runs/detection_results.json.
+        video_path: Path to the source .mp4. When supplied, frames are read
+                    directly from the video (no frames/ directory needed).
+                    Falls back to frames/frame_N.jpg when None.
+
+    Output:
+        Writes runs/output_reidentification.json.
+    """
+    _data  = json.load(open(detection_results_path))
+    fps    = _data.get("fps", 50.0)
+    frames = _data["frames"]
+
+    cap = None
+    if video_path:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise FileNotFoundError(f"Cannot open video: {video_path}")
+        # Frames are processed in sequential order — never seek, just read forward.
+        print(f"ReID: reading frames sequentially from video: {video_path}")
+    else:
+        print("ReID: reading frames from frames/ directory")
 
     extractor = torchreid.utils.FeatureExtractor(
         model_name='osnet_x1_0',
         device='cuda'
     )
 
-    id_mem = IdentityMemory()
-    output = {"fps": 50, "frames": []}
+    id_mem  = IdentityMemory()
+    output  = {"fps": fps, "frames": []}
+    total   = len(frames)
+    missing = 0
 
-    for frame in frames:
-        image_name = f"frames/frame_{frame['frame']}.jpg"
-        frame_image = cv2.imread(image_name)
+    for idx, frame in enumerate(frames):
+        frame_num  = frame["frame"]
+        image_name = f"frames/frame_{frame_num}.jpg"
+
+        # Read frame from video or disk.
+        # VideoCapture: read sequentially — no seeking, avoids H.264 decode errors.
+        # Frames with no fighters are grabbed without decoding (faster).
+        detections   = frame["detections"]
+        fighter_dets = [d for d in detections if d.get("class_id") in FIGHTER_CLASSES]
+
+        if cap is not None:
+            if fighter_dets:
+                ret, frame_image = cap.read()
+                frame_image = frame_image if ret else None
+            else:
+                cap.grab()   # advance position without decoding
+                frame_image = None
+        else:
+            frame_image = cv2.imread(image_name)
+
+        if frame_image is None and fighter_dets:
+            missing += 1
+            output["frames"].append({"image_name": image_name, "detections": []})
+            continue
+
+        # Progress log
+        if (idx + 1) % 500 == 0:
+            print(f"  ReID: {idx+1}/{total} frames processed")
+
         cropped_detections = []
 
-        detections = frame["detections"]
-        fighter_detections = [d for d in detections if d.get("class_id") in FIGHTER_CLASSES]
-
-        cropped_detections = []
-        for detection in fighter_detections:
+        for detection in fighter_dets:
             bbox = detection["bbox_xyxy"]
             if not bbox:
                 continue
@@ -40,31 +91,25 @@ def track_fighters(detection_results_path: str):
             features = extractor(cropped_detections)
 
         out_frame = {"image_name": image_name, "detections": []}
-        for i, d in enumerate(fighter_detections):
+        for i, d in enumerate(fighter_dets):
             # TODO: Figure out how to not track fighters for reidentification when they are grappling
-            #current_fight_state, _ = determine_fight_state(
-            #    frame["detections"],
-            #    0,
-            #    constants.MIN_GRAPPLING_TRESHOLD,
-            #    constants.DISTANCE_GRAPPLING_TRESHOLD
-            #)
-
-            # TODO: This is not doing much better for grappling frames
-            #if current_fight_state == FightState.STRIKING:
-            #    reid_id, sim = id_mem.assign(features[i])
-
             reid_id, sim = id_mem.assign(features[i])
             out_frame["detections"].append({
-                "bbox_xyxy": d.get("bbox_xyxy"),
+                "bbox_xyxy":  d.get("bbox_xyxy"),
                 "confidence": d.get("confidence"),
-                "class_id": int(reid_id),
-                "sim": float(sim)
+                "class_id":   int(reid_id),
+                "sim":        float(sim),
             })
-        
+
         output["frames"].append(out_frame)
+
+    if cap:
+        cap.release()
 
     with open("runs/output_reidentification.json", "w") as f:
         json.dump(output, f, indent=2)
+
+    print(f"ReID complete — {total} frames processed, {missing} unreadable")
 
 
 def crop_fighter(frame_bgr, bbox_xyxy, pad=0.1):
@@ -86,6 +131,4 @@ def crop_fighter(frame_bgr, bbox_xyxy, pad=0.1):
         return None
 
     crop = frame_bgr[y1:y2, x1:x2]
-    if crop.size == 0:
-        return None
-    return crop
+    return crop if crop.size > 0 else None

@@ -120,6 +120,15 @@ ai/
 └── database.py                    # SQLAlchemy SessionLocal
 ```
 
+## Glossary
+
+| Term | Definition |
+|---|---|
+| **ROI** (Region of Interest) | A rectangular crop of the video frame. In this project it refers to the bounding box around the scoreboard overlay — the portion of the broadcast frame containing the round number and countdown timer (e.g. bottom-left corner at x=1620, y=980, w=280, h=60). The pipeline detects this rectangle once during calibration and reuses it for all subsequent OCR samples, avoiding the cost of processing the full frame every time. |
+| **Scoreboard overlay** | The persistent on-screen graphic broadcast over the fight footage showing the current round number and countdown timer (e.g. `R1 4:32`). Present in all major MMA TV broadcasts regardless of organisation. |
+| **Segmentation** | The process of splitting a full fight video (including walkouts, corner breaks, and replays) into individual round clips by detecting when each round starts and ends. |
+| **OCR** (Optical Character Recognition) | Extracting text from an image. Used here to read the round number and timer directly from the scoreboard overlay. |
+
 ## Setup
 
 ### Prerequisites

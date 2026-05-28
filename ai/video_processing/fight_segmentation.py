@@ -11,6 +11,7 @@ round transitions are used to snap boundaries to exact frames.
 
 import bisect
 import json
+import re
 from collections import deque
 from pathlib import Path
 from typing import Optional
@@ -22,24 +23,32 @@ import numpy as np
 
 from models.constants import (
     LABEL_ID,
-    MIN_FIGHT_END_GAP_FRAMES,
-    MIN_ROUND_GAP_FRAMES,
-    MIN_ROUND_LENGTH_FRAMES,
+    MIN_FIGHT_END_GAP_SECS,
+    MIN_ROUND_GAP_SECS,
+    MIN_ROUND_LENGTH_SECS,
     MIN_VALID_FRAME_RATIO,
-    MIN_FIGHT_DURATION_FRAMES,
+    MIN_FIGHT_DURATION_SECS,
     ROUND_ENGAGEMENT_DISTANCE,
-    FIGHT_PRESENCE_WINDOW,
+    FIGHT_PRESENCE_WINDOW_SECS,
     FIGHT_ENTER_RATIO,
     FIGHT_EXIT_RATIO,
-    ROUND_ENGAGEMENT_WINDOW,
+    ROUND_ENGAGEMENT_WINDOW_SECS,
     ROUND_ENGAGED_RATIO,
     ROUND_DISENGAGED_RATIO,
     FUSION_WEIGHT_OCR,
     FUSION_WEIGHT_DETECTION,
     FUSION_WEIGHT_ENGAGEMENT,
-    OCR_BOUNDARY_SNAP_FRAMES,
+    OCR_BOUNDARY_SNAP_SECS,
 )
 from debug import DebugContext
+
+
+def _read_fps(detection_results_file: str) -> float:
+    """Read fps from the header of detection_results.json without loading the full file."""
+    with open(detection_results_file, "r", encoding="utf-8") as f:
+        head = f.read(128)
+    m = re.search(r'"fps"\s*:\s*([\d.]+)', head)
+    return float(m.group(1)) if m else 50.0
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +77,13 @@ def segment_fights(
     """
     ctx = debug_ctx or DebugContext.disabled()
 
+    # Read fps and derive frame counts from seconds-based constants
+    fps = _read_fps(detection_results_file)
+    ctx.log("segmentation", f"Video fps: {fps:.2f}")
+
+    min_round_length_frames  = int(MIN_ROUND_LENGTH_SECS  * fps)
+    min_fight_duration_frames = int(MIN_FIGHT_DURATION_SECS * fps)
+
     # Load OCR samples
     ocr_samples: list[dict] = []
     if scoreboard_samples_file:
@@ -86,11 +102,11 @@ def segment_fights(
             f"hard boundaries: {len(ocr_bounds)}")
 
     rounds, total_frames, valid_frames, debug_series = _segment_streaming(
-        detection_results_file, ocr_index, ctx
+        detection_results_file, ocr_index, ctx, fps
     )
 
     # Snap boundaries to nearest OCR round transition
-    rounds = _snap_to_ocr_boundaries(rounds, ocr_bounds, ctx)
+    rounds = _snap_to_ocr_boundaries(rounds, ocr_bounds, ctx, fps)
 
     # Quality metrics
     total_fight_duration = sum(e - s + 1 for s, e in rounds)
@@ -98,16 +114,18 @@ def segment_fights(
     round_count          = len(rounds)
 
     metrics = {
-        "total_frames":              total_frames,
-        "valid_frame_ratio":         valid_ratio,
-        "round_count":               round_count,
+        "total_frames":               total_frames,
+        "valid_frame_ratio":          valid_ratio,
+        "round_count":                round_count,
         "total_fight_duration_frames": total_fight_duration,
-        "ocr_samples_used":          len(ocr_samples),
+        "total_fight_duration_secs":  total_fight_duration / fps if fps > 0 else 0,
+        "ocr_samples_used":           len(ocr_samples),
+        "fps":                        fps,
     }
 
     is_valid = (
         valid_ratio >= MIN_VALID_FRAME_RATIO and
-        total_fight_duration >= MIN_FIGHT_DURATION_FRAMES and
+        total_fight_duration >= min_fight_duration_frames and
         round_count > 0
     )
 
@@ -118,9 +136,9 @@ def segment_fights(
         elif valid_ratio < MIN_VALID_FRAME_RATIO:
             reason = (f"Valid frame ratio too low: "
                       f"{valid_ratio:.2f} < {MIN_VALID_FRAME_RATIO}")
-        elif total_fight_duration < MIN_FIGHT_DURATION_FRAMES:
+        elif total_fight_duration < min_fight_duration_frames:
             reason = (f"Fight duration too short: "
-                      f"{total_fight_duration} < {MIN_FIGHT_DURATION_FRAMES}")
+                      f"{total_fight_duration/fps:.1f}s < {MIN_FIGHT_DURATION_SECS}s")
 
     ctx.log("segmentation",
             f"Result: {round_count} round(s)  valid={is_valid}  {reason or 'OK'}")
@@ -205,6 +223,7 @@ def _segment_streaming(
     detection_results_file: str,
     ocr_index: dict[int, dict],
     ctx: DebugContext,
+    fps: float,
 ) -> tuple[list[tuple[int, int]], int, int, list[dict]]:
     """
     One-pass streaming segmenter.
@@ -212,10 +231,17 @@ def _segment_streaming(
     Returns (rounds, total_frames, valid_frames, debug_series).
     debug_series is a list of per-sampled-frame dicts for plotting.
     """
+    # Convert seconds-based constants to frames using detected fps
+    min_fight_end_gap    = int(MIN_FIGHT_END_GAP_SECS    * fps)
+    min_round_gap        = int(MIN_ROUND_GAP_SECS        * fps)
+    presence_window_sz   = int(FIGHT_PRESENCE_WINDOW_SECS  * fps)
+    engagement_window_sz = int(ROUND_ENGAGEMENT_WINDOW_SECS * fps)
+    debug_sample_interval = max(1, int(0.5 * fps))  # debug point every 0.5 s
+
     # Estimate OCR stride for signal lookup
     frames_list = sorted(ocr_index.keys())
     ocr_stride  = (
-        int(np.median(np.diff(frames_list))) if len(frames_list) >= 2 else 25
+        int(np.median(np.diff(frames_list))) if len(frames_list) >= 2 else int(fps // 2)
     )
 
     presence_window  = deque()
@@ -265,8 +291,8 @@ def _segment_streaming(
             eng_w = FUSION_WEIGHT_ENGAGEMENT / (FUSION_WEIGHT_DETECTION + FUSION_WEIGHT_ENGAGEMENT)
             prob  = det_w * det_sig + eng_w * eng_sig
 
-        # Debug series (sample every 25 frames to keep file small)
-        if total_frames % 25 == 0:
+        # Debug series (one sample every ~0.5 s)
+        if total_frames % debug_sample_interval == 0:
             nearest_sample = (
                 ocr_index.get(min(frames_list, key=lambda f: abs(f - frame_num)))
                 if frames_list else None
@@ -286,13 +312,13 @@ def _segment_streaming(
         # --- Update fight presence window ---
         presence_window.append(prob >= 0.5)
         presence_sum += int(prob >= 0.5)
-        if len(presence_window) > FIGHT_PRESENCE_WINDOW:
+        if len(presence_window) > presence_window_sz:
             presence_sum -= int(presence_window.popleft())
         presence_ratio = presence_sum / len(presence_window)
 
         # ---- Fight state machine ----
         if not in_fight:
-            if (len(presence_window) >= FIGHT_PRESENCE_WINDOW and
+            if (len(presence_window) >= presence_window_sz and
                     presence_ratio >= FIGHT_ENTER_RATIO):
                 in_fight         = True
                 fight_start      = frame_num - len(presence_window) + 1
@@ -315,7 +341,7 @@ def _segment_streaming(
                 fight_exit_cand   = None
                 fight_exit_streak = 0
 
-            if fight_exit_streak >= MIN_FIGHT_END_GAP_FRAMES:
+            if fight_exit_streak >= min_fight_end_gap:
                 fight_end = fight_exit_cand
                 if in_round and round_start is not None and fight_end >= round_start:
                     rounds.append((round_start, fight_end))
@@ -339,7 +365,7 @@ def _segment_streaming(
         # ---- Round state machine ----
         engagement_window.append(prob >= 0.5)
         engagement_sum += int(prob >= 0.5)
-        if len(engagement_window) > ROUND_ENGAGEMENT_WINDOW:
+        if len(engagement_window) > engagement_window_sz:
             engagement_sum -= int(engagement_window.popleft())
         eng_ratio = (engagement_sum / len(engagement_window)
                      if engagement_window else 0.0)
@@ -353,7 +379,7 @@ def _segment_streaming(
                 break_cand   = None
                 break_streak = 0
 
-            if break_streak >= MIN_ROUND_GAP_FRAMES:
+            if break_streak >= min_round_gap:
                 round_end = break_cand
                 if round_start is not None and round_end >= round_start:
                     rounds.append((round_start, round_end))
@@ -364,7 +390,7 @@ def _segment_streaming(
                 break_cand   = None
                 break_streak = 0
         else:
-            if (len(engagement_window) >= ROUND_ENGAGEMENT_WINDOW and
+            if (len(engagement_window) >= engagement_window_sz and
                     eng_ratio >= ROUND_ENGAGED_RATIO):
                 in_round    = True
                 round_start = frame_num - len(engagement_window) + 1
@@ -380,7 +406,8 @@ def _segment_streaming(
             ctx.log("segmentation",
                     f"End of stream: closed final round {round_start}–{last_frame}")
 
-    rounds = [(s, e) for s, e in rounds if e - s + 1 >= MIN_ROUND_LENGTH_FRAMES]
+    min_round_len = int(MIN_ROUND_LENGTH_SECS * fps)
+    rounds = [(s, e) for s, e in rounds if e - s + 1 >= min_round_len]
     return rounds, total_frames, valid_frames, debug_series
 
 
@@ -392,28 +419,31 @@ def _snap_to_ocr_boundaries(
     rounds: list[tuple[int, int]],
     ocr_bounds: list[int],
     ctx: DebugContext,
+    fps: float,
 ) -> list[tuple[int, int]]:
     """
     For each detected round boundary, snap to the nearest OCR-derived
-    round-transition frame if within OCR_BOUNDARY_SNAP_FRAMES.
+    round-transition frame if within OCR_BOUNDARY_SNAP_SECS.
     """
     if not ocr_bounds or not rounds:
         return rounds
 
+    snap_frames = int(OCR_BOUNDARY_SNAP_SECS * fps)
     snapped: list[tuple[int, int]] = []
+
     for i, (start, end) in enumerate(rounds):
         new_start = start
         new_end   = end
 
         if i > 0:
             nearest = min(ocr_bounds, key=lambda b: abs(b - start))
-            if abs(nearest - start) <= OCR_BOUNDARY_SNAP_FRAMES:
+            if abs(nearest - start) <= snap_frames:
                 ctx.log("segmentation",
                         f"Snap round {i+1} start {start} → {nearest} (OCR transition)")
                 new_start = nearest
 
         nearest_end = min(ocr_bounds, key=lambda b: abs(b - end))
-        if abs(nearest_end - end) <= OCR_BOUNDARY_SNAP_FRAMES:
+        if abs(nearest_end - end) <= snap_frames:
             ctx.log("segmentation",
                     f"Snap round {i+1} end {end} → {nearest_end} (OCR transition)")
             new_end = nearest_end

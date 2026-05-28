@@ -40,16 +40,28 @@ ai/
 
 ## Architecture Rules
 - **`main.py` is a pure argument parser and dispatcher.** It contains no business
-  logic whatsoever — only `argparse` setup and calls to `pipeline.py` functions.
+  logic — only `argparse` setup and a single call to `run_pipeline()`.
   Do not add conditional logic, file path construction, timing, or imports of
   processing modules to `main.py`.
-- **`pipeline.py` owns all orchestration.** Step ordering, fallback handling,
-  timing measurement, output path construction, and manifest writing all live here.
+- **`pipeline.py` owns all orchestration** via a single `run_pipeline()` entry point.
+  Step ordering, skip logic, fallback handling, timing, and manifest writing live here.
 - **`debug.py / DebugContext`** is the single route for all debug output (images,
   JSON snapshots, log lines). Never add scattered `print`/`cv2.imwrite` for debug
   purposes — use `ctx.save_image`, `ctx.save_json`, `ctx.log` instead.
 - **`constants.py`** is the single source of truth for all numeric thresholds.
   Never hardcode a threshold or frame-count in a processing module.
+
+## Pipeline philosophy
+- **Default**: `python main.py fight.mp4` runs every step in order.
+- **Skip by supplying a file**: a file argument means "I already have this output,
+  skip this step and all earlier steps on the same track."
+  - `--detection-file` → skip YOLO
+  - `--reid-file`      → skip YOLO + ReID
+  - `--pose-results`   → skip YOLO + ReID + Pose
+  - `--scoreboard-samples` → skip OCR
+  - `--manifest`       → skip OCR + Segmentation
+- **Debug flags** (`--verify-pose`, `--verify-scoreboard`) run additional outputs
+  AFTER the main pipeline and cause `process_fight` to be skipped (no DB writes).
 
 ## Processing Pipeline
 1. `video_processing.py` — custom YOLO (`weights.pt`, conf=0.25) detects fighters + referee, saves `runs/detection_results.json`
