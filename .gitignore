@@ -1,1 +1,4 @@
 backend/.venv/.gitignore
+
+.env
+.env.local
