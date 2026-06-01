@@ -1,30 +1,35 @@
 import cv2
-import json
+import torch
 import torchreid
 from models.IdentityMemory import IdentityMemory
+
+# torchreid only supports 'cuda' or 'cpu' (no MPS).
+_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 FIGHTER_CLASSES = [0, 1]
 
 
 def track_fighters(
-    detection_results_path: str,
+    detection_data: dict,
     video_path: str | None = None,
-):
+) -> dict:
     """
     Assign stable red/blue identities to fighters across frames.
 
     Args:
-        detection_results_path: Path to runs/detection_results.json.
-        video_path: Path to the source .mp4. When supplied, frames are read
-                    directly from the video (no frames/ directory needed).
-                    Falls back to frames/frame_N.jpg when None.
+        detection_data: In-memory detection dict produced by process_video()
+                        (or loaded from a --detection-file dev override).
+        video_path:     Path to the source .mp4. When supplied, frames are read
+                        directly from the video (no frames/ directory needed).
+                        Falls back to frames/frame_N.jpg when None.
 
-    Output:
-        Writes runs/output_reidentification.json.
+    Returns:
+        Reid dict in-memory:
+            {"fps": float, "frames": [{"image_name": str, "detections": [...]}]}
+        No file is written to disk.
     """
-    _data  = json.load(open(detection_results_path))
-    fps    = _data.get("fps", 50.0)
-    frames = _data["frames"]
+    fps    = detection_data.get("fps", 50.0)
+    frames = detection_data["frames"]
 
     cap = None
     if video_path:
@@ -38,7 +43,7 @@ def track_fighters(
 
     extractor = torchreid.utils.FeatureExtractor(
         model_name='osnet_x1_0',
-        device='cuda'
+        device=_DEVICE,
     )
 
     id_mem  = IdentityMemory()
@@ -106,10 +111,8 @@ def track_fighters(
     if cap:
         cap.release()
 
-    with open("runs/output_reidentification.json", "w") as f:
-        json.dump(output, f, indent=2)
-
     print(f"ReID complete — {total} frames processed, {missing} unreadable")
+    return output
 
 
 def crop_fighter(frame_bgr, bbox_xyxy, pad=0.1):
