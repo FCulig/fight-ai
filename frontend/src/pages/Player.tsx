@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEvents } from '../hooks/useEvents';
 import { useFights } from '../hooks/useFights';
@@ -9,7 +9,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import VideoControls from '../components/VideoControls';
 import FrameInfo from '../components/FrameInfo';
 import EventFeed from '../components/EventFeed';
-import FighterOverlay from '../components/FighterOverlay';
+import FighterOverlay, { type FighterOverlayHandle } from '../components/FighterOverlay';
 
 function isStrikeEvent(desc: string) {
   return /punch|kick|jab|cross|hook|uppercut|elbow|knee|strike|hit|landed|blocked/i.test(desc);
@@ -25,6 +25,10 @@ export default function Player() {
   const fightId = id ? Number(id) : null;
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const overlayRef = useRef<FighterOverlayHandle>(null);
+  const rafRef = useRef<number | null>(null);
+  const fpsRef = useRef<number>(30);
+  const lastFrameRef = useRef<number>(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -39,6 +43,39 @@ export default function Player() {
   const isMobile = width < 768;
 
   const fps = selectedFight?.fps ?? 30;
+  fpsRef.current = fps;
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!isPlaying) {
+      if (rafRef.current !== null) {
+        video.cancelVideoFrameCallback(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
+    const tick = (_now: DOMHighResTimeStamp, metadata: VideoFrameCallbackMetadata) => {
+      const frame = Math.floor(metadata.mediaTime * fpsRef.current) + 1;
+      overlayRef.current?.draw(frame);
+      if (frame !== lastFrameRef.current) {
+        lastFrameRef.current = frame;
+        setCurrentTime(metadata.mediaTime);
+      }
+      rafRef.current = video.requestVideoFrameCallback(tick);
+    };
+
+    rafRef.current = video.requestVideoFrameCallback(tick);
+
+    return () => {
+      if (rafRef.current !== null) {
+        video.cancelVideoFrameCallback(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [isPlaying]);
   // 1-based frame number per the frame-numbering contract
   const currentFrame = Math.floor(currentTime * fps) + 1;
   const currentMs = Math.floor(currentTime * 1000);
@@ -62,6 +99,7 @@ export default function Player() {
     const newTime = Math.min(Math.max(video.currentTime + delta / fps, 0), video.duration);
     video.currentTime = newTime;
     setCurrentTime(newTime);
+    overlayRef.current?.draw(Math.floor(newTime * fpsRef.current) + 1);
   };
 
   const handleSeek = (time: number) => {
@@ -69,6 +107,7 @@ export default function Player() {
     if (!video) return;
     video.currentTime = time;
     setCurrentTime(time);
+    overlayRef.current?.draw(Math.floor(time * fpsRef.current) + 1);
   };
 
   const handleExportFrame = () => {
@@ -140,7 +179,7 @@ export default function Player() {
         >
           {selectedFight && (
             <FighterOverlay
-              currentFrame={currentFrame}
+              ref={overlayRef}
               frameMap={frameMap}
               fightWidth={selectedFight.width}
               fightHeight={selectedFight.height}

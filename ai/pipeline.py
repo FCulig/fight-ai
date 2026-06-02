@@ -192,6 +192,30 @@ def run_pipeline(
             db.close()
 
     # ----------------------------------------------------------------
+    # In debug modes, try loading rounds from DB — skips OCR + segmentation
+    # ----------------------------------------------------------------
+    _db_rounds: Optional[list[tuple[int, int]]] = None
+    _explicit_rounds = manifest_file is not None or rounds_arg is not None
+    if (verify_pose is not None or verify_scoreboard) and not _explicit_rounds:
+        from sqlalchemy import text
+        from database import SessionLocal
+        db = SessionLocal()
+        try:
+            rows = db.execute(
+                text(
+                    "SELECT start_frame, end_frame FROM rounds "
+                    "WHERE fight_id = :id ORDER BY round_number"
+                ),
+                {"id": fight_id},
+            ).fetchall()
+            if rows:
+                _db_rounds = [(row.start_frame, row.end_frame) for row in rows]
+                print(f"Debug mode: loaded {len(_db_rounds)} round(s) from DB "
+                      f"(fight_id={fight_id}) — skipping OCR + segmentation")
+        finally:
+            db.close()
+
+    # ----------------------------------------------------------------
     # Determine which steps to run
     # ----------------------------------------------------------------
 
@@ -201,7 +225,7 @@ def run_pipeline(
     run_pose               = pose_results is None
 
     # Track B — segmentation
-    has_rounds = manifest_file is not None or rounds_arg is not None
+    has_rounds = manifest_file is not None or rounds_arg is not None or _db_rounds is not None
     run_ocr    = (not skip_scoreboard
                   and scoreboard_samples is None
                   and not has_rounds)
@@ -226,15 +250,17 @@ def run_pipeline(
         return "RUN"
 
     def _ocr_label() -> str:
-        if skip_scoreboard:       return "SKIP — disabled"
-        if scoreboard_samples:    return f"SKIP — {scoreboard_samples}"
-        if manifest_file:         return f"SKIP — manifest supplied"
-        if rounds_arg:            return "SKIP — rounds explicit"
+        if skip_scoreboard:           return "SKIP — disabled"
+        if scoreboard_samples:        return f"SKIP — {scoreboard_samples}"
+        if manifest_file:             return f"SKIP — manifest supplied"
+        if rounds_arg:                return "SKIP — rounds explicit"
+        if _db_rounds is not None:    return "SKIP — rounds from DB"
         return "RUN" + (" (recalibrate)" if recalibrate else "")
 
     def _seg_label() -> str:
-        if manifest_file:  return f"SKIP — {manifest_file}"
-        if rounds_arg:     return "SKIP — rounds explicit"
+        if manifest_file:             return f"SKIP — {manifest_file}"
+        if rounds_arg:                return "SKIP — rounds explicit"
+        if _db_rounds is not None:    return "SKIP — rounds from DB"
         return "RUN"
 
     _print_plan("Fight AI — Processing Pipeline", [
@@ -355,6 +381,9 @@ def run_pipeline(
     elif manifest_file:
         rounds = _load_rounds_from_manifest(manifest_file)
         print(f"Loaded rounds from {manifest_file}: {rounds}")
+    elif _db_rounds is not None:
+        rounds = _db_rounds
+        print(f"Using rounds from DB: {rounds}")
     else:
         t0         = time.perf_counter()
         seg_result = segment_fights(
