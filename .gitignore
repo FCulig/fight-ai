@@ -2,3 +2,5 @@ backend/.venv/.gitignore
 
 .env
 .env.local
+# Python virtual environments
+.venv/
