@@ -1,5 +1,3 @@
-from typing import Optional
-
 from sqlalchemy import Column, ForeignKey, Integer, Text
 from pydantic import BaseModel, ConfigDict
 
@@ -12,7 +10,7 @@ class FightEvent(Base):
     id = Column(Integer, primary_key=True, index=True)
     frame = Column(Integer, nullable=False)
     description = Column(Text, nullable=False)
-    fight_id = Column(Integer, ForeignKey("fights.id", ondelete="CASCADE"), nullable=True)
+    fight_id = Column(Integer, ForeignKey("fights.id", ondelete="CASCADE"), nullable=False)
 
 
 class FightEventResponse(BaseModel):
@@ -21,4 +19,4 @@ class FightEventResponse(BaseModel):
     id: int
     frame: int
     description: str
-    fight_id: Optional[int]
+    fight_id: int
