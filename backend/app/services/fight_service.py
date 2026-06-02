@@ -18,6 +18,13 @@ def get_processed_fights() -> List[Fight]:
     return run_db_query(_query)
 
 
+def get_fight_by_id(fight_id: int) -> Fight | None:
+    def _query(session):
+        return session.query(Fight).filter(Fight.id == fight_id).first()
+
+    return run_db_query(_query)
+
+
 def delete_fight(fight_id: int) -> bool:
     def _query(session):
         fight = session.query(Fight).filter(Fight.id == fight_id).first()

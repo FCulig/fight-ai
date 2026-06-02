@@ -1,7 +1,7 @@
 import { forwardRef, useState, useRef, useCallback } from 'react';
 
 interface VideoPlayerProps {
-  src: string;
+  src: string | undefined;
   isPlaying: boolean;
   onTimeUpdate: () => void;
   onLoadedMetadata: () => void;

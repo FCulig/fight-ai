@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useEvents } from '../hooks/useEvents';
 import { useFights } from '../hooks/useFights';
 import { useFighterFrames } from '../hooks/useFighterFrames';
@@ -19,16 +20,21 @@ function isGroundEvent(desc: string) {
 }
 
 export default function Player() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const fightId = id ? Number(id) : null;
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [showBoxes, setShowBoxes] = useState(true);
 
-  const { fights, selectedFight, selectedFightId, setSelectedFightId } = useFights();
-  const { events, loading, error } = useEvents(selectedFightId);
-  const { frameMap } = useFighterFrames(selectedFightId);
-  const { rounds } = useRounds(selectedFightId);
+  const { fights } = useFights();
+  const selectedFight = fights.find(f => f.id === fightId) ?? null;
+  const { events, loading, error } = useEvents(fightId);
+  const { frameMap } = useFighterFrames(fightId);
+  const { rounds } = useRounds(fightId);
   const width = useWindowWidth();
   const isMobile = width < 768;
 
@@ -38,8 +44,8 @@ export default function Player() {
   const currentMs = Math.floor(currentTime * 1000);
 
   const videoSrc = selectedFight
-    ? `/${selectedFight.video_path.split('/').pop()}`
-    : '/fight.mp4';
+    ? `/fights/${selectedFight.id}/video`
+    : undefined;
 
   const togglePlay = () => {
     const video = videoRef.current;
@@ -104,8 +110,6 @@ export default function Player() {
     padding: isMobile ? '14px 16px' : '18px 20px',
   };
 
-  const processedFights = fights.filter(f => f.processed);
-
   return (
     <div style={{
       display: 'flex',
@@ -164,42 +168,41 @@ export default function Player() {
         flexDirection: 'column',
         gap: 12,
       }}>
-        {/* Fight selector */}
-        {processedFights.length > 0 && (
-          <div className="anim-fade-up anim-delay-1" style={glassCard}>
+        {/* Back to fight list */}
+        <div className="anim-fade-up anim-delay-1" style={glassCard}>
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.55)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              padding: 0,
+              width: '100%',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
+            All Fights
+          </button>
+          {selectedFight && (
             <p style={{
-              fontSize: 10,
+              margin: '8px 0 0',
+              fontSize: 13,
               fontWeight: 700,
-              color: 'rgba(255,255,255,0.28)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-              margin: '0 0 8px',
+              color: '#f1f5f9',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}>
-              Fight
+              {selectedFight.video_path.split('/').pop()?.replace(/\.[^/.]+$/, '')}
             </p>
-            <select
-              value={selectedFightId ?? ''}
-              onChange={e => setSelectedFightId(Number(e.target.value))}
-              style={{
-                width: '100%',
-                background: 'rgba(0,0,0,0.4)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 8,
-                color: '#fff',
-                fontSize: 13,
-                padding: '8px 10px',
-                cursor: 'pointer',
-                outline: 'none',
-              }}
-            >
-              {processedFights.map(f => (
-                <option key={f.id} value={f.id} style={{ background: '#1a1a2e' }}>
-                  {f.video_path.split('/').pop()}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Stats card */}
         <div className="anim-fade-up anim-delay-2" style={glassCard}>

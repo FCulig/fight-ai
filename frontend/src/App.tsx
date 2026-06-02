@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import Header from './components/Header';
+import FightList from './pages/FightList';
 import Player from './pages/Player';
 import Library from './pages/Library';
 
@@ -37,7 +38,8 @@ export default function App() {
       <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Header />
         <Routes>
-          <Route path="/" element={<Player />} />
+          <Route path="/" element={<FightList />} />
+          <Route path="/fights/:id" element={<Player />} />
           <Route path="/library" element={<Library />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
