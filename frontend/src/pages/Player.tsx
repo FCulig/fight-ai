@@ -1,14 +1,14 @@
 import { useRef, useState } from 'react';
 import { useEvents } from '../hooks/useEvents';
+import { useFights } from '../hooks/useFights';
+import { useFighterFrames } from '../hooks/useFighterFrames';
+import { useRounds } from '../hooks/useRounds';
 import { useWindowWidth } from '../hooks/useWindowWidth';
 import VideoPlayer from '../components/VideoPlayer';
 import VideoControls from '../components/VideoControls';
 import FrameInfo from '../components/FrameInfo';
 import EventFeed from '../components/EventFeed';
-
-const VIDEO_PATH = '/fight.mp4';
-const FPS = 50;
-const ROUND_DURATION = 300;
+import FighterOverlay from '../components/FighterOverlay';
 
 function isStrikeEvent(desc: string) {
   return /punch|kick|jab|cross|hook|uppercut|elbow|knee|strike|hit|landed|blocked/i.test(desc);
@@ -23,12 +23,23 @@ export default function Player() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const { events, loading, error } = useEvents();
+  const [showBoxes, setShowBoxes] = useState(true);
+
+  const { fights, selectedFight, selectedFightId, setSelectedFightId } = useFights();
+  const { events, loading, error } = useEvents(selectedFightId);
+  const { frameMap } = useFighterFrames(selectedFightId);
+  const { rounds } = useRounds(selectedFightId);
   const width = useWindowWidth();
   const isMobile = width < 768;
 
-  const currentFrame = Math.floor(currentTime * FPS);
+  const fps = selectedFight?.fps ?? 30;
+  // 1-based frame number per the frame-numbering contract
+  const currentFrame = Math.floor(currentTime * fps) + 1;
   const currentMs = Math.floor(currentTime * 1000);
+
+  const videoSrc = selectedFight
+    ? `/${selectedFight.video_path.split('/').pop()}`
+    : '/fight.mp4';
 
   const togglePlay = () => {
     const video = videoRef.current;
@@ -42,7 +53,7 @@ export default function Player() {
     if (!video) return;
     video.pause();
     setIsPlaying(false);
-    const newTime = Math.min(Math.max(video.currentTime + delta / FPS, 0), video.duration);
+    const newTime = Math.min(Math.max(video.currentTime + delta / fps, 0), video.duration);
     video.currentTime = newTime;
     setCurrentTime(newTime);
   };
@@ -72,7 +83,11 @@ export default function Player() {
   const groundEvents = visibleEvents.filter(e => isGroundEvent(e.description));
   const totalStrikes = events.filter(e => isStrikeEvent(e.description)).length;
   const grappleSeconds = groundEvents.length * 4;
-  const currentRound = Math.floor(currentTime / ROUND_DURATION) + 1;
+
+  // DB-backed round lookup (1-based frames match the round boundaries)
+  const currentRound =
+    rounds.find(r => currentFrame >= r.start_frame && currentFrame <= r.end_frame)
+      ?.round_number ?? '-';
 
   const fmtGrapple = (s: number) => {
     const m = Math.floor(s / 60);
@@ -88,6 +103,8 @@ export default function Player() {
     borderRadius: 16,
     padding: isMobile ? '14px 16px' : '18px 20px',
   };
+
+  const processedFights = fights.filter(f => f.processed);
 
   return (
     <div style={{
@@ -107,7 +124,7 @@ export default function Player() {
       >
         <VideoPlayer
           ref={videoRef}
-          src={VIDEO_PATH}
+          src={videoSrc}
           isPlaying={isPlaying}
           onTimeUpdate={() => { const v = videoRef.current; if (v) setCurrentTime(v.currentTime); }}
           onLoadedMetadata={() => { const v = videoRef.current; if (v) setDuration(v.duration); }}
@@ -116,7 +133,17 @@ export default function Player() {
           onTogglePlay={togglePlay}
           onStepForward={() => stepFrame(1)}
           onStepBackward={() => stepFrame(-1)}
-        />
+        >
+          {selectedFight && (
+            <FighterOverlay
+              currentFrame={currentFrame}
+              frameMap={frameMap}
+              fightWidth={selectedFight.width}
+              fightHeight={selectedFight.height}
+              showBoxes={showBoxes}
+            />
+          )}
+        </VideoPlayer>
         <VideoControls
           isPlaying={isPlaying}
           currentTime={currentTime}
@@ -126,7 +153,7 @@ export default function Player() {
           onStepBackward={() => stepFrame(-1)}
           onStepForward={() => stepFrame(1)}
         />
-        <FrameInfo currentFrame={currentFrame} currentMs={currentMs} fps={FPS} />
+        <FrameInfo currentFrame={currentFrame} currentMs={currentMs} fps={fps} />
       </div>
 
       {/* ── Sidebar ─────────────────────────────────── */}
@@ -137,6 +164,43 @@ export default function Player() {
         flexDirection: 'column',
         gap: 12,
       }}>
+        {/* Fight selector */}
+        {processedFights.length > 0 && (
+          <div className="anim-fade-up anim-delay-1" style={glassCard}>
+            <p style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: 'rgba(255,255,255,0.28)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.12em',
+              margin: '0 0 8px',
+            }}>
+              Fight
+            </p>
+            <select
+              value={selectedFightId ?? ''}
+              onChange={e => setSelectedFightId(Number(e.target.value))}
+              style={{
+                width: '100%',
+                background: 'rgba(0,0,0,0.4)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 8,
+                color: '#fff',
+                fontSize: 13,
+                padding: '8px 10px',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              {processedFights.map(f => (
+                <option key={f.id} value={f.id} style={{ background: '#1a1a2e' }}>
+                  {f.video_path.split('/').pop()}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Stats card */}
         <div className="anim-fade-up anim-delay-2" style={glassCard}>
           <p style={{
@@ -161,7 +225,7 @@ export default function Player() {
               backgroundClip: 'text',
             }}
           >
-            Round {currentRound}
+            {currentRound === '-' ? '—' : `Round ${currentRound}`}
           </p>
 
           {/* Stat tiles */}
@@ -221,6 +285,32 @@ export default function Player() {
                 {fmtGrapple(grappleSeconds)}
               </p>
             </div>
+          </div>
+
+          {/* Overlays */}
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <p style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: 'rgba(255,255,255,0.28)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.12em',
+              margin: 0,
+              flex: 1,
+            }}>
+              Overlays
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showBoxes}
+                onChange={e => setShowBoxes(e.target.checked)}
+                style={{ accentColor: '#00daf3', width: 14, height: 14, cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>
+                Fighter Boxes
+              </span>
+            </label>
           </div>
 
           <button

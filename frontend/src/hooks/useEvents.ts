@@ -1,26 +1,21 @@
 import { useState, useEffect } from 'react';
-import { fetchEvents } from '../services/api';
+import { fetchEvents, fetchFightEvents } from '../services/api';
 import type { Event } from '../types/Event';
 
-export const useEvents = () => {
+export const useEvents = (fightId?: number | null) => {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadEvents = async () => {
-      try {
-        const data = await fetchEvents();
-        setEvents(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadEvents();
-  }, []);
+    setLoading(true);
+    setEvents([]);
+    const load = fightId != null ? fetchFightEvents(fightId) : fetchEvents();
+    load
+      .then(setEvents)
+      .catch(err => setError(err instanceof Error ? err.message : 'An unknown error occurred'))
+      .finally(() => setLoading(false));
+  }, [fightId]);
 
   return { events, loading, error };
 };
