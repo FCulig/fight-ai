@@ -1,4 +1,5 @@
 import json
+import numpy as np
 from collections import deque
 from typing import Optional
 
@@ -9,15 +10,20 @@ from fight_processing.fight_processing_util import (
     detect_strikes,
     determine_fight_state,
     determine_takedown_initiator,
+    get_fighter_scale,
+    get_head_center,
     get_hip_height,
-    is_frame_valid
+    is_frame_valid,
+    make_keypoint_smoother,
 )
 
 from models.FightState import FightState
 from models.constants import (
     MIN_GRAPPLING_THRESHOLD,
     DISTANCE_GRAPPLING_THRESHOLD,
-    TAKEDOWN_LOOKBACK_FRAMES
+    TAKEDOWN_LOOKBACK_FRAMES,
+    RECOIL_LOOKAHEAD_FRAMES,
+    RECOIL_VELOCITY_RATIO,
 )
 
 _FRAME_BATCH_SIZE = 1_000
@@ -50,6 +56,7 @@ def _flush_frame_batch(db, batch: list[dict]) -> None:
 def process_fight(
     pose_data: dict,
     fight_id: int,
+    fps: int,
     rounds: Optional[list[tuple[int, int]]] = None,
 ) -> None:
     """
@@ -67,6 +74,7 @@ def process_fight(
         pose_data:  In-memory pose dict produced by track_poses()
                     (or loaded from a --pose-results dev override).
         fight_id:   Primary key of the fights row for this video.
+        fps:        Frames per second of the source video (from fights row).
         rounds:     List of (start_frame, end_frame) tuples from segment_fights().
     """
     db = SessionLocal()
@@ -107,6 +115,15 @@ def process_fight(
 
         hip_history  = deque(maxlen=TAKEDOWN_LOOKBACK_FRAMES)
         prev_red_kp, prev_blue_kp = None, None
+
+        smooth_red  = make_keypoint_smoother()
+        smooth_blue = make_keypoint_smoother()
+
+        # Pending strikes waiting for recoil confirmation.
+        # Each entry: {"emit_at": frame, "description": str, "defender": "red"|"blue",
+        #              "head_at_contact": np.array, "def_scale": float}
+        # Clinch strikes are emitted immediately (no recoil expected).
+        pending_strikes: list[dict] = []
 
         def _limb_state():
             return {"cooldown": 0, "extension_frames": 0}
@@ -161,23 +178,57 @@ def process_fight(
             red_kp, blue_kp = None, None
             for d in frame["detections"]:
                 if d["class_id"] == 0:
-                    red_kp = d["keypoints"]
+                    red_kp = smooth_red(d["keypoints"], frame_number)
                 elif d["class_id"] == 1:
-                    blue_kp = d["keypoints"]
+                    blue_kp = smooth_blue(d["keypoints"], frame_number)
 
             if red_kp and blue_kp:
+                red_head  = get_head_center(red_kp)
+                blue_head = get_head_center(blue_kp)
+
                 hip_history.append({
                     "red":  get_hip_height(red_kp),
                     "blue": get_hip_height(blue_kp),
                 })
 
-                if current_fight_state == FightState.STRIKING and prev_red_kp and prev_blue_kp:
+                # Resolve pending strikes that have now accumulated enough lookahead.
+                still_pending = []
+                for ps in pending_strikes:
+                    if frame_number < ps["emit_at"]:
+                        still_pending.append(ps)
+                        continue
+                    # Check head recoil of the defender over the lookahead window.
+                    cur_head = red_head if ps["defender"] == "red" else blue_head
+                    head_disp = np.linalg.norm(cur_head - ps["head_at_contact"])
+                    head_speed = (head_disp / RECOIL_LOOKAHEAD_FRAMES) * fps
+                    landed = head_speed >= (RECOIL_VELOCITY_RATIO * ps["def_scale"])
+                    desc = ps["description"] + (" (landed)" if landed else " (missed)")
+                    _insert_event(db, ps["contact_frame"], desc, fight_id)
+                    print(desc + f" at frame {ps['contact_frame']}")
+                pending_strikes = still_pending
+
+                if prev_red_kp and prev_blue_kp:
+                    is_grappling = current_fight_state == FightState.GRAPPLING
                     for strike in detect_strikes(
-                        red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state
+                        red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state, fps,
+                        grappling=is_grappling
                     ):
                         description = f"{strike['fighter']} threw a {strike['type']}"
-                        _insert_event(db, frame_number, description, fight_id)
-                        print(description + f" at frame {frame_number}")
+                        if is_grappling:
+                            # Clinch strikes emitted immediately — no recoil expected.
+                            _insert_event(db, frame_number, description, fight_id)
+                            print(description + f" at frame {frame_number}")
+                        else:
+                            defender_key = "red" if strike["defender"] == "fighter_red" else "blue"
+                            def_kp = red_kp if defender_key == "red" else blue_kp
+                            pending_strikes.append({
+                                "contact_frame":   frame_number,
+                                "emit_at":         frame_number + RECOIL_LOOKAHEAD_FRAMES,
+                                "description":     description,
+                                "defender":        defender_key,
+                                "head_at_contact": red_head if defender_key == "red" else blue_head,
+                                "def_scale":       get_fighter_scale(def_kp),
+                            })
 
                 prev_red_kp  = red_kp
                 prev_blue_kp = blue_kp
@@ -209,6 +260,12 @@ def process_fight(
         # Flush remaining fighter_frames
         if frame_batch:
             _flush_frame_batch(db, frame_batch)
+
+        # Flush any strikes still pending at end of video — emit without recoil confirmation.
+        for ps in pending_strikes:
+            desc = ps["description"] + " (unconfirmed)"
+            _insert_event(db, ps["contact_frame"], desc, fight_id)
+            print(desc + f" at frame {ps['contact_frame']}")
 
         print(f"Frames spent grappling: {frames_spent_grappling}")
 

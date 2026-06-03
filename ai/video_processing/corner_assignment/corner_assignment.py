@@ -21,8 +21,8 @@ _WRIST_PAIRS = [(9, 7), (10, 8)]
 
 def _patch_half(kp: list, wrist_idx: int, elbow_idx: int) -> int:
     """Scale crop half-side by forearm length when elbow is visible."""
-    wx, wy = kp[wrist_idx]
-    ex, ey = kp[elbow_idx]
+    wx, wy = kp[wrist_idx][0], kp[wrist_idx][1]
+    ex, ey = kp[elbow_idx][0], kp[elbow_idx][1]
     if ex == 0 and ey == 0:
         return TAPE_PATCH_HALF
     forearm = ((wx - ex) ** 2 + (wy - ey) ** 2) ** 0.5
@@ -40,7 +40,7 @@ def _sample_tape(frame_bgr: np.ndarray, kp: list, h: int, w: int) -> tuple[int, 
     blue_total = 0
 
     for wrist_idx, elbow_idx in _WRIST_PAIRS:
-        wx, wy = kp[wrist_idx]
+        wx, wy = kp[wrist_idx][0], kp[wrist_idx][1]
 
         if wx == 0 and wy == 0:
             continue

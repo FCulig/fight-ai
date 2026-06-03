@@ -164,7 +164,50 @@ ix_fight_events_fight_id      ON fight_events (fight_id)
 - **Fighter identity pipeline (two-stage):**
   1. `FighterTracker` (geometry-only, `models/FighterTracker.py`): constrained 2-slot tracker with IoU + centroid-distance cost matrix solved by Hungarian matching. Assigns a stable *provisional* `track_id` (0 or 1) per frame. Clinch frames (inter-fighter IoU > `CLINCH_IOU_THRESHOLD`) freeze velocity updates to prevent identity swaps. Each detection also carries `model_class_id` (the original YOLO class) for the fallback below.
   2. `assign_corners()` (`video_processing/corner_assignment/`): reads the video once after pose, samples HSV colour around wrist keypoints (COCO 9/10) to count red vs blue glove-tape pixels per track, then remaps `class_id` to the final red=0/blue=1 convention. Falls back to majority YOLO model-class vote per track when tape evidence is insufficient (`< CORNER_MIN_TAPE_SAMPLES`).
-- Keypoints: 17-point COCO format. Frame is only valid when both fighters have all 17 keypoints present
+- **Frame validity:** `is_frame_valid()` requires both fighters present with all *strike-relevant* joints (head, shoulders, elbows, wrists, hips, knees, ankles — `STRIKE_KEYPOINT_INDICES`) above `KEYPOINT_MIN_CONFIDENCE`. The old all-17-keypoints rule has been replaced to avoid discarding frames with minor occlusion on irrelevant joints.
+
+### Strike detection
+
+Strike detection runs in `fight_processing_util.detect_strikes()` on every valid frame and fires for both striking and grappling fight states. All thresholds are **scale- and fps-invariant**:
+
+- **Scale reference (`get_fighter_scale`):** torso length (shoulder midpoint → hip midpoint) in pixels, per fighter per frame. Falls back to shoulder width when the torso is foreshortened. Used to normalise all distance and velocity thresholds so they are invariant to camera zoom and fighter distance.
+- **Velocity:** distal-joint displacement per frame, minus torso displacement (removes locomotion), converted to px/sec (× `fps`) then normalised by attacker scale → `scale/sec`. Compared against `PUNCH_VELOCITY_RATIO` / `KICK_VELOCITY_RATIO`.
+- **Contact distance:** normalised by *defender* scale, compared against `HEAD_CONTACT_RATIO` / `TORSO_CONTACT_RATIO` / `LEG_CONTACT_RATIO`.
+
+**Three gates must all pass to record a strike:**
+
+1. **Extension / angle** — straight arm (angle > `ARM_EXTENSION_THRESHOLD` = 140°) *or* bent arm (`PUNCH_BENT_ANGLE_MIN`–`PUNCH_BENT_ANGLE_MAX` = 60–139°) for punches; straight leg for kicks. The bent-arm path catches hooks and uppercuts.
+2. **Scale-normalised velocity** — must exceed the ratio threshold for `STRIKE_EXTENSION_FRAMES` consecutive frames.
+3. **Contact proximity** — wrist/ankle must be within the ratio threshold of the target body zone. Skipped entirely in grappling mode (fighters are already touching).
+
+**Per-limb keypoint confidence gating:** if any of the three joints (proximal/mid/distal) for a limb is below `KEYPOINT_MIN_CONFIDENCE`, that limb is skipped for the frame. Prevents velocity spikes from hallucinated keypoint coordinates during occlusion.
+
+**Keypoint smoothing:** raw pose coordinates are fed through a One-Euro filter (`make_keypoint_smoother` in `fight_processing_util.py`) per joint per axis before any velocity computation. Parameters: `ONE_EURO_MIN_CUTOFF`, `ONE_EURO_BETA`, `ONE_EURO_D_CUTOFF` in `constants.py`. Smoothers are created once per fighter at the start of `process_fight` and persist across frames.
+
+**Grappling / clinch strikes:** when `current_fight_state == GRAPPLING`, `detect_strikes` is called with `grappling=True`. Lower velocity ratios (`GRAPPLING_PUNCH_VELOCITY_RATIO`, `GRAPPLING_KICK_VELOCITY_RATIO`) are used, the contact gate is skipped, and events are emitted immediately as `clinch_punch` / `clinch_knee`.
+
+**Punch classification (`classify_punch_type`):**
+- Straight path + lead hand (same side as foot closer to opponent) → `jab`
+- Straight path + rear hand → `cross`
+- Bent path + wrist moving mostly upward → `uppercut`
+- Bent path + wrist moving mostly laterally → `hook`
+
+Final open-range punch event type: `{punch_type}_{target}` e.g. `jab_head`, `cross_body`, `hook_head`, `uppercut_head`. Kick types remain `head_kick`, `middle_kick`, `low_kick`.
+
+**Landed vs. attempted (`RECOIL_LOOKAHEAD_FRAMES`, `RECOIL_VELOCITY_RATIO`):** for each candidate open-range strike, `process_fight` defers the event write into a `pending_strikes` queue. After `RECOIL_LOOKAHEAD_FRAMES` frames it checks whether the defender's head moved at > `RECOIL_VELOCITY_RATIO × defender_scale / sec` — a proxy for head recoil on impact. The final event description is suffixed with `(landed)`, `(missed)`, or `(unconfirmed)` for strikes at the very end of the video.
+
+**`process_fight` signature:** `process_fight(pose_data, fight_id, fps, rounds=None)` — `fps` is a required parameter (previously missing), sourced from the `fights` row and passed by `pipeline.py`.
+
+**Event vocabulary in `fight_events.description`:**
+
+| Type | Example description |
+|------|---------------------|
+| Open-range punch | `fighter_red threw a jab_head (landed)` |
+| Open-range kick  | `fighter_blue threw a middle_kick (missed)` |
+| Clinch punch     | `fighter_red threw a clinch_punch` |
+| Clinch knee      | `fighter_blue threw a clinch_knee` |
+| Fight state      | `Fight state changed to FightState.GRAPPLING, takedown initiated by fighter_red` |
+| Round boundary   | `Round 1 started` / `Round 1 ended` |
 
 ## Environment
 - `.env` file required with `DATABASE_URL=postgresql://...`

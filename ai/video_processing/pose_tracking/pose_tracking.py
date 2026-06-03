@@ -87,8 +87,8 @@ def track_poses(
             if result.keypoints is None or len(result.keypoints.xy) == 0:
                 continue
 
-            pose_boxes = result.boxes.xyxy.cpu().numpy()    # (N, 4)
-            pose_kps   = result.keypoints.xy.cpu().numpy()  # (N, 17, 2)
+            pose_boxes = result.boxes.xyxy.cpu().numpy()      # (N, 4)
+            pose_kps   = result.keypoints.data.cpu().numpy()  # (N, 17, 3) — [x, y, conf]
 
             for detection in frame["detections"]:
                 reid_box   = detection["bbox_xyxy"]

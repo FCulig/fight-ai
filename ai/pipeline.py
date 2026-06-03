@@ -425,7 +425,7 @@ def run_pipeline(
         from fight_processing.fight_processing import process_fight
         print("Running fight processing …")
         t0 = time.perf_counter()
-        process_fight(pose_data, fight_id=fight_id, rounds=rounds)
+        process_fight(pose_data, fight_id=fight_id, fps=fps, rounds=rounds)
         timings["fight_processing"] = time.perf_counter() - t0
 
         # Single-file mode: own the processed flag update

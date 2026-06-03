@@ -3,26 +3,92 @@ from collections import deque
 from models.constants import (
     LABEL_ID,
     MIN_HIP_DROP_THRESHOLD,
-    PUNCH_VELOCITY_THRESHOLD,
-    KICK_VELOCITY_THRESHOLD,
+    PUNCH_VELOCITY_RATIO,
+    KICK_VELOCITY_RATIO,
     ARM_EXTENSION_THRESHOLD,
+    PUNCH_BENT_ANGLE_MIN,
+    PUNCH_BENT_ANGLE_MAX,
     LEG_EXTENSION_THRESHOLD,
     STRIKE_COOLDOWN_FRAMES,
     STRIKE_EXTENSION_FRAMES,
-    HEAD_CONTACT_THRESHOLD,
-    TORSO_CONTACT_THRESHOLD,
-    LEG_CONTACT_THRESHOLD,
+    HEAD_CONTACT_RATIO,
+    TORSO_CONTACT_RATIO,
+    LEG_CONTACT_RATIO,
+    GRAPPLING_PUNCH_VELOCITY_RATIO,
+    GRAPPLING_KICK_VELOCITY_RATIO,
+    KEYPOINT_MIN_CONFIDENCE,
+    STRIKE_KEYPOINT_INDICES,
+    ONE_EURO_MIN_CUTOFF,
+    ONE_EURO_BETA,
+    ONE_EURO_D_CUTOFF,
 )
 from models.FightState import FightState
 
+
+class _OneEuroFilter:
+    """Per-scalar One-Euro filter. Call filter(x, t) at each frame."""
+    def __init__(self):
+        self._x_prev = None
+        self._dx_prev = 0.0
+        self._t_prev = None
+
+    def _alpha(self, cutoff, dt):
+        tau = 1.0 / (2 * np.pi * cutoff)
+        return 1.0 / (1.0 + tau / dt)
+
+    def filter(self, x, t):
+        if self._t_prev is None:
+            self._x_prev = x
+            self._t_prev = t
+            return x
+        dt = max(t - self._t_prev, 1e-6)
+        # Derivative estimate
+        dx = (x - self._x_prev) / dt
+        a_d = self._alpha(ONE_EURO_D_CUTOFF, dt)
+        dx_hat = a_d * dx + (1 - a_d) * self._dx_prev
+        # Adaptive cutoff
+        cutoff = ONE_EURO_MIN_CUTOFF + ONE_EURO_BETA * abs(dx_hat)
+        a = self._alpha(cutoff, dt)
+        x_hat = a * x + (1 - a) * self._x_prev
+        self._x_prev = x_hat
+        self._dx_prev = dx_hat
+        self._t_prev = t
+        return x_hat
+
+
+def make_keypoint_smoother():
+    """Returns a function smooth(kp, frame_index) → smoothed kp list.
+    Maintains one One-Euro filter per joint per axis (17 joints × 2 axes = 34 filters).
+    Call per fighter; reset between fights by creating a new smoother."""
+    filters = [[_OneEuroFilter(), _OneEuroFilter()] for _ in range(17)]
+
+    def smooth(kp, frame_index):
+        out = []
+        for i, joint in enumerate(kp):
+            sx = filters[i][0].filter(joint[0], frame_index)
+            sy = filters[i][1].filter(joint[1], frame_index)
+            # Preserve original confidence value
+            conf = joint[2] if len(joint) > 2 else 1.0
+            out.append([sx, sy, conf])
+        return out
+
+    return smooth
+
+
+def _fighter_keypoints_valid(kp):
+    """Returns True when all strike-relevant joints have sufficient confidence."""
+    if kp is None or len(kp) < 17:
+        return False
+    return all(kp[i][2] >= KEYPOINT_MIN_CONFIDENCE for i in STRIKE_KEYPOINT_INDICES)
+
+
 def is_frame_valid(detections):
-    has_red_fighter = any(d.get('class_id') == 0 for d in detections)
-    has_blue_fighter = any(d.get('class_id') == 1 for d in detections)
-    has_all_keypoints = all(d["keypoints"] is not None and len(d["keypoints"]) >= 17 for d in detections)
-
-    #print(f"Frame validation: has_red_fighter={has_red_fighter}, has_blue_fighter={has_blue_fighter}, has_all_keypoints={has_all_keypoints}")
-
-    return has_red_fighter and has_blue_fighter and has_all_keypoints
+    """Frame is valid when both fighters are present and their strike-relevant joints
+    are all above KEYPOINT_MIN_CONFIDENCE. Relaxed from requiring all 17 keypoints
+    to avoid discarding frames with only minor occlusion."""
+    red_kp = next((d["keypoints"] for d in detections if d.get("class_id") == 0), None)
+    blue_kp = next((d["keypoints"] for d in detections if d.get("class_id") == 1), None)
+    return _fighter_keypoints_valid(red_kp) and _fighter_keypoints_valid(blue_kp)
 
 def get_torso_rectangle(keypoints):
     """Returns (x1, y1, x2, y2) torso rectangle from shoulders and hips"""
@@ -84,6 +150,24 @@ def compute_iou(box_a, box_b):
 
     return inter_area / union_area
 
+def get_fighter_scale(keypoints):
+    """Body-size reference in pixels: distance from shoulder midpoint to hip midpoint.
+    Used to normalize velocity and contact thresholds so they are invariant to camera
+    zoom and fighter distance from the camera. Falls back to shoulder width when hips
+    are unreliable (foreshortening). Clamped to 10px minimum to avoid division issues."""
+    shoulder_mid = np.array([(keypoints[5][0] + keypoints[6][0]) / 2,
+                              (keypoints[5][1] + keypoints[6][1]) / 2])
+    hip_mid      = np.array([(keypoints[11][0] + keypoints[12][0]) / 2,
+                              (keypoints[11][1] + keypoints[12][1]) / 2])
+    torso_len = np.linalg.norm(shoulder_mid - hip_mid)
+    if torso_len < 20:
+        # Fallback: shoulder width
+        torso_len = np.linalg.norm(
+            np.array(keypoints[5][:2]) - np.array(keypoints[6][:2])
+        )
+    return max(torso_len, 10.0)
+
+
 def get_hip_height(keypoints):
     """Returns average y-coordinate of left and right hips (kp 11, 12). Higher value = lower on screen."""
     left_hip = keypoints[11]
@@ -127,6 +211,34 @@ def get_head_center(keypoints):
     return pts.mean(axis=0)
 
 
+def get_lead_hand_side(kp, opp_kp):
+    """Returns 'left' or 'right' (COCO joint labelling) for the attacker's lead hand.
+    Lead hand = same side as the lead foot (the foot horizontally closer to the opponent)."""
+    opp_x = (opp_kp[5][0] + opp_kp[6][0]) / 2  # opponent shoulder center x
+    left_ankle_x  = kp[15][0]
+    right_ankle_x = kp[16][0]
+    left_dist  = abs(left_ankle_x  - opp_x)
+    right_dist = abs(right_ankle_x - opp_x)
+    return "left" if left_dist < right_dist else "right"
+
+
+def classify_punch_type(limb_key, angle, wrist_rel_vel, kp, opp_kp):
+    """Returns a punch-type prefix string: jab | cross | hook | uppercut.
+    straight path (angle > ARM_EXTENSION_THRESHOLD) → jab (lead) or cross (rear).
+    bent path → uppercut if wrist moves mostly upward, hook otherwise."""
+    is_straight = angle >= ARM_EXTENSION_THRESHOLD
+    hand_side = "left" if "left" in limb_key else "right"
+    lead_side = get_lead_hand_side(kp, opp_kp)
+
+    if is_straight:
+        return "jab" if hand_side == lead_side else "cross"
+    else:
+        # Bent-arm: direction of wrist relative velocity determines sub-type.
+        # Image y increases downward, so negative dy = moving upward.
+        vx, vy = wrist_rel_vel[0], wrist_rel_vel[1]
+        return "uppercut" if (vy < 0 and abs(vy) >= abs(vx)) else "hook"
+
+
 def point_to_segment_distance(p, a, b):
     """Returns the shortest distance from point p to the line segment a-b."""
     p, a, b = np.array(p[:2]), np.array(a[:2]), np.array(b[:2])
@@ -153,7 +265,7 @@ def compute_angle(a, b, c):
     return np.degrees(np.arccos(np.clip(cos_angle, -1.0, 1.0)))
 
 
-def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state):
+def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state, fps, grappling=False):
     """
     Detects landed strikes by combining three filters:
       1. Limb extension angle above threshold (strike is being thrown)
@@ -174,6 +286,10 @@ def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state):
         red_kp / blue_kp:           Current frame keypoints (17-pt COCO, [x, y, conf])
         prev_red_kp / prev_blue_kp: Previous frame keypoints
         strike_state:               Per-fighter, per-limb state dict (mutated in place)
+        fps:                        Video frame rate — used to convert velocity to px/sec.
+        grappling:                  When True, use lower velocity ratios and skip the
+                                    contact-proximity gate (fighters are already touching).
+                                    Strike types are prefixed with "clinch_".
 
     Returns:
         List of dicts: [{"fighter": "fighter_red"|"fighter_blue", "type": <event_type>}, ...]
@@ -193,22 +309,33 @@ def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state):
     red_head        = get_head_center(red_kp)
     blue_head       = get_head_center(blue_kp)
 
+    red_scale  = get_fighter_scale(red_kp)
+    blue_scale = get_fighter_scale(blue_kp)
+
     checks = [
-        ("fighter_red",  red_kp,  prev_red_kp,  red_torso_vel,  blue_head, blue_torso_rect, blue_kp,  strike_state["red"]),
-        ("fighter_blue", blue_kp, prev_blue_kp, blue_torso_vel, red_head,  red_torso_rect,  red_kp,   strike_state["blue"]),
+        # attacker label, attacker kp, prev kp, torso vel, attacker scale,
+        # opp head, opp torso rect, opp kp, opp scale, limb state
+        ("fighter_red",  red_kp,  prev_red_kp,  red_torso_vel,  red_scale,
+         blue_head, blue_torso_rect, blue_kp,  blue_scale, strike_state["red"]),
+        ("fighter_blue", blue_kp, prev_blue_kp, blue_torso_vel, blue_scale,
+         red_head,  red_torso_rect,  red_kp,   red_scale,  strike_state["blue"]),
     ]
 
-    for fighter_label, kp, prev_kp, torso_vel, opp_head, opp_torso_rect, opp_kp, limb_state in checks:
+    for (fighter_label, kp, prev_kp, torso_vel, atk_scale,
+         opp_head, opp_torso_rect, opp_kp, def_scale, limb_state) in checks:
 
-        # (proximal, mid, distal, limb_key, vel_thresh, angle_thresh, is_kick)
+        punch_vel = GRAPPLING_PUNCH_VELOCITY_RATIO if grappling else PUNCH_VELOCITY_RATIO
+        kick_vel  = GRAPPLING_KICK_VELOCITY_RATIO  if grappling else KICK_VELOCITY_RATIO
+
+        # (proximal, mid, distal, limb_key, vel_ratio, angle_thresh, is_kick)
         limb_checks = [
-            (5,  7,  9,  "left_punch",  PUNCH_VELOCITY_THRESHOLD, ARM_EXTENSION_THRESHOLD, False),
-            (6,  8,  10, "right_punch", PUNCH_VELOCITY_THRESHOLD, ARM_EXTENSION_THRESHOLD, False),
-            (11, 13, 15, "left_kick",   KICK_VELOCITY_THRESHOLD,  LEG_EXTENSION_THRESHOLD,  True),
-            (12, 14, 16, "right_kick",  KICK_VELOCITY_THRESHOLD,  LEG_EXTENSION_THRESHOLD,  True),
+            (5,  7,  9,  "left_punch",  punch_vel, ARM_EXTENSION_THRESHOLD, False),
+            (6,  8,  10, "right_punch", punch_vel, ARM_EXTENSION_THRESHOLD, False),
+            (11, 13, 15, "left_kick",   kick_vel,  LEG_EXTENSION_THRESHOLD,  True),
+            (12, 14, 16, "right_kick",  kick_vel,  LEG_EXTENSION_THRESHOLD,  True),
         ]
 
-        for proximal, mid, distal, limb_key, vel_thresh, angle_thresh, is_kick in limb_checks:
+        for proximal, mid, distal, limb_key, vel_ratio, angle_thresh, is_kick in limb_checks:
             state = limb_state[limb_key]
 
             if state["cooldown"] > 0:
@@ -216,13 +343,30 @@ def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state):
                 state["extension_frames"] = 0
                 continue
 
+            # Skip limb when any joint is unreliable — avoids velocity spikes from
+            # occluded / hallucinated keypoint coordinates.
+            if any(kp[j][2] < KEYPOINT_MIN_CONFIDENCE for j in (proximal, mid, distal)):
+                state["extension_frames"] = 0
+                continue
+
             # Pre-filter: extension angle + torso-relative velocity
             angle = compute_angle(kp[proximal], kp[mid], kp[distal])
             abs_vel = np.array(kp[distal][:2]) - np.array(prev_kp[distal][:2])
             relative_vel = abs_vel - torso_vel
-            speed = np.linalg.norm(relative_vel)
+            # Convert px/frame → px/sec, then normalise by attacker scale → scale/sec
+            speed_per_sec = np.linalg.norm(relative_vel) * fps
+            speed_normalised = speed_per_sec / atk_scale
 
-            if angle > angle_thresh and speed > vel_thresh:
+            # Accept straight strikes (jab/cross) OR bent-arm strikes (hook/uppercut).
+            # Kicks only use the straight/extension path.
+            if is_kick:
+                angle_ok = angle > angle_thresh
+            else:
+                straight = angle > ARM_EXTENSION_THRESHOLD
+                bent     = PUNCH_BENT_ANGLE_MIN <= angle <= PUNCH_BENT_ANGLE_MAX
+                angle_ok = straight or bent
+
+            if angle_ok and speed_normalised > vel_ratio:
                 state["extension_frames"] += 1
             else:
                 state["extension_frames"] = 0
@@ -231,36 +375,43 @@ def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state):
             if state["extension_frames"] < STRIKE_EXTENSION_FRAMES:
                 continue
 
-            # Contact check: find which zone the end-effector is closest to
+            # Contact check: distances normalised by defender scale.
+            # In grappling mode fighters are already touching — skip proximity and
+            # classify by limb type only, prefixing the event with "clinch_".
             end = np.array(kp[distal][:2])
             strike_type = None
 
-            if is_kick:
-                # Left and right thigh segments of the opponent
-                left_thigh_dist  = point_to_segment_distance(end, opp_kp[11], opp_kp[13])
-                right_thigh_dist = point_to_segment_distance(end, opp_kp[12], opp_kp[14])
-                thigh_dist = min(left_thigh_dist, right_thigh_dist)
-
-                head_dist  = np.linalg.norm(end - opp_head)
-                torso_dist = distance_to_rect(end, opp_torso_rect) if opp_torso_rect else float('inf')
-
-                if head_dist < HEAD_CONTACT_THRESHOLD:
-                    strike_type = "head_kick"
-                elif torso_dist < TORSO_CONTACT_THRESHOLD:
-                    strike_type = "middle_kick"
-                elif thigh_dist < LEG_CONTACT_THRESHOLD:
-                    strike_type = "low_kick"
+            if grappling:
+                strike_type = "clinch_knee" if is_kick else "clinch_punch"
             else:
-                head_dist  = np.linalg.norm(end - opp_head)
-                torso_dist = distance_to_rect(end, opp_torso_rect) if opp_torso_rect else float('inf')
+                head_dist_norm  = np.linalg.norm(end - opp_head) / def_scale
+                torso_dist_norm = (distance_to_rect(end, opp_torso_rect) / def_scale
+                                   if opp_torso_rect else float('inf'))
 
-                if head_dist < HEAD_CONTACT_THRESHOLD:
-                    strike_type = "punch_head"
-                elif torso_dist < TORSO_CONTACT_THRESHOLD:
-                    strike_type = "punch_body"
+                if is_kick:
+                    left_thigh_dist  = point_to_segment_distance(end, opp_kp[11], opp_kp[13])
+                    right_thigh_dist = point_to_segment_distance(end, opp_kp[12], opp_kp[14])
+                    thigh_dist_norm  = min(left_thigh_dist, right_thigh_dist) / def_scale
+
+                    if head_dist_norm < HEAD_CONTACT_RATIO:
+                        strike_type = "head_kick"
+                    elif torso_dist_norm < TORSO_CONTACT_RATIO:
+                        strike_type = "middle_kick"
+                    elif thigh_dist_norm < LEG_CONTACT_RATIO:
+                        strike_type = "low_kick"
+                else:
+                    punch_label = classify_punch_type(limb_key, angle, relative_vel, kp, opp_kp)
+                    if head_dist_norm < HEAD_CONTACT_RATIO:
+                        strike_type = f"{punch_label}_head"
+                    elif torso_dist_norm < TORSO_CONTACT_RATIO:
+                        strike_type = f"{punch_label}_body"
 
             if strike_type:
-                strikes.append({"fighter": fighter_label, "type": strike_type})
+                strikes.append({
+                    "fighter":  fighter_label,
+                    "type":     strike_type,
+                    "defender": "fighter_blue" if fighter_label == "fighter_red" else "fighter_red",
+                })
                 state["cooldown"] = STRIKE_COOLDOWN_FRAMES
                 state["extension_frames"] = 0
 

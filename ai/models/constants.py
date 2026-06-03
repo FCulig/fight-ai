@@ -17,17 +17,45 @@ TAKEDOWN_LOOKBACK_FRAMES = 15
 MIN_HIP_DROP_THRESHOLD = 30
 
 # Strike detection thresholds
-PUNCH_VELOCITY_THRESHOLD = 15   # pixels/frame for wrist to count as a punch
-KICK_VELOCITY_THRESHOLD = 20    # pixels/frame for ankle to count as a kick
-ARM_EXTENSION_THRESHOLD = 140   # minimum elbow angle (degrees) for a punch
+# Velocities are expressed as (fraction of attacker scale) per second — fps-invariant.
+# Contact distances are expressed as fraction of defender scale — zoom-invariant.
+PUNCH_VELOCITY_RATIO = 4.5      # wrist speed (scale/sec) to count as a punch
+KICK_VELOCITY_RATIO = 6.0       # ankle speed (scale/sec) to count as a kick
+ARM_EXTENSION_THRESHOLD = 140   # minimum elbow angle (degrees) for a straight punch (jab/cross)
+# Bent-arm punch (hook/uppercut): elbow angle window — too straight = jab (handled above),
+# too bent = not a punch at all.
+PUNCH_BENT_ANGLE_MIN = 60      # degrees — below this is too folded to be a punch
+PUNCH_BENT_ANGLE_MAX = 139     # degrees — above this falls into the straight path
 LEG_EXTENSION_THRESHOLD = 130   # minimum knee angle (degrees) for a kick
 STRIKE_COOLDOWN_FRAMES = 15     # frames to suppress re-detection after a strike
-STRIKE_EXTENSION_FRAMES = 2    # consecutive frames angle must be held to confirm a strike
+STRIKE_EXTENSION_FRAMES = 2     # consecutive frames angle must be held to confirm a strike
+# In clinch/grappling the fighters are already in contact so the contact gate is skipped;
+# use a lower velocity threshold to catch short-range strikes (knees, dirty boxing).
+GRAPPLING_PUNCH_VELOCITY_RATIO = 2.0
+GRAPPLING_KICK_VELOCITY_RATIO  = 2.5
 
-# Contact distance thresholds (pixels) for confirming a strike landed
-HEAD_CONTACT_THRESHOLD = 50
-TORSO_CONTACT_THRESHOLD = 60
-LEG_CONTACT_THRESHOLD = 50
+# Keypoint confidence gating
+# Joints below this confidence are treated as unreliable and their limb is skipped.
+# Landed-vs-attempted: head recoil check after a candidate strike
+# Check the opponent head velocity over this many frames after contact.
+RECOIL_LOOKAHEAD_FRAMES = 4
+# Head must move at least this many (scale/sec) to count as a recoil signal.
+RECOIL_VELOCITY_RATIO   = 1.5
+
+# One-Euro filter parameters for keypoint smoothing
+ONE_EURO_MIN_CUTOFF = 1.5   # Hz — higher = less lag, more noise
+ONE_EURO_BETA       = 0.05  # speed coefficient — higher = less lag on fast motion
+ONE_EURO_D_CUTOFF   = 1.0   # Hz — cutoff for derivative low-pass
+
+KEYPOINT_MIN_CONFIDENCE = 0.4
+# Strike-relevant joint indices (COCO): head, shoulders, elbows, wrists, hips, knees, ankles.
+# Frame is valid if both fighters have all of these confident, rather than all 17 keypoints.
+STRIKE_KEYPOINT_INDICES = [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
+# Contact distance ratios (fraction of defender torso-length scale)
+HEAD_CONTACT_RATIO = 0.45
+TORSO_CONTACT_RATIO = 0.55
+LEG_CONTACT_RATIO = 0.45
 
 # Fight segmentation thresholds (in seconds — converted to frames at runtime using detected fps)
 MIN_FIGHT_END_GAP_SECS    = 45.0   # seconds of low fighter presence to end fight
