@@ -24,8 +24,10 @@ ai/
 │   │   ├── parsers.py        # Org-agnostic round/timer regexes
 │   │   ├── debug.py          # Heatmap / crop / matplotlib visualisation helpers
 │   │   └── scoreboard_verification.py  # Renders annotated verification MP4
-│   ├── fighter_reidentification/
-│   │   └── fighter_reidentification.py  # torchreid ReID, assigns class_id 0/1
+│   ├── fighter_tracking/
+│   │   └── fighter_tracking.py  # Geometry-only tracker (Hungarian + IoU), assigns provisional track_id 0/1
+│   ├── corner_assignment/
+│   │   └── corner_assignment.py # Glove-tape HSV vote → remaps provisional track_id to final red=0/blue=1
 │   └── pose_tracking/
 │       └── pose_tracking.py  # YOLOv8x-pose on fighter crops → keypoints
 ├── fight_processing/
@@ -33,7 +35,7 @@ ai/
 │   └── fight_processing_util.py
 ├── models/
 │   ├── FightState.py         # Enum: STRIKING=1, GRAPPLING=2
-│   ├── IdentityMemory.py     # EMA cosine-similarity ReID tracker (max 2 fighters)
+│   ├── FighterTracker.py     # Constrained 2-slot tracker with Hungarian matching
 │   └── constants.py          # All thresholds and label IDs
 └── database.py               # SQLAlchemy SessionLocal
 ```
@@ -87,8 +89,9 @@ the next step consumes it directly. PostgreSQL is the only persistent data store
 | Step | Function | Returns |
 |------|----------|---------|
 | YOLO detection | `process_video()` | detection dict |
-| ReID | `track_fighters()` | reid dict |
-| Pose tracking | `track_poses()` | pose dict |
+| Fighter tracking | `track_fighters()` | track dict (provisional track_id 0/1) |
+| Pose tracking | `track_poses()` | pose dict (+ keypoints) |
+| Corner assignment | `assign_corners()` | pose dict (class_id remapped to red=0/blue=1) |
 | Scoreboard OCR | `extract_scoreboard_samples()` | samples dict |
 | Segmentation | `segment_fights()` | rounds list |
 | Fight processing | `process_fight()` | — (writes to DB) |
@@ -96,9 +99,10 @@ the next step consumes it directly. PostgreSQL is the only persistent data store
 `fps` is read once from the `fights` row (extracted from the video at registration time)
 and threaded in-memory to every step that needs it. No step re-reads fps from disk.
 
-**Developer skip-flags** (`--detection-file`, `--reid-file`, `--pose-results`,
+**Developer skip-flags** (`--detection-file`, `--track-file`, `--pose-results`,
 `--scoreboard-samples`) load a developer-supplied file into the in-memory dict at the
 appropriate step. The pipeline never *produces* these files.
+`--reid-file` is a deprecated alias for `--track-file`.
 
 **Diagnostic outputs** (`--verify-pose` / `--verify-scoreboard` debug videos and
 scoreboard calibration debug images) are opt-in artifacts and are not part of the data
@@ -157,7 +161,9 @@ ix_fight_events_fight_id      ON fight_events (fight_id)
 - Torso rectangle: built from COCO keypoints `[5,6,11,12]` (left/right shoulder, left/right hip) — primary grappling signal
 - Grappling detection: torso-rect distance < `DISTANCE_GRAPPLING_THRESHOLD` (20px) for `MIN_GRAPPLING_THRESHOLD` (3) consecutive frames → `FightState.GRAPPLING`
 - When a fighter is not visible (missing/invalid keypoints): frame is skipped via `is_frame_valid()`, current state is persisted unchanged
-- ReID: `IdentityMemory` caps at 2 IDs, uses EMA (0.9) + cosine similarity (threshold 0.75), force-assigns to closest when at capacity
+- **Fighter identity pipeline (two-stage):**
+  1. `FighterTracker` (geometry-only, `models/FighterTracker.py`): constrained 2-slot tracker with IoU + centroid-distance cost matrix solved by Hungarian matching. Assigns a stable *provisional* `track_id` (0 or 1) per frame. Clinch frames (inter-fighter IoU > `CLINCH_IOU_THRESHOLD`) freeze velocity updates to prevent identity swaps. Each detection also carries `model_class_id` (the original YOLO class) for the fallback below.
+  2. `assign_corners()` (`video_processing/corner_assignment/`): reads the video once after pose, samples HSV colour around wrist keypoints (COCO 9/10) to count red vs blue glove-tape pixels per track, then remaps `class_id` to the final red=0/blue=1 convention. Falls back to majority YOLO model-class vote per track when tape evidence is insufficient (`< CORNER_MIN_TAPE_SAMPLES`).
 - Keypoints: 17-point COCO format. Frame is only valid when both fighters have all 17 keypoints present
 
 ## Environment

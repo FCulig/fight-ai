@@ -17,8 +17,9 @@ Philosophy
 Pipeline order
 --------------
 Track A (pose):     1. YOLO detection
-                    2. ReID
+                    2. Fighter tracking  (geometry-only, Hungarian matching)
                     3. Pose tracking
+                    3b. Corner assignment (glove-tape HSV vote → red/blue remap)
 Track B (segments): 1. YOLO detection  (shared with A)
                     4. Scoreboard OCR
                     5. Fight segmentation
@@ -29,7 +30,7 @@ Debug outputs:      7. Pose debug video        (--verify-pose only)
 Skip matrix
 -----------
 --detection-file      skips step 1 (loads file into detection dict)
---reid-file           skips steps 1–2 (loads file into reid dict)
+--track-file          skips steps 1–2 (loads file into track dict)
 --pose-results        skips steps 1–3 (loads file into pose dict)
 --scoreboard-samples  skips step 4 (loads file into samples list)
 --manifest            skips steps 4–5
@@ -114,7 +115,8 @@ def run_pipeline(
     fight_id: Optional[int]        = None,
     # ---- File overrides (supply to skip that step + all earlier steps) ----
     detection_file: Optional[str]     = None,
-    reid_file: Optional[str]          = None,
+    track_file: Optional[str]         = None,
+    reid_file: Optional[str]          = None,   # deprecated alias for track_file
     pose_results: Optional[str]       = None,
     scoreboard_samples: Optional[str] = None,
     manifest_file: Optional[str]      = None,
@@ -147,6 +149,10 @@ def run_pipeline(
     """
     verbose    = debug_level != "none"
     debug_root = "runs/scoreboard_overlay"
+
+    # Backwards-compat: --reid-file is an alias for --track-file
+    if reid_file and not track_file:
+        track_file = reid_file
 
     # ----------------------------------------------------------------
     # Resolve fps from DB (single-file: upsert; batch: select)
@@ -220,8 +226,8 @@ def run_pipeline(
     # ----------------------------------------------------------------
 
     # Track A — pose
-    run_detection_for_pose = reid_file is None and pose_results is None
-    run_reid               = reid_file is None and pose_results is None
+    run_detection_for_pose = track_file is None and pose_results is None
+    run_tracking           = track_file is None and pose_results is None
     run_pose               = pose_results is None
 
     # Track B — segmentation
@@ -263,15 +269,19 @@ def run_pipeline(
         if _db_rounds is not None:    return "SKIP — rounds from DB"
         return "RUN"
 
+    def _track_label() -> str:
+        if track_file:    return f"SKIP — {track_file}"
+        if pose_results:  return "SKIP — pose results supplied"
+        return "RUN"
+
     _print_plan("Fight AI — Processing Pipeline", [
         ("Fight ID",        str(fight_id)),
         ("Video",           video_file),
         ("FPS",             str(fps)),
         ("Detection",       _det_label()),
-        ("ReID",            f"SKIP — {reid_file}" if reid_file
-                            else ("SKIP — pose results supplied" if pose_results
-                                  else "RUN")),
+        ("Tracking",        _track_label()),
         ("Pose",            f"SKIP — {pose_results}" if pose_results else "RUN"),
+        ("Corner assign",   "SKIP — pose results supplied" if pose_results else "RUN"),
         ("Scoreboard OCR",  _ocr_label()),
         ("Segmentation",    _seg_label()),
         ("Fight process",   "SKIP — debug flags present" if not run_fight else "RUN"),
@@ -285,7 +295,7 @@ def run_pipeline(
 
     # In-memory data — each step consumes the previous step's output dict.
     detection_data: Optional[dict] = None
-    reid_data:      Optional[dict] = None
+    track_data:     Optional[dict] = None
     pose_data:      Optional[dict] = None
 
     # ----------------------------------------------------------------
@@ -301,17 +311,17 @@ def run_pipeline(
     timings["detection"] = time.perf_counter() - t0
 
     # ----------------------------------------------------------------
-    # Step 2 — ReID
+    # Step 2 — Fighter tracking (geometry-only, Hungarian matching)
     # ----------------------------------------------------------------
     t0 = time.perf_counter()
-    if run_reid:
-        from video_processing.fighter_reidentification.fighter_reidentification import track_fighters
-        print("Running ReID tracking …")
-        reid_data = track_fighters(detection_data, video_path=video_file)
-    elif reid_file:
-        print(f"Reusing ReID results: {reid_file}")
-        reid_data = _load_json(reid_file)
-    timings["reid"] = time.perf_counter() - t0
+    if run_tracking:
+        from video_processing.fighter_tracking.fighter_tracking import track_fighters
+        print("Running fighter tracking …")
+        track_data = track_fighters(detection_data, video_path=video_file)
+    elif track_file:
+        print(f"Reusing track results: {track_file}")
+        track_data = _load_json(track_file)
+    timings["tracking"] = time.perf_counter() - t0
 
     # ----------------------------------------------------------------
     # Step 3 — Pose tracking
@@ -320,11 +330,21 @@ def run_pipeline(
     if run_pose:
         from video_processing.pose_tracking.pose_tracking import track_poses
         print("Running pose tracking …")
-        pose_data = track_poses(reid_data, video_path=video_file)
+        pose_data = track_poses(track_data, video_path=video_file)
     elif pose_results:
         print(f"Reusing pose results: {pose_results}")
         pose_data = _load_json(pose_results)
     timings["pose"] = time.perf_counter() - t0
+
+    # ----------------------------------------------------------------
+    # Step 3b — Corner assignment (glove-tape HSV vote)
+    # ----------------------------------------------------------------
+    if pose_data is not None and not pose_results:
+        from video_processing.corner_assignment.corner_assignment import assign_corners
+        print("Running corner assignment …")
+        t0        = time.perf_counter()
+        pose_data = assign_corners(pose_data, video_path=video_file)
+        timings["corner_assignment"] = time.perf_counter() - t0
 
     # ----------------------------------------------------------------
     # Step 4 — Scoreboard OCR

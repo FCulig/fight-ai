@@ -65,3 +65,21 @@ FUSION_WEIGHT_ENGAGEMENT = 0.10
 
 # OCR signal snap: snap round boundary if within this many seconds of an OCR transition
 OCR_BOUNDARY_SNAP_SECS = 1.5   # converted to frames at runtime using detected fps
+
+# --- Fighter tracking (FighterTracker) ---
+TRACK_MAX_FIGHTERS       = 2
+TRACK_IOU_WEIGHT         = 0.6   # fraction of cost matrix from IoU term
+TRACK_DISTANCE_WEIGHT    = 0.4   # fraction of cost matrix from centroid-distance term
+TRACK_MAX_FRAMES_MISSING = 30    # frames a slot coasts before being pruned
+CLINCH_IOU_THRESHOLD     = 0.3   # inter-fighter IoU above which velocity is frozen
+
+# --- Glove-tape corner assignment ---
+TAPE_PATCH_HALF          = 40    # base half-side of the wrist crop in px (radius)
+WRIST_EDGE_MARGIN        = 10    # skip wrist if within this many px of frame border
+TAPE_MIN_SATURATION      = 80    # HSV S floor (0-255) — drops skin / grey pixels
+TAPE_MIN_VALUE           = 60    # HSV V floor (0-255) — drops black / dark pixels
+RED_HUE_HIGH1            = 10    # red band 1: 0 .. HIGH1  (OpenCV hue 0-180)
+RED_HUE_LOW2             = 170   # red band 2: LOW2 .. 180
+BLUE_HUE_LOW             = 100
+BLUE_HUE_HIGH            = 130
+CORNER_MIN_TAPE_SAMPLES  = 200   # min total coloured pixels before trusting tape vote

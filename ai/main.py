@@ -52,9 +52,12 @@ The pipeline never writes intermediate files — PostgreSQL is the only data sto
     g.add_argument("--detection-file", type=str, default=None,
                    metavar="PATH",
                    help="Load detection dict from file — skips YOLO")
+    g.add_argument("--track-file", type=str, default=None,
+                   metavar="PATH",
+                   help="Load track dict from file — skips YOLO + tracking")
     g.add_argument("--reid-file", type=str, default=None,
                    metavar="PATH",
-                   help="Load reid dict from file — skips YOLO + ReID")
+                   help="Deprecated alias for --track-file")
     g.add_argument("--pose-results", type=str, default=None,
                    metavar="PATH",
                    help="Load pose dict from file — skips YOLO + ReID + Pose")
@@ -108,6 +111,7 @@ def main() -> None:
         run_pipeline(
             args.video_input,
             detection_file     = args.detection_file,
+            track_file         = args.track_file,
             reid_file          = args.reid_file,
             pose_results       = args.pose_results,
             scoreboard_samples = args.scoreboard_samples,
