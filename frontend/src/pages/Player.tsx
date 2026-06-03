@@ -33,6 +33,7 @@ export default function Player() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [showBoxes, setShowBoxes] = useState(true);
+  const [showSkeletons, setShowSkeletons] = useState(false);
 
   const { fights } = useFights();
   const selectedFight = fights.find(f => f.id === fightId) ?? null;
@@ -184,6 +185,7 @@ export default function Player() {
               fightWidth={selectedFight.width}
               fightHeight={selectedFight.height}
               showBoxes={showBoxes}
+              showSkeletons={showSkeletons}
             />
           )}
         </VideoPlayer>
@@ -330,29 +332,41 @@ export default function Player() {
           </div>
 
           {/* Overlays */}
-          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ marginTop: 12 }}>
             <p style={{
               fontSize: 10,
               fontWeight: 700,
               color: 'rgba(255,255,255,0.28)',
               textTransform: 'uppercase',
               letterSpacing: '0.12em',
-              margin: 0,
-              flex: 1,
+              margin: '0 0 8px',
             }}>
               Overlays
             </p>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={showBoxes}
-                onChange={e => setShowBoxes(e.target.checked)}
-                style={{ accentColor: '#00daf3', width: 14, height: 14, cursor: 'pointer' }}
-              />
-              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>
-                Fighter Boxes
-              </span>
-            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showBoxes}
+                  onChange={e => setShowBoxes(e.target.checked)}
+                  style={{ accentColor: '#00daf3', width: 14, height: 14, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>
+                  Fighter Boxes
+                </span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showSkeletons}
+                  onChange={e => setShowSkeletons(e.target.checked)}
+                  style={{ accentColor: '#00daf3', width: 14, height: 14, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>
+                  Fighter Skeletons
+                </span>
+              </label>
+            </div>
           </div>
 
           <button

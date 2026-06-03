@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import List, Optional
 
-from sqlalchemy import Column, Float, ForeignKey, Integer
+from sqlalchemy import Column, Float, ForeignKey, Integer, JSON
 from pydantic import BaseModel, ConfigDict
 
 from app.utils.db import Base
@@ -18,6 +18,7 @@ class FighterFrame(Base):
     x2 = Column(Float, nullable=False)
     y2 = Column(Float, nullable=False)
     confidence = Column(Float, nullable=True)
+    keypoints = Column(JSON, nullable=True)
 
 
 class FighterFrameResponse(BaseModel):
@@ -31,3 +32,4 @@ class FighterFrameResponse(BaseModel):
     x2: float
     y2: float
     confidence: Optional[float]
+    keypoints: Optional[List[List[float]]] = None

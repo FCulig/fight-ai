@@ -1,3 +1,4 @@
+import json
 from collections import deque
 from typing import Optional
 
@@ -37,8 +38,9 @@ def _flush_frame_batch(db, batch: list[dict]) -> None:
     db.execute(
         text(
             "INSERT INTO fighter_frames "
-            "(fight_id, frame, fighter_id, x1, y1, x2, y2, confidence) "
-            "VALUES (:fight_id, :frame, :fighter_id, :x1, :y1, :x2, :y2, :confidence)"
+            "(fight_id, frame, fighter_id, x1, y1, x2, y2, confidence, keypoints) "
+            "VALUES (:fight_id, :frame, :fighter_id, :x1, :y1, :x2, :y2, :confidence, "
+            "CAST(:keypoints AS JSONB))"
         ),
         batch,
     )
@@ -131,11 +133,12 @@ def process_fight(
                 _insert_event(db, frame_number, description, fight_id)
                 print(description + f" at frame {frame_number}")
 
-            # Collect fighter bboxes for fighter_frames table
+            # Collect fighter bboxes (+ keypoints) for fighter_frames table
             for d in frame["detections"]:
                 if d["class_id"] in (0, 1):
                     bbox = d.get("bbox_xyxy") or []
                     if len(bbox) == 4:
+                        raw_kp = d.get("keypoints")
                         frame_batch.append({
                             "fight_id":   fight_id,
                             "frame":      frame_number,
@@ -143,6 +146,7 @@ def process_fight(
                             "x1": bbox[0], "y1": bbox[1],
                             "x2": bbox[2], "y2": bbox[3],
                             "confidence": d.get("confidence"),
+                            "keypoints":  json.dumps(raw_kp),  # [[x,y]*17] or null
                         })
 
             if len(frame_batch) >= _FRAME_BATCH_SIZE:

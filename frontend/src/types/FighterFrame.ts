@@ -7,4 +7,5 @@ export interface FighterFrame {
   x2: number;
   y2: number;
   confidence: number | null;
+  keypoints: [number, number][] | null;
 }
