@@ -21,6 +21,16 @@ export default defineConfig({
       '/fights': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
+        // The client-side route `/fights/:id` collides with this proxy path.
+        // On a full-page reload the browser requests `/fights/:id` with an
+        // `Accept: text/html` header — serve the SPA instead of proxying so
+        // React Router can handle the route. API calls use fetch() (Accept: */*)
+        // and fall through to the backend as normal.
+        bypass: (req) => {
+          if (req.headers.accept?.includes('text/html')) {
+            return '/index.html';
+          }
+        },
         configure: (proxy) => {
           proxy.on('proxyRes', (_proxyRes, _req, res) => {
             res.setHeader('Access-Control-Allow-Origin', '*');
