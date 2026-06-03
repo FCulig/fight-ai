@@ -1,14 +1,15 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useEvents } from '../hooks/useEvents';
+import { useFights } from '../hooks/useFights';
+import { useFighterFrames } from '../hooks/useFighterFrames';
+import { useRounds } from '../hooks/useRounds';
 import { useWindowWidth } from '../hooks/useWindowWidth';
 import VideoPlayer from '../components/VideoPlayer';
 import VideoControls from '../components/VideoControls';
 import FrameInfo from '../components/FrameInfo';
 import EventFeed from '../components/EventFeed';
-
-const VIDEO_PATH = '/fight.mp4';
-const FPS = 50;
-const ROUND_DURATION = 300;
+import FighterOverlay, { type FighterOverlayHandle } from '../components/FighterOverlay';
 
 function isStrikeEvent(desc: string) {
   return /punch|kick|jab|cross|hook|uppercut|elbow|knee|strike|hit|landed|blocked/i.test(desc);
@@ -19,16 +20,70 @@ function isGroundEvent(desc: string) {
 }
 
 export default function Player() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const fightId = id ? Number(id) : null;
+
   const videoRef = useRef<HTMLVideoElement>(null);
+  const overlayRef = useRef<FighterOverlayHandle>(null);
+  const rafRef = useRef<number | null>(null);
+  const fpsRef = useRef<number>(30);
+  const lastFrameRef = useRef<number>(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const { events, loading, error } = useEvents();
+  const [showBoxes, setShowBoxes] = useState(true);
+  const [showSkeletons, setShowSkeletons] = useState(false);
+
+  const { fights } = useFights();
+  const selectedFight = fights.find(f => f.id === fightId) ?? null;
+  const { events, loading, error } = useEvents(fightId);
+  const { frameMap } = useFighterFrames(fightId);
+  const { rounds } = useRounds(fightId);
   const width = useWindowWidth();
   const isMobile = width < 768;
 
-  const currentFrame = Math.floor(currentTime * FPS);
+  const fps = selectedFight?.fps ?? 30;
+  fpsRef.current = fps;
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!isPlaying) {
+      if (rafRef.current !== null) {
+        video.cancelVideoFrameCallback(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
+    const tick = (_now: DOMHighResTimeStamp, metadata: VideoFrameCallbackMetadata) => {
+      const frame = Math.floor(metadata.mediaTime * fpsRef.current) + 1;
+      overlayRef.current?.draw(frame);
+      if (frame !== lastFrameRef.current) {
+        lastFrameRef.current = frame;
+        setCurrentTime(metadata.mediaTime);
+      }
+      rafRef.current = video.requestVideoFrameCallback(tick);
+    };
+
+    rafRef.current = video.requestVideoFrameCallback(tick);
+
+    return () => {
+      if (rafRef.current !== null) {
+        video.cancelVideoFrameCallback(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [isPlaying]);
+  // 1-based frame number per the frame-numbering contract
+  const currentFrame = Math.floor(currentTime * fps) + 1;
   const currentMs = Math.floor(currentTime * 1000);
+
+  const videoSrc = selectedFight
+    ? `/fights/${selectedFight.id}/video`
+    : undefined;
 
   const togglePlay = () => {
     const video = videoRef.current;
@@ -42,9 +97,10 @@ export default function Player() {
     if (!video) return;
     video.pause();
     setIsPlaying(false);
-    const newTime = Math.min(Math.max(video.currentTime + delta / FPS, 0), video.duration);
+    const newTime = Math.min(Math.max(video.currentTime + delta / fps, 0), video.duration);
     video.currentTime = newTime;
     setCurrentTime(newTime);
+    overlayRef.current?.draw(Math.floor(newTime * fpsRef.current) + 1);
   };
 
   const handleSeek = (time: number) => {
@@ -52,6 +108,7 @@ export default function Player() {
     if (!video) return;
     video.currentTime = time;
     setCurrentTime(time);
+    overlayRef.current?.draw(Math.floor(time * fpsRef.current) + 1);
   };
 
   const handleExportFrame = () => {
@@ -72,7 +129,11 @@ export default function Player() {
   const groundEvents = visibleEvents.filter(e => isGroundEvent(e.description));
   const totalStrikes = events.filter(e => isStrikeEvent(e.description)).length;
   const grappleSeconds = groundEvents.length * 4;
-  const currentRound = Math.floor(currentTime / ROUND_DURATION) + 1;
+
+  // DB-backed round lookup (1-based frames match the round boundaries)
+  const currentRound =
+    rounds.find(r => currentFrame >= r.start_frame && currentFrame <= r.end_frame)
+      ?.round_number ?? '-';
 
   const fmtGrapple = (s: number) => {
     const m = Math.floor(s / 60);
@@ -107,7 +168,7 @@ export default function Player() {
       >
         <VideoPlayer
           ref={videoRef}
-          src={VIDEO_PATH}
+          src={videoSrc}
           isPlaying={isPlaying}
           onTimeUpdate={() => { const v = videoRef.current; if (v) setCurrentTime(v.currentTime); }}
           onLoadedMetadata={() => { const v = videoRef.current; if (v) setDuration(v.duration); }}
@@ -116,7 +177,18 @@ export default function Player() {
           onTogglePlay={togglePlay}
           onStepForward={() => stepFrame(1)}
           onStepBackward={() => stepFrame(-1)}
-        />
+        >
+          {selectedFight && (
+            <FighterOverlay
+              ref={overlayRef}
+              frameMap={frameMap}
+              fightWidth={selectedFight.width}
+              fightHeight={selectedFight.height}
+              showBoxes={showBoxes}
+              showSkeletons={showSkeletons}
+            />
+          )}
+        </VideoPlayer>
         <VideoControls
           isPlaying={isPlaying}
           currentTime={currentTime}
@@ -126,7 +198,7 @@ export default function Player() {
           onStepBackward={() => stepFrame(-1)}
           onStepForward={() => stepFrame(1)}
         />
-        <FrameInfo currentFrame={currentFrame} currentMs={currentMs} fps={FPS} />
+        <FrameInfo currentFrame={currentFrame} currentMs={currentMs} fps={fps} />
       </div>
 
       {/* ── Sidebar ─────────────────────────────────── */}
@@ -137,6 +209,42 @@ export default function Player() {
         flexDirection: 'column',
         gap: 12,
       }}>
+        {/* Back to fight list */}
+        <div className="anim-fade-up anim-delay-1" style={glassCard}>
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.55)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              padding: 0,
+              width: '100%',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
+            All Fights
+          </button>
+          {selectedFight && (
+            <p style={{
+              margin: '8px 0 0',
+              fontSize: 13,
+              fontWeight: 700,
+              color: '#f1f5f9',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {selectedFight.video_path.split('/').pop()?.replace(/\.[^/.]+$/, '')}
+            </p>
+          )}
+        </div>
+
         {/* Stats card */}
         <div className="anim-fade-up anim-delay-2" style={glassCard}>
           <p style={{
@@ -161,7 +269,7 @@ export default function Player() {
               backgroundClip: 'text',
             }}
           >
-            Round {currentRound}
+            {currentRound === '-' ? '—' : `Round ${currentRound}`}
           </p>
 
           {/* Stat tiles */}
@@ -220,6 +328,44 @@ export default function Player() {
               >
                 {fmtGrapple(grappleSeconds)}
               </p>
+            </div>
+          </div>
+
+          {/* Overlays */}
+          <div style={{ marginTop: 12 }}>
+            <p style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: 'rgba(255,255,255,0.28)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.12em',
+              margin: '0 0 8px',
+            }}>
+              Overlays
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showBoxes}
+                  onChange={e => setShowBoxes(e.target.checked)}
+                  style={{ accentColor: '#00daf3', width: 14, height: 14, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>
+                  Fighter Boxes
+                </span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showSkeletons}
+                  onChange={e => setShowSkeletons(e.target.checked)}
+                  style={{ accentColor: '#00daf3', width: 14, height: 14, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>
+                  Fighter Skeletons
+                </span>
+              </label>
             </div>
           </div>
 

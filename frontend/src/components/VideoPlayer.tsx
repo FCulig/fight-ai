@@ -1,7 +1,7 @@
 import { forwardRef, useState, useRef, useCallback } from 'react';
 
 interface VideoPlayerProps {
-  src: string;
+  src: string | undefined;
   isPlaying: boolean;
   onTimeUpdate: () => void;
   onLoadedMetadata: () => void;
@@ -10,10 +10,11 @@ interface VideoPlayerProps {
   onTogglePlay: () => void;
   onStepForward: () => void;
   onStepBackward: () => void;
+  children?: React.ReactNode;
 }
 
 const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>((
-  { src, isPlaying, onTimeUpdate, onLoadedMetadata, onPlay, onPause, onTogglePlay, onStepForward, onStepBackward },
+  { src, isPlaying, onTimeUpdate, onLoadedMetadata, onPlay, onPause, onTogglePlay, onStepForward, onStepBackward, children },
   ref
 ) => {
   const holdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -141,6 +142,8 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>((
           {seekDir === 'left' ? 'fast_rewind' : 'fast_forward'}
         </span>
       )}
+
+      {children}
     </div>
   );
 });

@@ -1,0 +1,5 @@
+-r requirements-base.txt
+
+# CPU-only PyTorch — for macOS (MPS on Apple Silicon, CPU on Intel) and Windows without NVIDIA GPU
+torch==2.11.0
+torchvision==0.26.0

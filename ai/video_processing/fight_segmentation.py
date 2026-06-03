@@ -10,8 +10,6 @@ round transitions are used to snap boundaries to exact frames.
 """
 
 import bisect
-import json
-import re
 from collections import deque
 from pathlib import Path
 from typing import Optional
@@ -43,31 +41,27 @@ from models.constants import (
 from debug import DebugContext
 
 
-def _read_fps(detection_results_file: str) -> float:
-    """Read fps from the header of detection_results.json without loading the full file."""
-    with open(detection_results_file, "r", encoding="utf-8") as f:
-        head = f.read(128)
-    m = re.search(r'"fps"\s*:\s*([\d.]+)', head)
-    return float(m.group(1)) if m else 50.0
-
-
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 def segment_fights(
-    detection_results_file: str,
-    scoreboard_samples_file: Optional[str] = None,
+    detection_data: dict,
+    fps: float,
+    scoreboard_samples: Optional[list[dict]] = None,
     debug_ctx: Optional[DebugContext] = None,
 ) -> dict:
     """
     Segment a full fight video into rounds.
 
     Args:
-        detection_results_file:  Path to runs/detection_results.json.
-        scoreboard_samples_file: Path to runs/scoreboard_overlay/samples.json
-                                 (optional; falls back to detection-only when absent).
-        debug_ctx:               DebugContext for debug output.
+        detection_data:     In-memory detection dict produced by process_video()
+                            (or loaded from a --detection-file dev override).
+        fps:                Frames per second, taken from the fights DB row.
+        scoreboard_samples: In-memory OCR samples list produced by
+                            extract_scoreboard_samples() (optional; falls back
+                            to detection-only segmentation when absent).
+        debug_ctx:          DebugContext for debug output.
 
     Returns:
         {
@@ -76,23 +70,14 @@ def segment_fights(
         }
     """
     ctx = debug_ctx or DebugContext.disabled()
-
-    # Read fps and derive frame counts from seconds-based constants
-    fps = _read_fps(detection_results_file)
     ctx.log("segmentation", f"Video fps: {fps:.2f}")
 
-    min_round_length_frames  = int(MIN_ROUND_LENGTH_SECS  * fps)
+    min_round_length_frames   = int(MIN_ROUND_LENGTH_SECS  * fps)
     min_fight_duration_frames = int(MIN_FIGHT_DURATION_SECS * fps)
 
-    # Load OCR samples
-    ocr_samples: list[dict] = []
-    if scoreboard_samples_file:
-        try:
-            with open(scoreboard_samples_file, "r", encoding="utf-8") as f:
-                ocr_samples = json.load(f)
-            ctx.log("segmentation", f"Loaded {len(ocr_samples)} OCR samples")
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            ctx.log("segmentation", f"WARNING: could not load OCR samples — {e}")
+    ocr_samples: list[dict] = scoreboard_samples or []
+    if ocr_samples:
+        ctx.log("segmentation", f"Loaded {len(ocr_samples)} OCR samples")
 
     ocr_index  = _build_ocr_index(ocr_samples)
     ocr_bounds = _extract_ocr_boundaries(ocr_samples)   # hard round-transition frames
@@ -102,7 +87,7 @@ def segment_fights(
             f"hard boundaries: {len(ocr_bounds)}")
 
     rounds, total_frames, valid_frames, debug_series = _segment_streaming(
-        detection_results_file, ocr_index, ctx, fps
+        detection_data, ocr_index, ctx, fps
     )
 
     # Snap boundaries to nearest OCR round transition
@@ -220,7 +205,7 @@ def _ocr_signal_at(frame_num: int, ocr_index: dict[int, dict], stride: int) -> f
 # ---------------------------------------------------------------------------
 
 def _segment_streaming(
-    detection_results_file: str,
+    detection_data: dict,
     ocr_index: dict[int, dict],
     ctx: DebugContext,
     fps: float,
@@ -266,7 +251,7 @@ def _segment_streaming(
     last_frame    = None
     debug_series: list[dict] = []
 
-    for frame in _iter_detection_frames(detection_results_file):
+    for frame in detection_data["frames"]:
         frame_num  = frame["frame"]
         last_frame = frame_num
         total_frames += 1
@@ -457,7 +442,8 @@ def _snap_to_ocr_boundaries(
 
 
 # ---------------------------------------------------------------------------
-# Per-frame signal helpers
+# Per-frame signal helpers  (note: _read_fps and _iter_detection_frames
+# were removed — detection data and fps are now passed in-memory)
 # ---------------------------------------------------------------------------
 
 def _frame_signals(detections: list[dict]) -> tuple[bool, bool]:
@@ -479,14 +465,6 @@ def _frame_signals(detections: list[dict]) -> tuple[bool, bool]:
     blue_cx = (blue_bbox[0] + blue_bbox[2]) / 2
     engaged = abs(red_cx - blue_cx) < ROUND_ENGAGEMENT_DISTANCE
     return True, engaged
-
-
-def _iter_detection_frames(detection_results_file: str):
-    """Stream frames from {"frames":[...]} JSON without loading the whole file."""
-    with open(detection_results_file, "r", encoding="utf-8") as f:
-        data = json.loads(f.read())
-    for frame in data["frames"]:
-        yield frame
 
 
 # ---------------------------------------------------------------------------

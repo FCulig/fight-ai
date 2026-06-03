@@ -5,7 +5,7 @@ All business logic lives in pipeline.py.
 
 import argparse
 
-from pipeline import run_pipeline
+from pipeline import run_batch, run_pipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -14,19 +14,22 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Full pipeline — run everything from scratch
+  # Batch mode — scan fight_videos/, process all unprocessed fights
+  python main.py
+
+  # Single-file mode — process one video
   python main.py fight.mp4
 
-  # Skip YOLO (reuse existing detection)
+  # Skip YOLO (reuse an existing detection file)
   python main.py fight.mp4 --detection-file runs/detection_results.json
 
-  # Skip YOLO + ReID (reuse existing reid output)
+  # Skip YOLO + ReID (reuse an existing reid file)
   python main.py fight.mp4 --reid-file runs/output_reidentification.json
 
-  # Skip YOLO + ReID + Pose (reuse existing pose results)
+  # Skip YOLO + ReID + Pose (reuse an existing pose file)
   python main.py fight.mp4 --pose-results runs/pose_results.json
 
-  # Skip OCR + segmentation (supply existing manifest)
+  # Skip OCR + segmentation (supply an existing manifest)
   python main.py fight.mp4 --manifest runs/manifest.json
 
   # Render pose debug video (also skips process_fight)
@@ -34,29 +37,33 @@ Examples:
 
   # Render pose debug video, reuse all heavy steps
   python main.py fight.mp4 --pose-results runs/pose_results.json --manifest runs/manifest.json --verify-pose
+
+Note: all skip flags load the developer-supplied file as a read-only override.
+The pipeline never writes intermediate files — PostgreSQL is the only data store.
         """,
     )
 
-    p.add_argument("video_input", type=str,
-                   help="Path to the .mp4 fight video")
+    p.add_argument("video_input", nargs="?", default=None,
+                   help="Path to the .mp4 fight video. "
+                        "Omit to run in batch mode (scans fight_videos/).")
 
-    # ---- File overrides (supplying a file skips that step + all earlier steps) ----
+    # ---- File overrides (read-only dev shortcuts to skip expensive steps) ----
     g = p.add_argument_group("file overrides — supply to skip steps")
     g.add_argument("--detection-file", type=str, default=None,
                    metavar="PATH",
-                   help="Reuse detection_results.json — skips YOLO")
+                   help="Load detection dict from file — skips YOLO")
     g.add_argument("--reid-file", type=str, default=None,
                    metavar="PATH",
-                   help="Reuse output_reidentification.json — skips YOLO + ReID")
+                   help="Load reid dict from file — skips YOLO + ReID")
     g.add_argument("--pose-results", type=str, default=None,
                    metavar="PATH",
-                   help="Reuse pose_results.json — skips YOLO + ReID + Pose")
+                   help="Load pose dict from file — skips YOLO + ReID + Pose")
     g.add_argument("--scoreboard-samples", type=str, default=None,
                    metavar="PATH",
-                   help="Reuse scoreboard samples JSON — skips OCR calibration + extraction")
+                   help="Load scoreboard samples from file — skips OCR calibration + extraction")
     g.add_argument("--manifest", type=str, default=None,
                    metavar="PATH",
-                   help="Reuse manifest.json — skips OCR + segmentation")
+                   help="Load rounds from manifest file — skips OCR + segmentation")
     g.add_argument("--rounds", type=str, default=None,
                    metavar="\"s1,e1 s2,e2\"",
                    help="Explicit round boundaries — skips OCR + segmentation")
@@ -85,8 +92,6 @@ Examples:
                     help="Render scoreboard OCR verification video")
 
     # ---- General ----
-    p.add_argument("--no-db", action="store_true",
-                   help="Skip database writes")
     p.add_argument("--debug-level", choices=["none", "normal", "verbose"],
                    default="verbose",
                    help="Debug output verbosity (default: verbose)")
@@ -97,22 +102,24 @@ Examples:
 def main() -> None:
     args = build_parser().parse_args()
 
-    run_pipeline(
-        args.video_input,
-        detection_file     = args.detection_file,
-        reid_file          = args.reid_file,
-        pose_results       = args.pose_results,
-        scoreboard_samples = args.scoreboard_samples,
-        manifest_file      = args.manifest,
-        scoreboard_roi     = args.scoreboard_roi,
-        skip_scoreboard    = args.skip_scoreboard,
-        recalibrate        = args.recalibrate,
-        rounds_arg         = args.rounds,
-        verify_pose        = args.verify_pose,
-        verify_scoreboard  = args.verify_scoreboard,
-        no_db              = args.no_db,
-        debug_level        = args.debug_level,
-    )
+    if args.video_input is None:
+        run_batch(debug_level=args.debug_level)
+    else:
+        run_pipeline(
+            args.video_input,
+            detection_file     = args.detection_file,
+            reid_file          = args.reid_file,
+            pose_results       = args.pose_results,
+            scoreboard_samples = args.scoreboard_samples,
+            manifest_file      = args.manifest,
+            scoreboard_roi     = args.scoreboard_roi,
+            skip_scoreboard    = args.skip_scoreboard,
+            recalibrate        = args.recalibrate,
+            rounds_arg         = args.rounds,
+            verify_pose        = args.verify_pose,
+            verify_scoreboard  = args.verify_scoreboard,
+            debug_level        = args.debug_level,
+        )
 
 
 if __name__ == "__main__":

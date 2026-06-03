@@ -137,10 +137,22 @@ ai/
 
 ### Install dependencies
 
+Choose the requirements file that matches your platform:
+
 ```bash
 python -m venv .venv
-source .venv/Scripts/activate  # Windows
-pip install -r requirements.txt
+
+# macOS (Apple Silicon uses MPS, Intel uses CPU)
+source .venv/bin/activate
+pip install -r requirements-cpu.txt
+
+# Windows without NVIDIA GPU
+.venv\Scripts\activate
+pip install -r requirements-cpu.txt
+
+# Linux / Windows with NVIDIA GPU (CUDA 12.6)
+source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+pip install -r requirements-cuda.txt
 ```
 
 ### Environment variables

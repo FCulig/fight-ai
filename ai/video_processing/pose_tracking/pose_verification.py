@@ -1,4 +1,3 @@
-import json
 import re
 import time
 import cv2
@@ -82,15 +81,16 @@ def _read_frame(
 # ---------------------------------------------------------------------------
 
 def verify_pose_tracking(
-    pose_json_path: str,
+    pose_data: dict,
     rounds: list[tuple[int, int]],
+    fps: int,
     video_path: str | None = None,
     start_frame: int | None = None,
     end_frame: int | None = None,
 ):
     """[DEBUG] Create a visualisation video with pose tracking and round awareness.
 
-    Reads the JSON produced by track_poses() and renders an annotated MP4.
+    Renders an annotated MP4 from the in-memory pose dict.
 
     When a frame falls within a known round (as detected by segment_fights):
       - Bounding boxes and pose skeletons are drawn.
@@ -102,13 +102,15 @@ def verify_pose_tracking(
         along with the start frame of the next round.
 
     Args:
-        pose_json_path: Path to 'runs/pose_results.json'.
-        rounds:         List of (start_frame, end_frame) tuples from segment_fights().
-        video_path:     Path to the source .mp4. When supplied, frames are read
-                        directly from the video (no dependency on frames/ directory).
-                        When None, frames are read from the image_name paths in the JSON.
-        start_frame:    First frame to render (inclusive). None = beginning of video.
-        end_frame:      Last frame to render (inclusive). None = end of video.
+        pose_data:   In-memory pose dict produced by track_poses()
+                     (or loaded from a --pose-results dev override).
+        rounds:      List of (start_frame, end_frame) tuples from segment_fights().
+        fps:         Frames per second, taken from the fights DB row.
+        video_path:  Path to the source .mp4. When supplied, frames are read
+                     directly from the video (no dependency on frames/ directory).
+                     When None, frames are read from the image_name paths in the dict.
+        start_frame: First frame to render (inclusive). None = beginning of video.
+        end_frame:   Last frame to render (inclusive). None = end of video.
 
     Output:
         Writes 'pose_overlay.mp4' to the working directory.
@@ -121,11 +123,9 @@ def verify_pose_tracking(
 
     OUTPUT_MP4 = "pose_overlay.mp4"
 
-    log(f"Loading pose data: {pose_json_path}")
-    data   = json.load(open(pose_json_path, "r"))
-    fps    = int(data.get("fps", 50))
-    frames = data.get("frames", [])
-    log(f"{len(frames)} frames in pose JSON  |  fps={fps}")
+    log("Loading pose data (in-memory)")
+    frames = pose_data.get("frames", [])
+    log(f"{len(frames)} frames in pose data  |  fps={fps}")
 
     # --- Apply time-range filter ---
     if start_frame is not None or end_frame is not None:
