@@ -23,18 +23,52 @@ frontend/src/
 │   ├── useFighterFrames.ts # fetches frames for selectedFightId → Map<frame, FighterFrame[]>
 │   ├── useRounds.ts      # fetches rounds for selectedFightId
 │   └── useWindowWidth.ts # responsive breakpoint helper
+├── mocks/
+│   └── fightMock.ts      # hardcoded mock data (fighters, stats, pace, form) — see TODO_BACKEND_DATA.md
 ├── components/
 │   ├── FighterOverlay.tsx  # canvas overlay for fighter bounding boxes
 │   ├── VideoPlayer.tsx     # <video> wrapper with play/seek gestures; accepts children for overlays
 │   ├── VideoControls.tsx   # playback controls + scrubber
 │   ├── FrameInfo.tsx       # frame / ms / fps display
-│   ├── EventFeed.tsx       # scrolling event list
+│   ├── EventFeed.tsx       # scrolling event list (legacy — not used in the new Player)
 │   ├── EventItem.tsx       # individual event row
-│   └── Header.tsx          # top nav
+│   ├── Header.tsx          # top nav
+│   └── player/             # Analysis Player sub-components
+│       ├── eventMeta.ts    # deriveEventCat / eventColor / eventIcon helpers (regex-based)
+│       ├── LiveFeed.tsx    # real-event chat feed with filter pills + click-to-seek
+│       ├── ScopeToggle.tsx # Whole Fight / Round 1 / Round 2 pill group
+│       ├── AccGauge.tsx    # SVG accuracy ring gauge
+│       ├── SegBar.tsx      # horizontal segmented bar (strikes by target / position)
+│       ├── PaceChart.tsx   # SVG area/line pace chart with live playhead
+│       ├── MiniStat.tsx    # small inner-tile stat (Takedowns, Control, KD, Sub Att)
+│       ├── EdgeMeter.tsx   # tale-of-the-tape needle (Height / Reach / Age)
+│       ├── RecentForm.tsx  # W/L chip list (Recent Form · Last 5)
+│       ├── FighterColumn.tsx  # per-fighter stats card (AccGauge + MiniStat + SegBar)
+│       ├── FightStatistics.tsx # scope bar + ScopeToggle + two FighterColumn
+│       ├── Momentum.tsx    # MOMENTUM card wrapping PaceChart
+│       └── MatchupCard.tsx # tale-of-the-tape + EdgeMeter rows + RecentForm
 └── pages/
-    ├── Player.tsx          # main fight-review page
+    ├── Player.tsx          # main fight-review page (Analysis Player redesign)
     └── Library.tsx         # fight library listing
 ```
+
+## Analysis Player Layout
+
+`Player.tsx` implements a cinematic, full-page layout with five stacked sections (top → bottom):
+
+1. **Top grid** (`1fr 410px`, collapses single-column below 1100px) — `<VideoPlayer>` + `FighterOverlay` + ROUND chip on the left; `LiveFeed` filling the right column via absolute positioning so it always matches the video column height.
+2. **FIGHT STATISTICS** — `FightStatistics.tsx`: glass bar with `monitoring` icon + `ScopeToggle` (Whole Fight / Round 1 / Round 2); two `FighterColumn` cards below (real scope state selects the mock stat set from `fightMock.ts`).
+3. **MOMENTUM** — `Momentum.tsx`: `PaceChart` (SVG area/line, mock pace data, real time-axis from `currentTime`/`duration`; real `r1EndSeconds` from `useRounds` or fallback mock).
+4. **MATCHUP** — `MatchupCard.tsx`: tale-of-the-tape header + `EdgeRow` needles for Height/Reach/Age + Recent Form W/L chips.
+
+### Live feed event derivation
+`LiveFeed` drives on **real** backend events (same `useEvents` hook). Each `Event.description` is classified by `deriveEventCat()` in `eventMeta.ts` using the same strike/ground regexes that existed before in `Player.tsx` and `EventFeed.tsx`. Filter pills (All / Strikes / Fight State / Grapple) and click-to-seek work the same way as the design reference.
+
+### Mock data
+All hardcoded values (fighter profiles, per-round stats, pace arrays, recent form) live in `src/mocks/fightMock.ts`. Every gap is documented with the API shape needed to replace it in `TODO_BACKEND_DATA.md`.
+
+### Responsive
+`useWindowWidth()` drives a `narrow = width < 1100` flag. Below 1100px: top grid collapses to single column (live feed becomes a fixed-height `420px` block below controls); fighter columns stack; matchup tale-of-the-tape collapses; form lists both align left.
 
 ## API Proxy (vite.config.ts)
 Both `/events` and `/fights` are proxied to `http://127.0.0.1:8000`.

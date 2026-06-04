@@ -460,6 +460,77 @@ z-index 100 — sticky header
 
 ---
 
+## CSS Custom Properties (Design Tokens)
+
+All brand tokens are now defined as CSS custom properties in `:root` in `index.css`. Use `var(--…)` and `color-mix(in srgb, …)` instead of hardcoded hex values in new components.
+
+### Token reference
+| Token | Value |
+|---|---|
+| `--bg-base` | `#050709` |
+| `--surface-glass` | `rgba(255,255,255,0.04)` |
+| `--surface-inner` | `rgba(0,0,0,0.30)` |
+| `--header-bg` | `rgba(5,7,9,0.72)` |
+| `--text-primary` | `#f1f5f9` |
+| `--text-secondary` | `#cbd5e1` |
+| `--text-tertiary` | `#94a3b8` |
+| `--text-muted` | `#64748b` |
+| `--text-disabled` | `#475569` |
+| `--cyan-400` | `#00daf3` |
+| `--cyan-600` | `#0099b0` |
+| `--cyan-on` | `#001f24` |
+| `--purple-600` | `#7c3aed` |
+| `--orange-400` | `#ff7043` |
+| `--orange-600` | `#e64a19` |
+| `--green-500` | `#a3c900` |
+| `--red-500` | `#ef4444` |
+| `--slate-400` | `#94a3b8` |
+| `--f-red` | `#ff4d4d` (red-corner fighter) |
+| `--f-red-dim` | `rgba(255,77,77,0.16)` |
+| `--f-blue` | `#3aa0ff` (blue-corner fighter) |
+| `--f-blue-dim` | `rgba(58,160,255,0.16)` |
+| `--border-glass` | `rgba(255,255,255,0.07)` |
+| `--border-subtle` | `rgba(255,255,255,0.05)` |
+| `--border-cyan` | `rgba(0,218,243,0.18)` |
+| `--accent` | `#00daf3` |
+| `--accent-2` | `#0099b0` |
+
+---
+
+## Helper Classes
+
+Utility classes defined in `index.css`:
+
+| Class | Purpose |
+|---|---|
+| `.glass` | Glass-morphism surface (surface-glass fill + blur + border-glass) |
+| `.inner-tile` | Nested dark tile (surface-inner fill + border-subtle) |
+| `.divider` | 1px horizontal divider (border-subtle background) |
+| `.label` | Section label text (10.5px, 700, uppercase, 0.12em spacing) |
+| `.pill` | Inactive scope/filter pill button |
+| `.pill.active` | Active pill (accent fill + glow via `color-mix`) |
+
+---
+
+## Analysis Player Animations
+
+```css
+@keyframes feed-in {
+  from { transform: translateY(9px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+/* Used on each new event row in LiveFeed, duration 0.35s ease-out */
+
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+  70%  { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+/* Used on the live indicator dot in LiveFeed header, 1.4s infinite */
+```
+
+---
+
 ## Event Color System
 
 Used for left-border accents and icon badge colors in the event timeline:
@@ -490,17 +561,16 @@ The canvas is `position: absolute` over the video, `pointer-events: none`. Boxes
 
 ## Responsive Behavior
 
-| Component | Mobile (`< 640px`) | Desktop |
-|---|---|---|
-| Header padding | 14px | 28px |
-| Logo size | 15px | 17px |
-| Nav item padding | 5px 10px | 5px 14px |
-| Upload button | Icon only | Icon + "Upload Video" |
-| Icon buttons | Hidden | Visible |
-| Page padding | 12–20px / 16px | 20–40px / 24px |
-| Fight list grid | 1 column | `repeat(auto-fill, minmax(280px, 1fr))` |
-| Player layout | Column | Row (video + 300px sidebar) |
-| Event feed max-height | 360px | 540px |
-| Seek bar height | 5px | 3px |
-| Touch target min | 44×44px | auto |
-| Round display | 52px | 64px |
+| Component | Mobile (`< 640px`) | Tablet/Desktop `< 1100px` | Wide `≥ 1100px` |
+|---|---|---|---|
+| Header padding | 14px | 28px | 28px |
+| Logo size | 15px | 17px | 17px |
+| Upload button | Icon only | Icon + text | Icon + text |
+| Page padding | 16px v / 14px h | 22px v / 30px h | 22px v / 30px h |
+| Fight list grid | 1 column | auto-fill ≥280px | auto-fill ≥280px |
+| Player top grid | Single column | Single column | `1fr 410px` |
+| Live feed | Fixed 420px block | Fixed 420px block | Absolute-fill (tracks video height) |
+| Fighter columns | Single column | Single column | `1fr 1fr` |
+| Matchup tale | Single column | Single column | `1fr auto 1fr` |
+| Seek bar height | 5px | 3px | 3px |
+| Touch target min | 44×44px | auto | auto |

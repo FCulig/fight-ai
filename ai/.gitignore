@@ -26,5 +26,6 @@ yolo26x-pose.pt
 # Ignore all model results
 runs/
 frames/
+fight_videos/
 
 .claude/
