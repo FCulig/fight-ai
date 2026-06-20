@@ -27,11 +27,8 @@ def get_fight_by_id(fight_id: int) -> Fight | None:
 
 def delete_fight(fight_id: int) -> bool:
     def _query(session):
-        fight = session.query(Fight).filter(Fight.id == fight_id).first()
-        if fight is None:
-            return False
-        session.delete(fight)
+        rows_deleted = session.query(Fight).filter(Fight.id == fight_id).delete()
         session.commit()
-        return True
+        return rows_deleted > 0
 
     return run_db_query(_query)
