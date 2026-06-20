@@ -233,7 +233,14 @@ export default function Player() {
       </div>
 
       {/* FIGHT STATISTICS */}
-      {!eventsLoading && <FightStatistics />}
+      {!eventsLoading && (
+        <FightStatistics
+          currentFrame={currentFrame}
+          events={events}
+          fps={fps}
+          rounds={rounds}
+        />
+      )}
 
       {/* MOMENTUM */}
       <Momentum time={currentTime} duration={duration} r1EndSeconds={r1EndSeconds} />

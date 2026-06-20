@@ -264,6 +264,11 @@ button:focus-visible {
   100% { box-shadow: 0 0 0 0 transparent; }
 }
 
+@keyframes scope-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
 /* ── Scrollbar ──────────────────────────────────────── */
 
 ::-webkit-scrollbar { width: 5px; }
