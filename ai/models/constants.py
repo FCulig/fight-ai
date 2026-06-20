@@ -7,8 +7,22 @@ LABEL_ID = {
 # Mininum number of frames for which delta distance needs to hold value in order for grappling to start
 MIN_GRAPPLING_THRESHOLD = 3
 
-# Distance threshold to determine if fighters are grappling
+# Distance threshold to determine if fighters are grappling (clinch or ground)
 DISTANCE_GRAPPLING_THRESHOLD = 20
+
+# --- Posture: standing (clinch) vs grounded (ground game) ---
+# Within grapple distance, posture splits CLINCH from GROUND.
+# Torso vector = shoulder-midpoint → hip-midpoint. Tilt from the vertical axis
+# (degrees): ~0° standing upright, ~90° lying horizontal. Above this a fighter
+# reads as grounded.
+TORSO_VERTICAL_ANGLE_THRESHOLD = 50
+# Vertical body span (head→ankle y-extent) divided by fighter scale. Collapses
+# when a fighter is on the canvas. Below this the body reads as grounded.
+GROUND_VERTICAL_SPAN_RATIO = 1.2
+# Consecutive close frames with grounded posture required to enter GROUND.
+# Slightly higher than MIN_GRAPPLING_THRESHOLD — ground transitions are slower
+# than the per-frame noise that triggers a false clinch read.
+MIN_GROUND_THRESHOLD = 5
 
 # Number of frames to look back when determining takedown initiator
 TAKEDOWN_LOOKBACK_FRAMES = 15
@@ -51,6 +65,13 @@ KEYPOINT_MIN_CONFIDENCE = 0.4
 # Strike-relevant joint indices (COCO): head, shoulders, elbows, wrists, hips, knees, ankles.
 # Frame is valid if both fighters have all of these confident, rather than all 17 keypoints.
 STRIKE_KEYPOINT_INDICES = [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+# Core trunk joints (COCO): nose, shoulders, hips. These alone give the torso
+# centre (velocity baseline), torso rectangle + head centre (contact gate as the
+# defender) and body scale. The relaxed bar for open-range striking requires only
+# these confident — the punching arm is gated per-limb inside detect_strikes, so a
+# blurred wrist no longer discards the whole frame. Legs/ankles, routinely occluded
+# in a standing broadcast view, are not required.
+STRIKING_CORE_KEYPOINT_INDICES = [0, 5, 6, 11, 12]
 
 # Contact distance ratios (fraction of defender torso-length scale)
 HEAD_CONTACT_RATIO = 0.45
@@ -111,3 +132,21 @@ RED_HUE_LOW2             = 170   # red band 2: LOW2 .. 180
 BLUE_HUE_LOW             = 100
 BLUE_HUE_HIGH            = 130
 CORNER_MIN_TAPE_SAMPLES  = 200   # min total coloured pixels before trusting tape vote
+
+# --- Appearance-anchored per-frame corner assignment ---
+# Torso / shorts histogram sampling
+TORSO_HIST_BINS               = 16    # hue histogram bins (OpenCV hue 0–180)
+TORSO_MIN_SATURATION          = 50    # HSV S floor for torso pixels
+TORSO_MIN_VALUE               = 40    # HSV V floor for torso pixels
+TORSO_SAMPLE_MIN_PIXELS       = 150   # min pixels to trust a torso histogram
+
+# Template bootstrap + per-frame assignment
+CORNER_CLEAN_FRAME_MIN_TAPE   = 8     # per-frame combined tape px to qualify as a clean frame
+CORNER_TEMPLATE_MIN_SEPARATION = 0.15 # separation below this → distrust appearance, use legacy
+CORNER_TAPE_WEIGHT            = 0.6   # tape-cue weight in combined distance (sums to 1 with hist)
+CORNER_HIST_WEIGHT            = 0.4   # torso-histogram weight
+CORNER_HYSTERESIS_WEIGHT      = 0.5   # penalty added to any assignment that flips a slot's label
+CORNER_SWAP_CONFIRM_FRAMES    = 4     # consecutive frames a flip must persist to be confirmed
+
+# --- Grappling frame-validity relaxation ---
+GRAPPLING_MIN_VISIBLE_KEYPOINTS = 6   # min confident strike-relevant joints for PARTIAL validity

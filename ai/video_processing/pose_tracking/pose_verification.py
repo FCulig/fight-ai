@@ -3,8 +3,7 @@ import time
 import cv2
 import numpy as np
 from fight_processing.fight_processing_util import determine_fight_state, is_frame_valid
-from models.FightState import FightState
-from models.constants import MIN_GRAPPLING_THRESHOLD, DISTANCE_GRAPPLING_THRESHOLD
+from models.FightState import FightState, GRAPPLING_STATES
 
 
 # ---------------------------------------------------------------------------
@@ -280,8 +279,7 @@ def verify_pose_tracking(
     writer = cv2.VideoWriter(OUTPUT_MP4, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
 
     current_fight_state = FightState.STRIKING
-    grappling_frames    = 0
-    striking_frames     = 0
+    state_counters      = {"striking": 0, "clinch": 0, "ground": 0}
     written = missing   = 0
     total               = len(frames)
     t_start             = time.perf_counter()
@@ -306,10 +304,7 @@ def verify_pose_tracking(
             pct    = 100 * written / total if total else 0
             in_rnd = frame_num is not None and _is_in_round(frame_num, rounds)
             if in_rnd:
-                state_label = (
-                    "GRAPPLING" if current_fight_state == FightState.GRAPPLING
-                    else "STRIKING"
-                )
+                state_label = current_fight_state.name
                 phase = f"round in progress | state: {state_label}"
             else:
                 phase = "between rounds"
@@ -324,16 +319,13 @@ def verify_pose_tracking(
 
         # ---- In-round frame: pose + grappling logic ----
         if is_frame_valid(detections):
-            current_fight_state, grappling_frames, striking_frames = determine_fight_state(
+            current_fight_state, state_counters = determine_fight_state(
                 detections,
-                grappling_frames,
-                striking_frames,
+                state_counters,
                 current_fight_state,
-                MIN_GRAPPLING_THRESHOLD,
-                DISTANCE_GRAPPLING_THRESHOLD,
             )
 
-        if current_fight_state == FightState.GRAPPLING:
+        if current_fight_state in GRAPPLING_STATES:
             fighter_dets = [
                 d for d in detections
                 if d.get("class_id") in (0, 1) and d.get("bbox_xyxy")
@@ -346,7 +338,7 @@ def verify_pose_tracking(
                 ux1, uy1 = int(min(xs1)), int(min(ys1))
                 ux2, uy2 = int(max(xs2)), int(max(ys2))
                 cv2.rectangle(frame_img, (ux1, uy1), (ux2, uy2), COLOR_GRAPPLING, 3)
-                cv2.putText(frame_img, "GRAPPLING", (ux1, max(15, uy1 - 8)),
+                cv2.putText(frame_img, current_fight_state.name, (ux1, max(15, uy1 - 8)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_GRAPPLING, 2, cv2.LINE_AA)
         else:
             for det in detections:

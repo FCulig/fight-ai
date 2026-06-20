@@ -14,16 +14,18 @@ from fight_processing.fight_processing_util import (
     get_head_center,
     get_hip_height,
     is_frame_valid,
+    frame_validity,
     make_keypoint_smoother,
 )
 
-from models.FightState import FightState
+from models.FightState import FightState, GRAPPLING_STATES
 from models.constants import (
-    MIN_GRAPPLING_THRESHOLD,
-    DISTANCE_GRAPPLING_THRESHOLD,
     TAKEDOWN_LOOKBACK_FRAMES,
     RECOIL_LOOKAHEAD_FRAMES,
     RECOIL_VELOCITY_RATIO,
+    HEAD_CONTACT_RATIO,
+    TORSO_CONTACT_RATIO,
+    PUNCH_VELOCITY_RATIO,
 )
 
 _FRAME_BATCH_SIZE = 1_000
@@ -37,6 +39,94 @@ def _insert_event(db, frame: int, description: str, fight_id: int) -> None:
         ),
         {"frame": frame, "description": description, "fight_id": fight_id},
     )
+
+
+def _percentile(values: list[float], q: float) -> float:
+    """Nearest-rank percentile (q in 0..100) of a non-empty list."""
+    s = sorted(values)
+    k = max(0, min(len(s) - 1, int(round((q / 100.0) * (len(s) - 1)))))
+    return s[k]
+
+
+def _print_standing_punch_diag(validity_counts, striking_eval_frames, diag,
+                               invalid_breakdown=None, missing_detcount=None,
+                               striking_both_visible=None) -> None:
+    """Temporary diagnostic: explains why standing punches are/aren't firing.
+
+    A standing punch must clear: (1) a FULL-validity frame, (2) angle+velocity,
+    (3) the contact-proximity gate. `diag` holds every candidate that already
+    cleared (1) and (2); `hit` records whether (3) accepted it. If many candidates
+    exist but few `hit`, the contact gate is the bottleneck — and the distance
+    distribution tells us how far the threshold would need to move.
+    """
+    total = sum(validity_counts.values())
+    print("\n--- Standing-punch diagnostics ---")
+    print(f"Frame validity: FULL={validity_counts['FULL']} "
+          f"PARTIAL={validity_counts['PARTIAL']} "
+          f"INVALID={validity_counts['INVALID']} (total {total})")
+    if invalid_breakdown:
+        print(f"INVALID breakdown: both_present_low_joints="
+              f"{invalid_breakdown['both_present_low_joints']} "
+              f"missing_red={invalid_breakdown['missing_red']} "
+              f"missing_blue={invalid_breakdown['missing_blue']} "
+              f"missing_both={invalid_breakdown['missing_both']}")
+    if missing_detcount:
+        print(f"  missing-fighter frames by raw detection count: "
+              f"two_dets(label collision)={missing_detcount['two_dets']} "
+              f"one_det={missing_detcount['one_det']} "
+              f"zero_dets={missing_detcount['zero_dets']}")
+    if striking_both_visible:
+        sbv_full = striking_both_visible["full"]
+        sbv_low  = striking_both_visible["low_joints"]
+        sbv_tot  = sbv_full + sbv_low
+        print(f"STRIKING + both fighters visible: {sbv_tot} frames "
+              f"(FULL/ran detection={sbv_full}, "
+              f"low-joints/dropped={sbv_low})")
+        if sbv_tot:
+            print(f"  => {sbv_low/sbv_tot:.0%} of both-visible standing frames are "
+                  f"dropped purely by the all-15-joints bar (recoverable).")
+    print(f"STRIKING frames evaluated by detect_strikes: {striking_eval_frames}")
+
+    extended   = (diag or {}).get("extended", [])
+    candidates = (diag or {}).get("candidates", [])
+
+    # Velocity distribution of all arm extensions (angle ok) — where to set the
+    # PUNCH_VELOCITY_RATIO threshold relative to real punch motions.
+    if extended:
+        print(f"Arm extensions (angle ok): {len(extended)}; "
+              f"scale/sec speed p50/p75/p90/p95 = "
+              f"{_percentile(extended, 50):.2f} / {_percentile(extended, 75):.2f} "
+              f"/ {_percentile(extended, 90):.2f} / {_percentile(extended, 95):.2f} "
+              f"(PUNCH_VELOCITY_RATIO threshold = {PUNCH_VELOCITY_RATIO})")
+
+    if not candidates:
+        print("Standing punch candidates (passed angle+velocity): 0")
+        print("=> Nothing cleared the velocity gate. Compare the arm-extension speed "
+              "percentiles above against PUNCH_VELOCITY_RATIO — if real punches sit "
+              "below it, lower the threshold.")
+        print("--- end diagnostics ---\n")
+        return
+
+    hits   = [d for d in candidates if d["hit"]]
+    misses = [d for d in candidates if not d["hit"]]
+    print(f"Standing punch candidates (passed angle+velocity): {len(candidates)} "
+          f"-> contact gate accepted {len(hits)}, rejected {len(misses)}")
+    print(f"Contact thresholds: HEAD_CONTACT_RATIO={HEAD_CONTACT_RATIO} "
+          f"TORSO_CONTACT_RATIO={TORSO_CONTACT_RATIO}")
+
+    if misses:
+        head_d  = [d["head"] for d in misses]
+        torso_d = [d["torso"] for d in misses]
+        print("Rejected candidates' normalised contact distance "
+              "(min / p25 / median):")
+        print(f"  head : {min(head_d):.2f} / {_percentile(head_d, 25):.2f} "
+              f"/ {_percentile(head_d, 50):.2f}")
+        print(f"  torso: {min(torso_d):.2f} / {_percentile(torso_d, 25):.2f} "
+              f"/ {_percentile(torso_d, 50):.2f}")
+        print("=> If these medians sit just above the thresholds, the contact gate "
+              "is the bottleneck and loosening the ratios (or a windowed check) "
+              "would recover these punches.")
+    print("--- end diagnostics ---\n")
 
 
 def _flush_frame_batch(db, batch: list[dict]) -> None:
@@ -109,9 +199,36 @@ def process_fight(
         current_fight_state  = FightState.STRIKING
         previous_fight_state = FightState.STRIKING
 
-        grappling_frames      = 0
-        striking_frames       = 0
+        state_counters = {"striking": 0, "clinch": 0, "ground": 0}
         frames_spent_grappling = 0
+        frames_spent_ground    = 0
+
+        # --- Standing-punch diagnostics (temporary) ---
+        # validity_counts: how many frames hit each validity grade.
+        # striking_eval_frames: STRIKING frames that actually reached detect_strikes
+        #   (both fighters present, prev frame available) — the only frames a
+        #   standing punch can fire in.
+        # standing_punch_diag: per-candidate contact records from detect_strikes.
+        validity_counts      = {"FULL": 0, "PARTIAL": 0, "INVALID": 0}
+        striking_eval_frames = 0
+        # "extended": speed of every standing arm extension (angle ok), for tuning
+        # the velocity threshold. "candidates": post-velocity-gate contact records.
+        standing_punch_diag: dict = {"extended": [], "candidates": []}
+        # INVALID breakdown: which frames lacked a fighter vs had both but too
+        # few confident joints. Distinguishes an upstream detection/labelling
+        # gap from the validity bar being too strict.
+        invalid_breakdown = {"missing_red": 0, "missing_blue": 0,
+                             "missing_both": 0, "both_present_low_joints": 0}
+        # When a fighter is "missing", how many fighter-class (0/1) detections did
+        # the frame actually carry? 2 detections but a corner missing => corner
+        # assignment collapsed both onto one label (labelling bug). 0-1 detections
+        # => the detector/tracker genuinely produced fewer than two fighters.
+        missing_detcount = {"two_dets": 0, "one_det": 0, "zero_dets": 0}
+        # The cohort you actually care about: STRIKING state with BOTH fighters
+        # visible. "full" = passed the strict joint bar and ran standing detection;
+        # "low_joints" = both visible but the all-15-joints bar rejected the frame
+        # so standing detection never ran (currently dropped as INVALID).
+        striking_both_visible = {"full": 0, "low_joints": 0}
 
         hip_history  = deque(maxlen=TAKEDOWN_LOOKBACK_FRAMES)
         prev_red_kp, prev_blue_kp = None, None
@@ -170,9 +287,41 @@ def process_fight(
                 _flush_frame_batch(db, frame_batch)
                 frame_batch.clear()
 
-            if not is_frame_valid(frame["detections"]):
-                if current_fight_state == FightState.GRAPPLING:
+            validity = frame_validity(frame["detections"], current_fight_state)
+            validity_counts[validity] += 1
+
+            _has_red  = any(d.get("class_id") == 0 for d in frame["detections"])
+            _has_blue = any(d.get("class_id") == 1 for d in frame["detections"])
+            if (current_fight_state == FightState.STRIKING and _has_red and _has_blue):
+                if validity == "FULL":
+                    striking_both_visible["full"] += 1
+                else:
+                    striking_both_visible["low_joints"] += 1
+
+            if validity == "INVALID":
+                if _has_red and _has_blue:
+                    invalid_breakdown["both_present_low_joints"] += 1
+                else:
+                    if _has_red:
+                        invalid_breakdown["missing_blue"] += 1
+                    elif _has_blue:
+                        invalid_breakdown["missing_red"] += 1
+                    else:
+                        invalid_breakdown["missing_both"] += 1
+                    # How many fighter-class detections did this frame actually carry?
+                    _ndet = sum(1 for d in frame["detections"]
+                                if d.get("class_id") in (0, 1))
+                    if _ndet >= 2:
+                        missing_detcount["two_dets"] += 1
+                    elif _ndet == 1:
+                        missing_detcount["one_det"] += 1
+                    else:
+                        missing_detcount["zero_dets"] += 1
+
+                if current_fight_state in GRAPPLING_STATES:
                     frames_spent_grappling += 1
+                if current_fight_state == FightState.GROUND:
+                    frames_spent_ground += 1
                 continue
 
             red_kp, blue_kp = None, None
@@ -207,15 +356,21 @@ def process_fight(
                     print(desc + f" at frame {ps['contact_frame']}")
                 pending_strikes = still_pending
 
-                if prev_red_kp and prev_blue_kp:
-                    is_grappling = current_fight_state == FightState.GRAPPLING
+                is_grappling = current_fight_state in GRAPPLING_STATES
+                is_ground    = current_fight_state == FightState.GROUND
+
+                if prev_red_kp is not None and prev_blue_kp is not None:
+                    if not is_grappling:
+                        striking_eval_frames += 1
                     for strike in detect_strikes(
                         red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state, fps,
-                        grappling=is_grappling
+                        frame_idx=frame_number,
+                        grappling=is_grappling, ground=is_ground,
+                        diag=None if is_grappling else standing_punch_diag,
                     ):
                         description = f"{strike['fighter']} threw a {strike['type']}"
                         if is_grappling:
-                            # Clinch strikes emitted immediately — no recoil expected.
+                            # Clinch/ground strikes emitted immediately — no recoil.
                             _insert_event(db, frame_number, description, fight_id)
                             print(description + f" at frame {frame_number}")
                         else:
@@ -230,28 +385,43 @@ def process_fight(
                                 "def_scale":       get_fighter_scale(def_kp),
                             })
 
-                prev_red_kp  = red_kp
-                prev_blue_kp = blue_kp
+                prev_red_kp   = red_kp
+                prev_blue_kp  = blue_kp
 
-            current_fight_state, grappling_frames, striking_frames = determine_fight_state(
+                # PARTIAL frames count toward grappling totals; full detect_strikes
+                # already ran above (grappling=True suppresses the contact gate so
+                # occluded joints are handled by the per-limb confidence check).
+                if validity == "PARTIAL":
+                    if current_fight_state in GRAPPLING_STATES:
+                        frames_spent_grappling += 1
+                    if current_fight_state == FightState.GROUND:
+                        frames_spent_ground += 1
+
+            current_fight_state, state_counters = determine_fight_state(
                 frame["detections"],
-                grappling_frames,
-                striking_frames,
+                state_counters,
                 current_fight_state,
-                MIN_GRAPPLING_THRESHOLD,
-                DISTANCE_GRAPPLING_THRESHOLD,
             )
 
-            if current_fight_state == FightState.GRAPPLING:
-                frames_spent_grappling += 1
+            # Only FULL frames count here; PARTIAL frames already incremented
+            # inside the `if red_kp and blue_kp:` block above.
+            if validity == "FULL":
+                if current_fight_state in GRAPPLING_STATES:
+                    frames_spent_grappling += 1
+                if current_fight_state == FightState.GROUND:
+                    frames_spent_ground += 1
 
             if previous_fight_state != current_fight_state:
                 description = f"Fight state changed to {current_fight_state}"
 
-                if current_fight_state == FightState.GRAPPLING:
-                    initiator = determine_takedown_initiator(hip_history)
-                    if initiator:
-                        description += f", takedown initiated by {initiator}"
+                # Attribute the engagement to a fighter. The fight hitting the
+                # floor (entering GROUND) is a takedown; locking up while still
+                # standing (entering CLINCH) is a clinch.
+                initiator = determine_takedown_initiator(hip_history)
+                if current_fight_state == FightState.GROUND and initiator:
+                    description += f", takedown initiated by {initiator}"
+                elif current_fight_state == FightState.CLINCH and initiator:
+                    description += f", clinch initiated by {initiator}"
 
                 _insert_event(db, frame_number, description, fight_id)
                 print(description + f" at frame {frame_number}")
@@ -267,7 +437,13 @@ def process_fight(
             _insert_event(db, ps["contact_frame"], desc, fight_id)
             print(desc + f" at frame {ps['contact_frame']}")
 
-        print(f"Frames spent grappling: {frames_spent_grappling}")
+        print(f"Frames spent grappling: {frames_spent_grappling} "
+              f"(of which on the ground: {frames_spent_ground})")
+
+        _print_standing_punch_diag(
+            validity_counts, striking_eval_frames, standing_punch_diag,
+            invalid_breakdown, missing_detcount, striking_both_visible,
+        )
 
         # ------------------------------------------------------------------
         # Single commit — all rows land atomically
