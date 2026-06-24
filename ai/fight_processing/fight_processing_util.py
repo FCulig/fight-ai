@@ -16,6 +16,9 @@ from models.constants import (
     LEG_CONTACT_RATIO,
     GRAPPLING_PUNCH_VELOCITY_RATIO,
     GRAPPLING_KICK_VELOCITY_RATIO,
+    GRAPPLING_HEAD_CONTACT_RATIO,
+    GRAPPLING_TORSO_CONTACT_RATIO,
+    GRAPPLING_STRIKE_DIRECTION_MIN,
     KEYPOINT_MIN_CONFIDENCE,
     STRIKE_KEYPOINT_INDICES,
     STRIKING_CORE_KEYPOINT_INDICES,
@@ -350,8 +353,10 @@ def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state, fps
         prev_red_kp / prev_blue_kp: Previous frame keypoints
         strike_state:               Per-fighter, per-limb state dict (mutated in place)
         fps:                        Video frame rate — used to convert velocity to px/sec.
-        grappling:                  When True, use lower velocity ratios and skip the
-                                    contact-proximity gate (fighters are already touching).
+        grappling:                  When True, use lower velocity ratios and replace the
+                                    open-range contact-proximity gate with a directional
+                                    gate (relaxed proximity + velocity aimed at a target
+                                    zone) that rejects pummeling/gripping false positives.
                                     Strike types are prefixed "clinch_" (standing clinch)
                                     or "ground_" when `ground` is also True.
         ground:                     When True (and grappling), emit ground-and-pound
@@ -469,14 +474,42 @@ def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state, fps
                 continue
 
             # Contact check: distances normalised by defender scale.
-            # In grappling mode fighters are already touching — skip proximity and
-            # classify by limb type only, prefixing the event with "clinch_".
+            # In grappling mode the open-range proximity gate is replaced by a
+            # directional gate (relaxed proximity + velocity aimed at a target zone).
             end = np.array(kp[distal][:2])
             strike_type = None
 
             if grappling:
+                # Fighters are entangled, so raw proximity no longer discriminates a
+                # strike from pummeling / gripping (the hands are near the torso either
+                # way). The discriminating signal is DIRECTION: a real short strike
+                # drives the end-effector toward a target zone, whereas swimming for
+                # underhooks / framing / gripping moves it laterally or pulls it back.
                 prefix = "ground" if ground else "clinch"
-                strike_type = f"{prefix}_knee" if is_kick else f"{prefix}_punch"
+
+                head_dist_norm  = np.linalg.norm(end - opp_head) / def_scale
+                torso_dist_norm = (distance_to_rect(end, opp_torso_rect) / def_scale
+                                   if opp_torso_rect else float('inf'))
+                near_target = (head_dist_norm < GRAPPLING_HEAD_CONTACT_RATIO or
+                               torso_dist_norm < GRAPPLING_TORSO_CONTACT_RATIO)
+
+                # Aim the alignment check at whichever zone is closer.
+                if opp_torso_rect:
+                    opp_torso_center = np.array([
+                        (opp_torso_rect[0] + opp_torso_rect[2]) / 2,
+                        (opp_torso_rect[1] + opp_torso_rect[3]) / 2,
+                    ])
+                else:
+                    opp_torso_center = opp_head
+                target = opp_head if head_dist_norm <= torso_dist_norm else opp_torso_center
+                to_target = target - end
+                to_target_mag = np.linalg.norm(to_target)
+                vel_mag = np.linalg.norm(relative_vel)
+                alignment = (float(np.dot(relative_vel, to_target) / (vel_mag * to_target_mag))
+                             if vel_mag > 1e-6 and to_target_mag > 1e-6 else -1.0)
+
+                if near_target and alignment > GRAPPLING_STRIKE_DIRECTION_MIN:
+                    strike_type = f"{prefix}_knee" if is_kick else f"{prefix}_punch"
             else:
                 head_dist_norm  = np.linalg.norm(end - opp_head) / def_scale
                 torso_dist_norm = (distance_to_rect(end, opp_torso_rect) / def_scale

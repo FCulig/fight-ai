@@ -1,5 +1,7 @@
 from typing import List
 
+from sqlalchemy import text
+
 from app.utils.db import run_db_query
 from app.models.fight import Fight
 
@@ -25,10 +27,14 @@ def get_fight_by_id(fight_id: int) -> Fight | None:
     return run_db_query(_query)
 
 
-def delete_fight(fight_id: int) -> bool:
+def delete_fight(fight_id: int) -> str | None:
     def _query(session):
-        rows_deleted = session.query(Fight).filter(Fight.id == fight_id).delete()
+        result = session.execute(
+            text("DELETE FROM fights WHERE id = :id RETURNING video_path"),
+            {"id": fight_id},
+        )
         session.commit()
-        return rows_deleted > 0
+        row = result.fetchone()
+        return row[0] if row else None
 
     return run_db_query(_query)

@@ -43,10 +43,26 @@ PUNCH_BENT_ANGLE_MAX = 139     # degrees — above this falls into the straight 
 LEG_EXTENSION_THRESHOLD = 130   # minimum knee angle (degrees) for a kick
 STRIKE_COOLDOWN_FRAMES = 15     # frames to suppress re-detection after a strike
 STRIKE_EXTENSION_FRAMES = 2     # consecutive frames angle must be held to confirm a strike
-# In clinch/grappling the fighters are already in contact so the contact gate is skipped;
-# use a lower velocity threshold to catch short-range strikes (knees, dirty boxing).
+# In clinch/grappling the fighters are already in contact so the open-range contact
+# gate is replaced by a directional gate (below); use a lower velocity threshold to
+# catch short-range strikes (knees, dirty boxing).
 GRAPPLING_PUNCH_VELOCITY_RATIO = 2.0
 GRAPPLING_KICK_VELOCITY_RATIO  = 2.5
+
+# --- Grappling strike gate (clinch / ground) ---
+# In a clinch fighters are entangled, so raw proximity no longer discriminates a
+# strike from pummeling / hand-fighting / gripping — the hands are near the
+# opponent's torso either way. The discriminating signal is DIRECTION: a real short
+# strike drives the end-effector toward a target zone (head or torso), whereas
+# swimming for underhooks, framing and gripping move it laterally or pull it back.
+# A grappling strike must satisfy BOTH a relaxed proximity sanity-check and a
+# velocity-alignment-toward-target check.
+GRAPPLING_HEAD_CONTACT_RATIO  = 0.60   # relaxed head proximity (fraction of defender scale)
+GRAPPLING_TORSO_CONTACT_RATIO = 0.70   # relaxed torso proximity (fraction of defender scale)
+# Cosine of the angle between the end-effector velocity and the vector to the target
+# zone. 0.5 ≈ within 60° of driving straight at the target. Pummeling / gripping
+# motions are lateral or pull away and fall below this.
+GRAPPLING_STRIKE_DIRECTION_MIN = 0.5
 
 # Keypoint confidence gating
 # Joints below this confidence are treated as unreliable and their limb is skipped.

@@ -54,7 +54,10 @@ async def get_fight_video(fight_id: int):
 
 @router.delete("/{fight_id}/", status_code=204)
 async def delete_fight(fight_id: int):
-    found = fight_service.delete_fight(fight_id)
-    if not found:
+    video_path = fight_service.delete_fight(fight_id)
+    if video_path is None:
         raise HTTPException(status_code=404, detail="Fight not found")
+    resolved = _resolve_video_path(video_path)
+    if resolved.exists():
+        resolved.unlink()
     return Response(status_code=204)
