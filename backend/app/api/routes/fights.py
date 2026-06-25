@@ -14,6 +14,7 @@ from app.services import event_service, fight_service, fighter_frame_service, ro
 router = APIRouter()
 
 _VIDEO_BASE_DIR = Path(os.getenv("VIDEO_BASE_DIR", ""))
+_KEEP_VIDEO_ON_DELETE = os.getenv("KEEP_VIDEO_ON_DELETE", "").lower() in ("1", "true", "yes")
 
 
 def _resolve_video_path(stored_path: str) -> Path:
@@ -57,7 +58,8 @@ async def delete_fight(fight_id: int):
     video_path = fight_service.delete_fight(fight_id)
     if video_path is None:
         raise HTTPException(status_code=404, detail="Fight not found")
-    resolved = _resolve_video_path(video_path)
-    if resolved.exists():
-        resolved.unlink()
+    if not _KEEP_VIDEO_ON_DELETE:
+        resolved = _resolve_video_path(video_path)
+        if resolved.exists():
+            resolved.unlink()
     return Response(status_code=204)

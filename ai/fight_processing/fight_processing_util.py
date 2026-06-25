@@ -14,6 +14,11 @@ from models.constants import (
     HEAD_CONTACT_RATIO,
     TORSO_CONTACT_RATIO,
     LEG_CONTACT_RATIO,
+    HEAD_RADIUS_EAR_FACTOR,
+    HEAD_RADIUS_SCALE_RATIO,
+    HEAD_RADIUS_MIN_RATIO,
+    HEAD_RADIUS_MAX_RATIO,
+    HEAD_ABOVE_SHOULDER_RATIO,
     GRAPPLING_PUNCH_VELOCITY_RATIO,
     GRAPPLING_KICK_VELOCITY_RATIO,
     GRAPPLING_HEAD_CONTACT_RATIO,
@@ -272,9 +277,42 @@ def determine_takedown_initiator(hip_history):
 
 
 def get_head_center(keypoints):
-    """Returns the average position of nose (0), left ear (3), right ear (4)."""
-    pts = np.array([keypoints[0][:2], keypoints[3][:2], keypoints[4][:2]])
-    return pts.mean(axis=0)
+    """Returns the head centre: average of the *confident* points among nose (0),
+    left ear (3), right ear (4).
+
+    Confidence-gated on purpose — in a side-on broadcast view the far ear is
+    routinely occluded or hallucinated, and averaging that garbage coordinate
+    drags the head centre toward the torso, corrupting head-vs-body
+    classification right at the boundary. Falls back to the nose alone, then to a
+    point one head-height above the shoulder midpoint when no head joint is
+    confident."""
+    head_idx = [0, 3, 4]
+    pts = [keypoints[i][:2] for i in head_idx
+           if len(keypoints[i]) > 2 and keypoints[i][2] >= KEYPOINT_MIN_CONFIDENCE]
+    if pts:
+        return np.array(pts).mean(axis=0)
+
+    # No confident head joint — estimate from the shoulder line.
+    shoulder_mid = np.array([(keypoints[5][0] + keypoints[6][0]) / 2,
+                             (keypoints[5][1] + keypoints[6][1]) / 2])
+    # Image y increases downward, so the head is above (smaller y) the shoulders.
+    return shoulder_mid - np.array([0.0, HEAD_ABOVE_SHOULDER_RATIO * get_fighter_scale(keypoints)])
+
+
+def get_head_radius(keypoints, scale):
+    """Radius (px) of the head zone used for head-vs-body classification.
+
+    Uses the ear-to-ear span when both ears are confident (the full head width
+    tracks that span), otherwise a fraction of body scale. Clamped to a sane band
+    of the scale so a degenerate pose can't make the head zone absurd."""
+    l_ear, r_ear = keypoints[3], keypoints[4]
+    if (len(l_ear) > 2 and len(r_ear) > 2 and
+            l_ear[2] >= KEYPOINT_MIN_CONFIDENCE and r_ear[2] >= KEYPOINT_MIN_CONFIDENCE):
+        ear_span = np.linalg.norm(np.array(l_ear[:2]) - np.array(r_ear[:2]))
+        radius = ear_span * HEAD_RADIUS_EAR_FACTOR
+    else:
+        radius = HEAD_RADIUS_SCALE_RATIO * scale
+    return float(np.clip(radius, HEAD_RADIUS_MIN_RATIO * scale, HEAD_RADIUS_MAX_RATIO * scale))
 
 
 def get_lead_hand_side(kp, opp_kp):
@@ -528,10 +566,25 @@ def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state, fps
                         strike_type = "low_kick"
                 else:
                     punch_label = classify_punch_type(limb_key, angle, relative_vel, kp, opp_kp)
-                    if head_dist_norm < HEAD_CONTACT_RATIO:
-                        strike_type = f"{punch_label}_head"
-                    elif torso_dist_norm < TORSO_CONTACT_RATIO:
-                        strike_type = f"{punch_label}_body"
+                    # Acceptance: did the punch land near the opponent at all?
+                    # (unchanged reach — same two ratios as before).
+                    landed = (head_dist_norm < HEAD_CONTACT_RATIO or
+                              torso_dist_norm < TORSO_CONTACT_RATIO)
+                    if landed:
+                        # Head-vs-body by NEAREST REGION, not head-first priority.
+                        # Each distance is "how far outside the region" (0 when the
+                        # wrist is inside it): the head circle vs the torso rectangle.
+                        # A borderline head shot just outside the head circle is no
+                        # longer captured by the torso test merely because the head
+                        # sits above the torso's top edge.
+                        head_radius = get_head_radius(opp_kp, def_scale)
+                        head_region_dist  = max(0.0, np.linalg.norm(end - opp_head) - head_radius)
+                        torso_region_dist = (distance_to_rect(end, opp_torso_rect)
+                                             if opp_torso_rect else float('inf'))
+                        if head_region_dist <= torso_region_dist:
+                            strike_type = f"{punch_label}_head"
+                        else:
+                            strike_type = f"{punch_label}_body"
 
                 # Diagnostic: every standing PUNCH candidate that cleared the angle +
                 # velocity + extension-frame gates is recorded with its normalised

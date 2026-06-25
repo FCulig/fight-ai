@@ -90,9 +90,24 @@ STRIKE_KEYPOINT_INDICES = [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 STRIKING_CORE_KEYPOINT_INDICES = [0, 5, 6, 11, 12]
 
 # Contact distance ratios (fraction of defender torso-length scale)
+# These gate ACCEPTANCE — whether a strike landed near the opponent at all.
 HEAD_CONTACT_RATIO = 0.45
 TORSO_CONTACT_RATIO = 0.55
 LEG_CONTACT_RATIO = 0.45
+
+# --- Head zone geometry (head-vs-body classification) ---
+# Once a punch is accepted, head-vs-body is decided by the nearest anatomical
+# REGION: distance outside the head circle vs distance outside the torso
+# rectangle (0 when inside either). The head circle is centred on the confident
+# head keypoints; its radius is derived from the ear-to-ear span when both ears
+# are confident, else from body scale, then clamped to a sane band of the scale.
+HEAD_RADIUS_EAR_FACTOR   = 0.80   # head radius ≈ ear-to-ear span × this
+HEAD_RADIUS_SCALE_RATIO  = 0.25   # fallback head radius as fraction of torso scale
+HEAD_RADIUS_MIN_RATIO    = 0.15   # clamp: min head radius (fraction of scale)
+HEAD_RADIUS_MAX_RATIO    = 0.35   # clamp: max head radius (fraction of scale)
+# When no head keypoint is confident, estimate the head centre this far above the
+# shoulder midpoint (fraction of torso scale).
+HEAD_ABOVE_SHOULDER_RATIO = 0.45
 
 # Fight segmentation thresholds (in seconds — converted to frames at runtime using detected fps)
 MIN_FIGHT_END_GAP_SECS    = 45.0   # seconds of low fighter presence to end fight
