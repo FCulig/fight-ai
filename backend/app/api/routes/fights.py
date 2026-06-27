@@ -1,17 +1,29 @@
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
 
 from app.models.fight import FightResponse
 from app.models.fighter_frame import FighterFrameResponse
 from app.models.fight_event import FightEventResponse
 from app.models.round import RoundResponse
-from app.services import event_service, fight_service, fighter_frame_service, round_service
+from app.services import (
+    event_service,
+    fight_service,
+    fighter_frame_service,
+    fighter_service,
+    round_service,
+)
 
 router = APIRouter()
+
+
+class CornerAssignment(BaseModel):
+    red_fighter_id: Optional[int] = None
+    blue_fighter_id: Optional[int] = None
 
 _VIDEO_BASE_DIR = Path(os.getenv("VIDEO_BASE_DIR", ""))
 _KEEP_VIDEO_ON_DELETE = os.getenv("KEEP_VIDEO_ON_DELETE", "").lower() in ("1", "true", "yes")
@@ -38,8 +50,26 @@ async def get_fighter_frames(fight_id: int):
 
 
 @router.get("/{fight_id}/events/", response_model=List[FightEventResponse])
-async def get_fight_events(fight_id: int):
-    return event_service.get_events_by_fight(fight_id)
+async def get_fight_events(
+    fight_id: int,
+    fighter_id: Optional[int] = None,
+    action: Optional[str] = None,
+    success: Optional[bool] = None,
+):
+    return event_service.get_events_by_fight(fight_id, fighter_id, action, success)
+
+
+@router.patch("/{fight_id}/corners/", response_model=FightResponse)
+async def assign_corners(fight_id: int, payload: CornerAssignment):
+    for fid in (payload.red_fighter_id, payload.blue_fighter_id):
+        if fid is not None and fighter_service.get_fighter_by_id(fid) is None:
+            raise HTTPException(status_code=404, detail=f"Fighter {fid} not found")
+    ok = fighter_service.set_fight_corners(
+        fight_id, payload.red_fighter_id, payload.blue_fighter_id
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Fight not found")
+    return fight_service.get_fight_by_id(fight_id)
 
 
 @router.get("/{fight_id}/video")

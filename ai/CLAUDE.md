@@ -149,18 +149,31 @@ from disk or from a video file after registration.
 ## DB Schema
 
 ```sql
-fights         (id, video_path UNIQUE, fps, width, height, created_at, processed, processed_at)
+fighters       (id, first_name, last_name, nickname nullable, created_at)
+fights         (id, video_path UNIQUE, fps, width, height, created_at, processed, processed_at,
+                red_fighter_id → fighters nullable, blue_fighter_id → fighters nullable)
 rounds         (id, fight_id → fights, round_number, start_frame, end_frame)
                UNIQUE (fight_id, round_number)
-fighter_frames (id, fight_id → fights, frame, fighter_id, x1, y1, x2, y2, confidence)
-fight_events   (id, fight_id → fights nullable, frame, description)
+fighter_frames (id, fight_id → fights, frame, corner, x1, y1, x2, y2, confidence, keypoints)
+               -- `corner` is the appearance corner index (0=red, 1=blue), formerly `fighter_id`
+fight_events   (id, fight_id → fights, frame, description,
+                fighter_id → fighters nullable, action nullable, success nullable)
 ```
+
+`fight_events` carries both the free-form `description` (NOT NULL) and structured
+columns for querying: `fighter_id` (FK to `fighters`, resolved from the fight's
+corner assignment), `action` (strike type / `round_start` / `clinch_initiated` …),
+`success` (True=landed, False=missed, NULL=unknown — grappling/unconfirmed/non-strike).
+The red→`red_fighter_id` / blue→`blue_fighter_id` mapping is read from the `fights`
+row and threaded into `process_fight`; when corners are unassigned, `fighter_id` is NULL.
 
 Indexes:
 ```sql
-ix_fighter_frames_fight_frame ON fighter_frames (fight_id, frame)
-ix_rounds_fight_id            ON rounds (fight_id)
-ix_fight_events_fight_id      ON fight_events (fight_id)
+ix_fighter_frames_fight_frame   ON fighter_frames (fight_id, frame)
+ix_rounds_fight_id              ON rounds (fight_id)
+ix_fight_events_fight_id        ON fight_events (fight_id)
+ix_fight_events_fighter_id      ON fight_events (fighter_id)
+ix_fight_events_fighter_action  ON fight_events (fighter_id, action)
 ```
 
 ## Key Conventions
@@ -173,7 +186,7 @@ ix_fight_events_fight_id      ON fight_events (fight_id)
   - `GRAPPLING_STATES = {CLINCH, GROUND}` is the set that replaces the old binary `GRAPPLING` check everywhere (clinch-strike detection, contact-gate skipping).
 - **Fighter identity pipeline (two-stage):**
   1. `FighterTracker` (geometry-only, `models/FighterTracker.py`): constrained 2-slot tracker with IoU + centroid-distance cost matrix solved by Hungarian matching. Assigns a stable *provisional* `track_id` (0 or 1) per frame. Clinch frames (inter-fighter IoU > `CLINCH_IOU_THRESHOLD`) freeze velocity updates to prevent identity swaps. Each detection also carries `model_class_id` (the original YOLO class) for the fallback below.
-  2. `assign_corners()` (`video_processing/corner_assignment/`): **per-frame appearance-anchored re-ID.** Pass 1 reads the video once, builds per-detection descriptors (glove-tape `net_red`/`tape_total` + torso HSV hue histogram), identifies *clean frames* (fighters separated ≥ `DISTANCE_GRAPPLING_THRESHOLD`, both well-posed, tape present), and bootstraps per-corner appearance templates from those frames. Pass 2 (no second video read — over cached descriptors) assigns each detection to a template using normalized tape + Bhattacharyya histogram distance with a hysteresis gate (`CORNER_SWAP_CONFIRM_FRAMES` consecutive frames before committing a flip). `fighter_id` in `fighter_frames` now legitimately follows appearance across a mid-clinch tracker slot swap. Falls back to the original whole-fight tape-vote / model-class-vote path when template separation is below `CORNER_TEMPLATE_MIN_SEPARATION` (similar colors).
+  2. `assign_corners()` (`video_processing/corner_assignment/`): **per-frame appearance-anchored re-ID.** Pass 1 reads the video once, builds per-detection descriptors (glove-tape `net_red`/`tape_total` + torso HSV hue histogram), identifies *clean frames* (fighters separated ≥ `DISTANCE_GRAPPLING_THRESHOLD`, both well-posed, tape present), and bootstraps per-corner appearance templates from those frames. Pass 2 (no second video read — over cached descriptors) assigns each detection to a template using normalized tape + Bhattacharyya histogram distance with a hysteresis gate (`CORNER_SWAP_CONFIRM_FRAMES` consecutive frames before committing a flip). `corner` in `fighter_frames` now legitimately follows appearance across a mid-clinch tracker slot swap. Falls back to the original whole-fight tape-vote / model-class-vote path when template separation is below `CORNER_TEMPLATE_MIN_SEPARATION` (similar colors).
 - **Frame validity** — graded via `frame_validity(detections, fight_state) → "FULL" | "PARTIAL" | "INVALID"` in `fight_processing_util.py`:
   - `FULL` — both fighters have all strike-relevant joints (head, shoulders, elbows, wrists, hips, knees, ankles — `STRIKE_KEYPOINT_INDICES`) above `KEYPOINT_MIN_CONFIDENCE`. Open-range striking runs as normal.
   - `PARTIAL` — both fighters detected, below the strict `FULL` bar but with enough of the right joints to run strike detection:
@@ -236,6 +249,14 @@ Final open-range punch event type: `{punch_type}_{target}` e.g. `jab_head`, `cro
 | Fight state (clinch) | `Fight state changed to FightState.CLINCH, clinch initiated by fighter_red` |
 | Fight state (ground) | `Fight state changed to FightState.GROUND, takedown initiated by fighter_red` |
 | Round boundary   | `Round 1 started` / `Round 1 ended` |
+
+Each row also writes the structured columns: `action` holds the strike `type`
+(`jab_head`, `middle_kick`, `clinch_punch`, …) or an event code (`round_start`,
+`round_end`, `clinch_initiated`, `takedown_initiated`); `fighter_id` is the
+attacker/initiator resolved via the corner→`fighters` mapping (NULL for round
+events or unassigned corners); `success` is True/False for confirmed open-range
+strikes (landed/missed) and NULL for grappling, end-of-video unconfirmed, and
+non-strike events.
 
 ## Environment
 - `.env` file required with `DATABASE_URL=postgresql://...`

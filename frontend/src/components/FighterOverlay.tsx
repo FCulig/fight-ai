@@ -68,7 +68,7 @@ const FighterOverlay = forwardRef<FighterOverlayHandle, FighterOverlayProps>(
         const scaleY = canvas.height / fightHeightRef.current;
 
         for (const d of detections) {
-          const color = d.fighter_id === 0 ? COLOR_RED : COLOR_BLUE;
+          const color = d.corner === 0 ? COLOR_RED : COLOR_BLUE;
 
           if (drawBoxes) {
             ctx.strokeStyle = color;

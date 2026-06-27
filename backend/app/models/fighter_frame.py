@@ -12,7 +12,7 @@ class FighterFrame(Base):
     id = Column(Integer, primary_key=True, index=True)
     fight_id = Column(Integer, ForeignKey("fights.id", ondelete="CASCADE"), nullable=False)
     frame = Column(Integer, nullable=False)
-    fighter_id = Column(Integer, nullable=False)
+    corner = Column(Integer, nullable=False)
     x1 = Column(Float, nullable=False)
     y1 = Column(Float, nullable=False)
     x2 = Column(Float, nullable=False)
@@ -26,7 +26,7 @@ class FighterFrameResponse(BaseModel):
 
     fight_id: int
     frame: int
-    fighter_id: int
+    corner: int
     x1: float
     y1: float
     x2: float

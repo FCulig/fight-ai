@@ -31,13 +31,29 @@ from models.constants import (
 _FRAME_BATCH_SIZE = 1_000
 
 
-def _insert_event(db, frame: int, description: str, fight_id: int) -> None:
+def _insert_event(
+    db,
+    frame: int,
+    description: str,
+    fight_id: int,
+    action: Optional[str] = None,
+    fighter_id: Optional[int] = None,
+    success: Optional[bool] = None,
+) -> None:
     db.execute(
         text(
-            "INSERT INTO fight_events (frame, description, fight_id) "
-            "VALUES (:frame, :description, :fight_id)"
+            "INSERT INTO fight_events "
+            "(frame, description, fight_id, action, fighter_id, success) "
+            "VALUES (:frame, :description, :fight_id, :action, :fighter_id, :success)"
         ),
-        {"frame": frame, "description": description, "fight_id": fight_id},
+        {
+            "frame": frame,
+            "description": description,
+            "fight_id": fight_id,
+            "action": action,
+            "fighter_id": fighter_id,
+            "success": success,
+        },
     )
 
 
@@ -134,8 +150,8 @@ def _flush_frame_batch(db, batch: list[dict]) -> None:
     db.execute(
         text(
             "INSERT INTO fighter_frames "
-            "(fight_id, frame, fighter_id, x1, y1, x2, y2, confidence, keypoints) "
-            "VALUES (:fight_id, :frame, :fighter_id, :x1, :y1, :x2, :y2, :confidence, "
+            "(fight_id, frame, corner, x1, y1, x2, y2, confidence, keypoints) "
+            "VALUES (:fight_id, :frame, :corner, :x1, :y1, :x2, :y2, :confidence, "
             "CAST(:keypoints AS JSONB))"
         ),
         batch,
@@ -148,6 +164,8 @@ def process_fight(
     fight_id: int,
     fps: int,
     rounds: Optional[list[tuple[int, int]]] = None,
+    red_fighter_id: Optional[int] = None,
+    blue_fighter_id: Optional[int] = None,
 ) -> None:
     """
     Run the fight state machine and persist all events, rounds, and fighter
@@ -166,8 +184,25 @@ def process_fight(
         fight_id:   Primary key of the fights row for this video.
         fps:        Frames per second of the source video (from fights row).
         rounds:     List of (start_frame, end_frame) tuples from segment_fights().
+        red_fighter_id:  fighters.id assigned to the red corner (or None).
+        blue_fighter_id: fighters.id assigned to the blue corner (or None).
     """
     db = SessionLocal()
+
+    def _fighter_id_for(label: Optional[str]) -> Optional[int]:
+        """Map an appearance corner label to the assigned fighters.id.
+
+        ``red_fighter_id`` / ``blue_fighter_id`` come from the fights row
+        (corner assignment done in the UI). Either may be ``None`` when corners
+        have not been assigned yet, in which case the event's ``fighter_id`` is
+        written as NULL.
+        """
+        if label == "fighter_red":
+            return red_fighter_id
+        if label == "fighter_blue":
+            return blue_fighter_id
+        return None
+
     try:
         # ------------------------------------------------------------------
         # Delete existing rows for this fight (idempotent re-processing)
@@ -259,12 +294,12 @@ def process_fight(
 
             if frame_number in round_starts:
                 description = f"Round {round_starts[frame_number]} started"
-                _insert_event(db, frame_number, description, fight_id)
+                _insert_event(db, frame_number, description, fight_id, action="round_start")
                 print(description + f" at frame {frame_number}")
 
             if frame_number in round_ends:
                 description = f"Round {round_ends[frame_number]} ended"
-                _insert_event(db, frame_number, description, fight_id)
+                _insert_event(db, frame_number, description, fight_id, action="round_end")
                 print(description + f" at frame {frame_number}")
 
             # Collect fighter bboxes (+ keypoints) for fighter_frames table
@@ -276,7 +311,7 @@ def process_fight(
                         frame_batch.append({
                             "fight_id":   fight_id,
                             "frame":      frame_number,
-                            "fighter_id": d["class_id"],
+                            "corner":     d["class_id"],
                             "x1": bbox[0], "y1": bbox[1],
                             "x2": bbox[2], "y2": bbox[3],
                             "confidence": d.get("confidence"),
@@ -352,7 +387,9 @@ def process_fight(
                     head_speed = (head_disp / RECOIL_LOOKAHEAD_FRAMES) * fps
                     landed = head_speed >= (RECOIL_VELOCITY_RATIO * ps["def_scale"])
                     desc = ps["description"] + (" (landed)" if landed else " (missed)")
-                    _insert_event(db, ps["contact_frame"], desc, fight_id)
+                    _insert_event(db, ps["contact_frame"], desc, fight_id,
+                                  action=ps["action"], fighter_id=ps["fighter_id"],
+                                  success=bool(landed))
                     print(desc + f" at frame {ps['contact_frame']}")
                 pending_strikes = still_pending
 
@@ -369,9 +406,12 @@ def process_fight(
                         diag=None if is_grappling else standing_punch_diag,
                     ):
                         description = f"{strike['fighter']} threw a {strike['type']}"
+                        attacker_id = _fighter_id_for(strike["fighter"])
                         if is_grappling:
-                            # Clinch/ground strikes emitted immediately — no recoil.
-                            _insert_event(db, frame_number, description, fight_id)
+                            # Clinch/ground strikes emitted immediately — no recoil,
+                            # so landed/missed is unknown (success=None).
+                            _insert_event(db, frame_number, description, fight_id,
+                                          action=strike["type"], fighter_id=attacker_id)
                             print(description + f" at frame {frame_number}")
                         else:
                             defender_key = "red" if strike["defender"] == "fighter_red" else "blue"
@@ -380,6 +420,8 @@ def process_fight(
                                 "contact_frame":   frame_number,
                                 "emit_at":         frame_number + RECOIL_LOOKAHEAD_FRAMES,
                                 "description":     description,
+                                "action":          strike["type"],
+                                "fighter_id":      attacker_id,
                                 "defender":        defender_key,
                                 "head_at_contact": red_head if defender_key == "red" else blue_head,
                                 "def_scale":       get_fighter_scale(def_kp),
@@ -418,12 +460,16 @@ def process_fight(
                 # floor (entering GROUND) is a takedown; locking up while still
                 # standing (entering CLINCH) is a clinch.
                 initiator = determine_takedown_initiator(hip_history)
+                action: Optional[str] = None
                 if current_fight_state == FightState.GROUND and initiator:
                     description += f", takedown initiated by {initiator}"
+                    action = "takedown_initiated"
                 elif current_fight_state == FightState.CLINCH and initiator:
                     description += f", clinch initiated by {initiator}"
+                    action = "clinch_initiated"
 
-                _insert_event(db, frame_number, description, fight_id)
+                _insert_event(db, frame_number, description, fight_id,
+                              action=action, fighter_id=_fighter_id_for(initiator))
                 print(description + f" at frame {frame_number}")
                 previous_fight_state = current_fight_state
 
@@ -434,7 +480,9 @@ def process_fight(
         # Flush any strikes still pending at end of video — emit without recoil confirmation.
         for ps in pending_strikes:
             desc = ps["description"] + " (unconfirmed)"
-            _insert_event(db, ps["contact_frame"], desc, fight_id)
+            # Recoil never confirmed — success unknown (None).
+            _insert_event(db, ps["contact_frame"], desc, fight_id,
+                          action=ps["action"], fighter_id=ps["fighter_id"])
             print(desc + f" at frame {ps['contact_frame']}")
 
         print(f"Frames spent grappling: {frames_spent_grappling} "

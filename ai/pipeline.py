@@ -159,6 +159,8 @@ def run_pipeline(
     # ----------------------------------------------------------------
     _single_file_mode = fight_id is None
     fps: int
+    red_fighter_id: Optional[int] = None
+    blue_fighter_id: Optional[int] = None
 
     if _single_file_mode:
         from sqlalchemy import text
@@ -176,11 +178,13 @@ def run_pipeline(
                         height       = EXCLUDED.height,
                         processed    = false,
                         processed_at = NULL
-                    RETURNING id
+                    RETURNING id, red_fighter_id, blue_fighter_id
                 """),
                 {"path": video_file, "fps": fps, "w": width, "h": height},
             ).fetchone()
             fight_id = row.id
+            red_fighter_id = row.red_fighter_id
+            blue_fighter_id = row.blue_fighter_id
             db.commit()
         finally:
             db.close()
@@ -190,10 +194,13 @@ def run_pipeline(
         db = SessionLocal()
         try:
             row = db.execute(
-                text("SELECT fps, width, height FROM fights WHERE id = :id"),
+                text("SELECT fps, width, height, red_fighter_id, blue_fighter_id "
+                     "FROM fights WHERE id = :id"),
                 {"id": fight_id},
             ).fetchone()
             fps = row.fps
+            red_fighter_id = row.red_fighter_id
+            blue_fighter_id = row.blue_fighter_id
         finally:
             db.close()
 
@@ -425,7 +432,8 @@ def run_pipeline(
         from fight_processing.fight_processing import process_fight
         print("Running fight processing …")
         t0 = time.perf_counter()
-        process_fight(pose_data, fight_id=fight_id, fps=fps, rounds=rounds)
+        process_fight(pose_data, fight_id=fight_id, fps=fps, rounds=rounds,
+                      red_fighter_id=red_fighter_id, blue_fighter_id=blue_fighter_id)
         timings["fight_processing"] = time.perf_counter() - t0
 
         # Single-file mode: own the processed flag update

@@ -13,7 +13,7 @@ frontend/src/
 ├── types/
 │   ├── Event.ts          # { id, frame, description, fight_id }
 │   ├── Fight.ts          # { id, video_path, fps, width, height, created_at, processed, processed_at }
-│   ├── FighterFrame.ts   # { fight_id, frame, fighter_id, x1, y1, x2, y2, confidence }
+│   ├── FighterFrame.ts   # { fight_id, frame, corner, x1, y1, x2, y2, confidence }
 │   └── Round.ts          # { id, fight_id, round_number, start_frame, end_frame }
 ├── services/
 │   └── api.ts            # fetchEvents, fetchFightEvents, fetchFights, fetchFighterFrames, fetchRounds
@@ -103,7 +103,7 @@ On each `currentFrame` change:
    const scaleX = canvas.width / fightWidth;
    const scaleY = canvas.height / fightHeight;
    ```
-6. Draw red rect for `fighter_id === 0`, blue for `fighter_id === 1`
+6. Draw red rect for `corner === 0`, blue for `corner === 1`
 
 `VideoPlayer` accepts `children` so `FighterOverlay` can be rendered inside the `position: relative` video container and stack correctly.
 
