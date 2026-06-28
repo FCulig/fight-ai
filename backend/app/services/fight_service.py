@@ -1,28 +1,52 @@
 from typing import List
 
 from sqlalchemy import text
-
 from app.utils.db import run_db_query
 from app.models.fight import Fight
+from app.models.fighter import Fighter
+
+
+def _attach_fighter_names(session, fights: list[Fight]) -> list[Fight]:
+    fighter_ids = set()
+    for f in fights:
+        if f.red_fighter_id:
+            fighter_ids.add(f.red_fighter_id)
+        if f.blue_fighter_id:
+            fighter_ids.add(f.blue_fighter_id)
+    if not fighter_ids:
+        return fights
+    rows = session.query(Fighter.id, Fighter.first_name, Fighter.last_name).filter(
+        Fighter.id.in_(fighter_ids)
+    ).all()
+    names = {r.id: f"{r.first_name} {r.last_name}" for r in rows}
+    for f in fights:
+        f.red_fighter_name = names.get(f.red_fighter_id)
+        f.blue_fighter_name = names.get(f.blue_fighter_id)
+    return fights
 
 
 def get_all_fights() -> List[Fight]:
     def _query(session):
-        return session.query(Fight).order_by(Fight.id).all()
+        fights = session.query(Fight).order_by(Fight.id).all()
+        return _attach_fighter_names(session, fights)
 
     return run_db_query(_query)
 
 
 def get_processed_fights() -> List[Fight]:
     def _query(session):
-        return session.query(Fight).filter(Fight.processed.is_(True)).order_by(Fight.id).all()
+        fights = session.query(Fight).filter(Fight.processed.is_(True)).order_by(Fight.id).all()
+        return _attach_fighter_names(session, fights)
 
     return run_db_query(_query)
 
 
 def get_fight_by_id(fight_id: int) -> Fight | None:
     def _query(session):
-        return session.query(Fight).filter(Fight.id == fight_id).first()
+        fight = session.query(Fight).filter(Fight.id == fight_id).first()
+        if fight:
+            _attach_fighter_names(session, [fight])
+        return fight
 
     return run_db_query(_query)
 
@@ -47,6 +71,7 @@ def create_fight(
         session.add(fight)
         session.commit()
         session.refresh(fight)
+        _attach_fighter_names(session, [fight])
         return fight
 
     return run_db_query(_query)

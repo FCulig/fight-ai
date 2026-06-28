@@ -9,4 +9,6 @@ export interface Fight {
   processed_at: string | null;
   red_fighter_id: number | null;
   blue_fighter_id: number | null;
+  red_fighter_name: string | null;
+  blue_fighter_name: string | null;
 }

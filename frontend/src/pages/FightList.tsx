@@ -3,8 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useFights } from '../hooks/useFights';
 import { useWindowWidth } from '../hooks/useWindowWidth';
 
-function fightName(videoPath: string) {
-  return videoPath.split('/').pop()?.replace(/\.[^/.]+$/, '') ?? videoPath;
+import type { Fight } from '../types/Fight';
+
+function fightLabel(fight: Fight): string {
+  if (fight.red_fighter_name && fight.blue_fighter_name) {
+    return `${fight.red_fighter_name} vs ${fight.blue_fighter_name}`;
+  }
+  return fight.video_path.split('/').pop()?.replace(/\.[^/.]+$/, '') ?? fight.video_path;
 }
 
 function fmtDate(iso: string | null) {
@@ -152,7 +157,7 @@ export default function FightList() {
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}>
-                  {fightName(fight.video_path)}
+                  {fightLabel(fight)}
                 </p>
                 <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
                   {processed

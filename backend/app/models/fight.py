@@ -35,3 +35,5 @@ class FightResponse(BaseModel):
     processed_at: Optional[datetime]
     red_fighter_id: Optional[int]
     blue_fighter_id: Optional[int]
+    red_fighter_name: Optional[str] = None
+    blue_fighter_name: Optional[str] = None

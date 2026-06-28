@@ -67,21 +67,3 @@ def get_events_by_fighter(
     return run_db_query(_query)
 
 
-def set_fight_corners(
-    fight_id: int,
-    red_fighter_id: Optional[int],
-    blue_fighter_id: Optional[int],
-) -> bool:
-    """Assign corner fighters to a fight. Returns False if the fight is missing."""
-    from app.models.fight import Fight
-
-    def _query(session):
-        fight = session.query(Fight).filter(Fight.id == fight_id).first()
-        if fight is None:
-            return False
-        fight.red_fighter_id = red_fighter_id
-        fight.blue_fighter_id = blue_fighter_id
-        session.commit()
-        return True
-
-    return run_db_query(_query)
