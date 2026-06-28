@@ -27,6 +27,31 @@ def get_fight_by_id(fight_id: int) -> Fight | None:
     return run_db_query(_query)
 
 
+def create_fight(
+    video_path: str,
+    fps: int,
+    width: int,
+    height: int,
+    red_fighter_id: int | None = None,
+    blue_fighter_id: int | None = None,
+) -> Fight:
+    def _query(session):
+        fight = Fight(
+            video_path=video_path,
+            fps=fps,
+            width=width,
+            height=height,
+            red_fighter_id=red_fighter_id,
+            blue_fighter_id=blue_fighter_id,
+        )
+        session.add(fight)
+        session.commit()
+        session.refresh(fight)
+        return fight
+
+    return run_db_query(_query)
+
+
 def delete_fight(fight_id: int) -> str | None:
     def _query(session):
         result = session.execute(

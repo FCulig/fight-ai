@@ -1,5 +1,7 @@
-import { NavLink } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useWindowWidth } from '../hooks/useWindowWidth';
+import UploadDialog from './UploadDialog';
 
 const NAV_LINKS = [
   { label: 'Analysis', to: '/' },
@@ -9,6 +11,8 @@ const NAV_LINKS = [
 export default function Header() {
   const width = useWindowWidth();
   const isMobile = width < 640;
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <header style={{
@@ -71,6 +75,7 @@ export default function Header() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <button
           className="btn-primary"
+          onClick={() => setUploadOpen(true)}
           style={{
             background: 'linear-gradient(135deg, #00daf3 0%, #0099b0 100%)',
             color: '#001f24',
@@ -98,6 +103,11 @@ export default function Header() {
           </button>
         ))}
       </div>
+      <UploadDialog
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onSuccess={() => { setUploadOpen(false); navigate('/', { state: { uploaded: Date.now() } }); }}
+      />
     </header>
   );
 }

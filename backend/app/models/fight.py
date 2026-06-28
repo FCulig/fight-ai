@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, TIMESTAMP
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, text
 from pydantic import BaseModel, ConfigDict
 
 from app.utils.db import Base
@@ -15,7 +15,7 @@ class Fight(Base):
     fps = Column(Integer, nullable=False)
     width = Column(Integer, nullable=False)
     height = Column(Integer, nullable=False)
-    created_at = Column(TIMESTAMP, nullable=False)
+    created_at = Column(TIMESTAMP, nullable=False, server_default=text("now()"))
     processed = Column(Boolean, nullable=False, default=False)
     processed_at = Column(TIMESTAMP, nullable=True)
     red_fighter_id = Column(Integer, ForeignKey("fighters.id", ondelete="SET NULL"), nullable=True)

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { fetchFights } from '../services/api';
 import type { Fight } from '../types/Fight';
 
@@ -8,17 +8,23 @@ export const useFights = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
     fetchFights()
       .then(data => {
         setFights(data);
-        if (data.length > 0) setSelectedFightId(data[data.length - 1].id);
+        setSelectedFightId(prev => {
+          if (prev !== null && data.some(f => f.id === prev)) return prev;
+          return data.length > 0 ? data[data.length - 1].id : null;
+        });
       })
       .catch(err => setError(err instanceof Error ? err.message : 'Unknown error'))
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   const selectedFight = fights.find(f => f.id === selectedFightId) ?? null;
 
-  return { fights, selectedFight, selectedFightId, setSelectedFightId, loading, error };
+  return { fights, selectedFight, selectedFightId, setSelectedFightId, loading, error, refetch: load };
 };

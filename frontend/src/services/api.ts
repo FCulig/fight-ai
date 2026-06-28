@@ -1,5 +1,6 @@
 import type { Event } from '../types/Event';
 import type { Fight } from '../types/Fight';
+import type { Fighter } from '../types/Fighter';
 import type { FighterFrame } from '../types/FighterFrame';
 import type { Round } from '../types/Round';
 
@@ -30,5 +31,43 @@ export const fetchFighterFrames = async (fightId: number): Promise<FighterFrame[
 export const fetchRounds = async (fightId: number): Promise<Round[]> => {
   const response = await fetch(`/fights/${fightId}/rounds/`);
   if (!response.ok) throw new Error(`Failed to fetch rounds: ${response.statusText}`);
+  return response.json();
+};
+
+export const fetchFighters = async (search?: string): Promise<Fighter[]> => {
+  const params = search ? `?search=${encodeURIComponent(search)}` : '';
+  const response = await fetch(`/fighters/${params}`);
+  if (!response.ok) throw new Error(`Failed to fetch fighters: ${response.statusText}`);
+  return response.json();
+};
+
+export const createFighter = async (data: {
+  first_name: string;
+  last_name: string;
+  nickname?: string;
+}): Promise<Fighter> => {
+  const response = await fetch('/fighters/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(`Failed to create fighter: ${response.statusText}`);
+  return response.json();
+};
+
+export const uploadFight = async (
+  file: File,
+  redFighterId?: number,
+  blueFighterId?: number,
+): Promise<Fight> => {
+  const form = new FormData();
+  form.append('file', file);
+  if (redFighterId != null) form.append('red_fighter_id', String(redFighterId));
+  if (blueFighterId != null) form.append('blue_fighter_id', String(blueFighterId));
+  const response = await fetch('/fights/upload', { method: 'POST', body: form });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail ?? `Upload failed: ${response.statusText}`);
+  }
   return response.json();
 };

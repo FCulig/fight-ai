@@ -41,6 +41,8 @@ export default function Player() {
   const fps = selectedFight?.fps ?? 30;
   fpsRef.current = fps;
 
+  const isProcessing = selectedFight !== null && !selectedFight.processed;
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -107,6 +109,50 @@ export default function Player() {
   // Round 1 end in seconds for pace chart playhead
   const r1Round = rounds.find(r => r.round_number === 1);
   const r1EndSeconds = r1Round ? r1Round.end_frame / fps : 0;
+
+  if (isProcessing) {
+    return (
+      <div style={{
+        display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center',
+        minHeight: 'calc(100vh - 58px)', padding: 24,
+      }}>
+        <div style={{
+          textAlign: 'center',
+          background: 'rgba(255,255,255,0.04)',
+          backdropFilter: 'blur(24px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+          border: '1px solid rgba(255,255,255,0.07)',
+          borderRadius: 20,
+          padding: '48px 56px',
+          boxShadow: '0 8px 40px rgba(0,0,0,0.35)',
+          maxWidth: 420,
+        }}>
+          <span className="material-symbols-outlined" style={{
+            fontSize: 40, color: '#64748b', display: 'block', marginBottom: 16,
+            animation: 'spin 1.5s linear infinite',
+          }}>progress_activity</span>
+          <h2 style={{
+            fontSize: 20, fontWeight: 800, margin: '0 0 10px',
+            background: 'linear-gradient(90deg, #f1f5f9, rgba(255,255,255,0.5))',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+          }}>
+            This fight is still being processed
+          </h2>
+          <p style={{ fontSize: 14, color: '#475569', margin: '0 0 20px', lineHeight: 1.6 }}>
+            The AI pipeline is analyzing the video. This usually takes a few minutes.
+          </p>
+          <button
+            onClick={() => navigate('/')}
+            className="btn-glass"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8 }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
+            Back to fights
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{

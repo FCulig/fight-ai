@@ -1,8 +1,13 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useWindowWidth } from '../hooks/useWindowWidth';
+import UploadDialog from '../components/UploadDialog';
 
 export default function Library() {
   const width = useWindowWidth();
   const isMobile = width < 640;
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <div style={{
@@ -56,18 +61,26 @@ export default function Library() {
           Your fight video library will appear here.<br />
           Upload a video to get started.
         </p>
-        <button style={{
-          marginTop: 24,
-          background: 'linear-gradient(135deg, #00daf3 0%, #0099b0 100%)',
-          color: '#001f24',
-          fontWeight: 700,
-          fontSize: 13,
-          padding: '9px 22px',
-          borderRadius: 10,
-          boxShadow: '0 0 20px rgba(0,218,243,0.25)',
-        }}>
+        <button
+          onClick={() => setUploadOpen(true)}
+          style={{
+            marginTop: 24,
+            background: 'linear-gradient(135deg, #00daf3 0%, #0099b0 100%)',
+            color: '#001f24',
+            fontWeight: 700,
+            fontSize: 13,
+            padding: '9px 22px',
+            borderRadius: 10,
+            boxShadow: '0 0 20px rgba(0,218,243,0.25)',
+          }}
+        >
           Upload Video
         </button>
+        <UploadDialog
+          open={uploadOpen}
+          onClose={() => setUploadOpen(false)}
+          onSuccess={() => { setUploadOpen(false); navigate('/', { state: { uploaded: Date.now() } }); }}
+        />
       </div>
     </div>
   );
