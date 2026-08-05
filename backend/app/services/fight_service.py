@@ -35,7 +35,7 @@ def get_all_fights() -> List[Fight]:
 
 def get_processed_fights() -> List[Fight]:
     def _query(session):
-        fights = session.query(Fight).filter(Fight.processed.is_(True)).order_by(Fight.id).all()
+        fights = session.query(Fight).filter(Fight.state == "completed").order_by(Fight.id).all()
         return _attach_fighter_names(session, fights)
 
     return run_db_query(_query)
@@ -69,6 +69,12 @@ def create_fight(
             blue_fighter_id=blue_fighter_id,
         )
         session.add(fight)
+        session.flush()
+        import json
+        session.execute(
+            text("SELECT pg_notify('fight_state', :payload)"),
+            {"payload": json.dumps({"id": fight.id, "state": "queued"})},
+        )
         session.commit()
         session.refresh(fight)
         _attach_fighter_names(session, [fight])

@@ -9,10 +9,10 @@ Philosophy
 - No intermediate files are written.  Every step passes its output to the
   next step in-memory.  PostgreSQL is the only data store.
 - In single-file mode (`python main.py fight.mp4`), run_pipeline() upserts
-  the fight row, runs the full pipeline, and marks the fight processed.
+  the fight row, runs the full pipeline, and sets state='completed'.
 - In batch mode (`python main.py`), run_batch() registers new videos, then
-  calls run_pipeline() for each unprocessed fight, passing the fight_id so
-  run_pipeline skips the upsert.  run_batch() owns the processed flag update.
+  calls run_pipeline() for each non-completed fight, passing the fight_id so
+  run_pipeline skips the upsert.  run_batch() owns the completed state update.
 
 Pipeline order
 --------------
@@ -43,7 +43,9 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from database import set_fight_state
 from debug import DebugContext
+from models.FightProcessingState import FightProcessingState as S
 from video_processing.video_processing import process_video
 from video_processing.fight_segmentation import segment_fights
 
@@ -140,9 +142,9 @@ def run_pipeline(
 
     Args:
         fight_id: When None (single-file mode), a fight row is upserted and
-                  the processed flag is set on success.  When provided (batch
+                  state is set to 'completed' on success.  When provided (batch
                   mode), the record already exists; fps is read from it and
-                  the processed flag is managed by run_batch().
+                  the completed state is managed by run_batch().
 
     Returns:
         {"rounds": [...], "quality": {...}}
@@ -173,11 +175,10 @@ def run_pipeline(
                     INSERT INTO fights (video_path, fps, width, height)
                     VALUES (:path, :fps, :w, :h)
                     ON CONFLICT (video_path) DO UPDATE
-                    SET fps          = EXCLUDED.fps,
-                        width        = EXCLUDED.width,
-                        height       = EXCLUDED.height,
-                        processed    = false,
-                        processed_at = NULL
+                    SET fps    = EXCLUDED.fps,
+                        width  = EXCLUDED.width,
+                        height = EXCLUDED.height,
+                        state  = 'queued'
                     RETURNING id, red_fighter_id, blue_fighter_id
                 """),
                 {"path": video_file, "fps": fps, "w": width, "h": height},
@@ -305,150 +306,151 @@ def run_pipeline(
     track_data:     Optional[dict] = None
     pose_data:      Optional[dict] = None
 
-    # ----------------------------------------------------------------
-    # Step 1 — YOLO detection
-    # ----------------------------------------------------------------
-    t0 = time.perf_counter()
-    if run_detection:
-        print(f"Running YOLO detection: {video_file}")
-        detection_data = process_video(video_file)
-    elif detection_file:
-        print(f"Reusing detection results: {detection_file}")
-        detection_data = _load_json(detection_file)
-    timings["detection"] = time.perf_counter() - t0
-
-    # ----------------------------------------------------------------
-    # Step 2 — Fighter tracking (geometry-only, Hungarian matching)
-    # ----------------------------------------------------------------
-    t0 = time.perf_counter()
-    if run_tracking:
-        from video_processing.fighter_tracking.fighter_tracking import track_fighters
-        print("Running fighter tracking …")
-        track_data = track_fighters(detection_data, video_path=video_file)
-    elif track_file:
-        print(f"Reusing track results: {track_file}")
-        track_data = _load_json(track_file)
-    timings["tracking"] = time.perf_counter() - t0
-
-    # ----------------------------------------------------------------
-    # Step 3 — Pose tracking
-    # ----------------------------------------------------------------
-    t0 = time.perf_counter()
-    if run_pose:
-        from video_processing.pose_tracking.pose_tracking import track_poses
-        print("Running pose tracking …")
-        pose_data = track_poses(track_data, video_path=video_file)
-    elif pose_results:
-        print(f"Reusing pose results: {pose_results}")
-        pose_data = _load_json(pose_results)
-    timings["pose"] = time.perf_counter() - t0
-
-    # ----------------------------------------------------------------
-    # Step 3b — Corner assignment (glove-tape HSV vote)
-    # ----------------------------------------------------------------
-    if pose_data is not None and not pose_results:
-        from video_processing.corner_assignment.corner_assignment import assign_corners
-        print("Running corner assignment …")
-        t0        = time.perf_counter()
-        pose_data = assign_corners(pose_data, video_path=video_file)
-        timings["corner_assignment"] = time.perf_counter() - t0
-
-    # ----------------------------------------------------------------
-    # Step 4 — Scoreboard OCR
-    # ----------------------------------------------------------------
-    scoreboard_data: Optional[list[dict]] = None
-    roi = None
-
-    if run_ocr:
-        from video_processing.scoreboard_overlay import (
-            calibrate_scoreboard_overlay,
-            extract_scoreboard_samples,
-            load_roi,
-            parse_roi_override,
-        )
-        override_roi = parse_roi_override(scoreboard_roi) if scoreboard_roi else None
-
-        t0  = time.perf_counter()
-        roi = calibrate_scoreboard_overlay(
-            video_file,
-            override_roi=override_roi,
-            recalibrate=recalibrate,
-            debug_ctx=ctx,
-        )
-        timings["scoreboard_calibration"] = time.perf_counter() - t0
-
-        if roi is None:
-            print(
-                "WARNING: Scoreboard overlay not detected — "
-                "falling back to detection-only segmentation.\n"
-                f"  Check {debug_root}/calibration_debug/"
-            )
-        else:
-            t0             = time.perf_counter()
-            scoreboard_data = extract_scoreboard_samples(video_file, roi, debug_ctx=ctx)
-            timings["scoreboard_ocr"] = time.perf_counter() - t0
-            print(f"OCR: {len(scoreboard_data)} samples extracted")
-
-    elif scoreboard_samples:
-        print(f"Reusing scoreboard samples: {scoreboard_samples}")
-        scoreboard_data = _load_json(scoreboard_samples)
-        # Load the cached ROI so scoreboard verification can use it later
-        from video_processing.scoreboard_overlay import load_roi
-        roi = load_roi(f"{debug_root}/roi.json", video_file)
-
-    # ----------------------------------------------------------------
-    # Step 5 — Fight segmentation / load rounds
-    # ----------------------------------------------------------------
-    rounds:     list[tuple[int, int]] = []
-    seg_result: dict                  = {}
-
-    if rounds_arg:
-        rounds = _parse_rounds_arg(rounds_arg)
-        print(f"Using explicit rounds: {rounds}")
-    elif manifest_file:
-        rounds = _load_rounds_from_manifest(manifest_file)
-        print(f"Loaded rounds from {manifest_file}: {rounds}")
-    elif _db_rounds is not None:
-        rounds = _db_rounds
-        print(f"Using rounds from DB: {rounds}")
-    else:
-        t0         = time.perf_counter()
-        seg_result = segment_fights(
-            detection_data,
-            fps=fps,
-            scoreboard_samples=scoreboard_data,
-            debug_ctx=DebugContext("runs", verbose=verbose),
-        )
-        timings["segmentation"] = time.perf_counter() - t0
-        rounds                  = seg_result.get("rounds", [])
-        print(f"\nSegmentation result:")
-        print(f"  Rounds : {rounds}")
-        print(f"  Quality: {seg_result.get('quality', {})}")
-
-    # ----------------------------------------------------------------
-    # Step 6 — Fight processing
-    # ----------------------------------------------------------------
-    if run_fight:
-        from fight_processing.fight_processing import process_fight
-        print("Running fight processing …")
+    try:
+        # ----------------------------------------------------------------
+        # Step 1 — YOLO detection
+        # ----------------------------------------------------------------
         t0 = time.perf_counter()
-        process_fight(pose_data, fight_id=fight_id, fps=fps, rounds=rounds,
-                      red_fighter_id=red_fighter_id, blue_fighter_id=blue_fighter_id)
-        timings["fight_processing"] = time.perf_counter() - t0
+        if run_detection:
+            set_fight_state(fight_id, S.DETECTING)
+            print(f"Running YOLO detection: {video_file}")
+            detection_data = process_video(video_file)
+        elif detection_file:
+            print(f"Reusing detection results: {detection_file}")
+            detection_data = _load_json(detection_file)
+        timings["detection"] = time.perf_counter() - t0
 
-        # Single-file mode: own the processed flag update
-        if _single_file_mode:
-            from sqlalchemy import text
-            from database import SessionLocal
-            db = SessionLocal()
-            try:
-                db.execute(
-                    text("UPDATE fights SET processed = true, processed_at = NOW() WHERE id = :id"),
-                    {"id": fight_id},
+        # ----------------------------------------------------------------
+        # Step 2 — Fighter tracking (geometry-only, Hungarian matching)
+        # ----------------------------------------------------------------
+        t0 = time.perf_counter()
+        if run_tracking:
+            set_fight_state(fight_id, S.TRACKING)
+            from video_processing.fighter_tracking.fighter_tracking import track_fighters
+            print("Running fighter tracking …")
+            track_data = track_fighters(detection_data, video_path=video_file)
+        elif track_file:
+            print(f"Reusing track results: {track_file}")
+            track_data = _load_json(track_file)
+        timings["tracking"] = time.perf_counter() - t0
+
+        # ----------------------------------------------------------------
+        # Step 3 — Pose tracking
+        # ----------------------------------------------------------------
+        t0 = time.perf_counter()
+        if run_pose:
+            set_fight_state(fight_id, S.POSE)
+            from video_processing.pose_tracking.pose_tracking import track_poses
+            print("Running pose tracking …")
+            pose_data = track_poses(track_data, video_path=video_file)
+        elif pose_results:
+            print(f"Reusing pose results: {pose_results}")
+            pose_data = _load_json(pose_results)
+        timings["pose"] = time.perf_counter() - t0
+
+        # ----------------------------------------------------------------
+        # Step 3b — Corner assignment (glove-tape HSV vote)
+        # ----------------------------------------------------------------
+        if pose_data is not None and not pose_results:
+            set_fight_state(fight_id, S.CORNERS)
+            from video_processing.corner_assignment.corner_assignment import assign_corners
+            print("Running corner assignment …")
+            t0        = time.perf_counter()
+            pose_data = assign_corners(pose_data, video_path=video_file)
+            timings["corner_assignment"] = time.perf_counter() - t0
+
+        # ----------------------------------------------------------------
+        # Step 4 — Scoreboard OCR
+        # ----------------------------------------------------------------
+        scoreboard_data: Optional[list[dict]] = None
+        roi = None
+
+        if run_ocr:
+            set_fight_state(fight_id, S.SCOREBOARD)
+            from video_processing.scoreboard_overlay import (
+                calibrate_scoreboard_overlay,
+                extract_scoreboard_samples,
+                load_roi,
+                parse_roi_override,
+            )
+            override_roi = parse_roi_override(scoreboard_roi) if scoreboard_roi else None
+
+            t0  = time.perf_counter()
+            roi = calibrate_scoreboard_overlay(
+                video_file,
+                override_roi=override_roi,
+                recalibrate=recalibrate,
+                debug_ctx=ctx,
+            )
+            timings["scoreboard_calibration"] = time.perf_counter() - t0
+
+            if roi is None:
+                print(
+                    "WARNING: Scoreboard overlay not detected — "
+                    "falling back to detection-only segmentation.\n"
+                    f"  Check {debug_root}/calibration_debug/"
                 )
-                db.commit()
-            finally:
-                db.close()
+            else:
+                t0             = time.perf_counter()
+                scoreboard_data = extract_scoreboard_samples(video_file, roi, debug_ctx=ctx)
+                timings["scoreboard_ocr"] = time.perf_counter() - t0
+                print(f"OCR: {len(scoreboard_data)} samples extracted")
+
+        elif scoreboard_samples:
+            print(f"Reusing scoreboard samples: {scoreboard_samples}")
+            scoreboard_data = _load_json(scoreboard_samples)
+            # Load the cached ROI so scoreboard verification can use it later
+            from video_processing.scoreboard_overlay import load_roi
+            roi = load_roi(f"{debug_root}/roi.json", video_file)
+
+        # ----------------------------------------------------------------
+        # Step 5 — Fight segmentation / load rounds
+        # ----------------------------------------------------------------
+        rounds:     list[tuple[int, int]] = []
+        seg_result: dict                  = {}
+
+        if rounds_arg:
+            rounds = _parse_rounds_arg(rounds_arg)
+            print(f"Using explicit rounds: {rounds}")
+        elif manifest_file:
+            rounds = _load_rounds_from_manifest(manifest_file)
+            print(f"Loaded rounds from {manifest_file}: {rounds}")
+        elif _db_rounds is not None:
+            rounds = _db_rounds
+            print(f"Using rounds from DB: {rounds}")
+        else:
+            set_fight_state(fight_id, S.SEGMENTING)
+            t0         = time.perf_counter()
+            seg_result = segment_fights(
+                detection_data,
+                fps=fps,
+                scoreboard_samples=scoreboard_data,
+                debug_ctx=DebugContext("runs", verbose=verbose),
+            )
+            timings["segmentation"] = time.perf_counter() - t0
+            rounds                  = seg_result.get("rounds", [])
+            print(f"\nSegmentation result:")
+            print(f"  Rounds : {rounds}")
+            print(f"  Quality: {seg_result.get('quality', {})}")
+
+        # ----------------------------------------------------------------
+        # Step 6 — Fight processing
+        # ----------------------------------------------------------------
+        if run_fight:
+            set_fight_state(fight_id, S.ANALYZING)
+            from fight_processing.fight_processing import process_fight
+            print("Running fight processing …")
+            t0 = time.perf_counter()
+            process_fight(pose_data, fight_id=fight_id, fps=fps, rounds=rounds,
+                          red_fighter_id=red_fighter_id, blue_fighter_id=blue_fighter_id)
+            timings["fight_processing"] = time.perf_counter() - t0
+
+            if _single_file_mode:
+                set_fight_state(fight_id, S.COMPLETED)
+
+    except Exception:
+        set_fight_state(fight_id, S.FAILED)
+        raise
 
     # ----------------------------------------------------------------
     # Step 7 — Pose debug video
@@ -507,9 +509,9 @@ def run_batch(
     1. Creates fight_videos_dir if absent and returns early with a hint.
     2. Scans for .mp4 / .mkv / .mov files and registers any new ones in the
        fights table (DO NOTHING on conflict — existing rows are never touched).
-    3. Queries all unprocessed fights and runs run_pipeline() for each.
-    4. On success: marks the fight processed.
-       On failure: logs the traceback; the fight stays processed=false for retry.
+    3. Queries all non-completed fights and runs run_pipeline() for each.
+    4. On success: sets state='completed'.
+       On failure: sets state='failed', logs the traceback; retried on next run.
     """
     import cv2
     dir_path = Path(fight_videos_dir)
@@ -561,7 +563,7 @@ def run_batch(
         rows = db.execute(
             text(
                 "SELECT id, video_path, fps, width, height "
-                "FROM fights WHERE processed = false ORDER BY id"
+                "FROM fights WHERE state != 'completed' ORDER BY id"
             )
         ).fetchall()
     finally:
@@ -585,26 +587,14 @@ def run_batch(
                 debug_level = debug_level,
             )
 
-            db2 = SessionLocal()   # SessionLocal/text already imported above
-            try:
-                db2.execute(
-                    text(
-                        "UPDATE fights "
-                        "SET processed = true, processed_at = NOW() "
-                        "WHERE id = :id"
-                    ),
-                    {"id": row.id},
-                )
-                db2.commit()
-            finally:
-                db2.close()
-
+            set_fight_state(row.id, S.COMPLETED)
             print(f"Fight {row.id} processed successfully.")
 
         except Exception:
             import traceback
             traceback.print_exc()
+            set_fight_state(row.id, S.FAILED)
             print(
                 f"ERROR: Fight {row.id} failed — "
-                "row stays processed=false for retry on next run."
+                "state set to 'failed', will retry on next run."
             )

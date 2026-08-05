@@ -1,10 +1,22 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from app.api.routes.tracking import router as tracking_router
 from app.api.routes.events import router as fight_events_router
 from app.api.routes.fights import router as fights_router
 from app.api.routes.fighters import router as fighters_router
+from app.utils import fight_state_listener
 
-app = FastAPI(title="Fight AI")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    fight_state_listener.start(asyncio.get_running_loop())
+    yield
+    fight_state_listener.stop()
+
+
+app = FastAPI(title="Fight AI", lifespan=lifespan)
 
 app.include_router(tracking_router, prefix="/tracking")
 app.include_router(fight_events_router, prefix="/events")

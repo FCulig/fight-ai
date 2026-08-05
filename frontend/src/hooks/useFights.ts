@@ -26,5 +26,5 @@ export const useFights = () => {
 
   const selectedFight = fights.find(f => f.id === selectedFightId) ?? null;
 
-  return { fights, selectedFight, selectedFightId, setSelectedFightId, loading, error, refetch: load };
+  return { fights, setFights, selectedFight, selectedFightId, setSelectedFightId, loading, error, refetch: load };
 };

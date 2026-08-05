@@ -175,7 +175,7 @@ def process_fight(
     the fight lands or none does.  Existing rows for `fight_id` are deleted
     first, making repeated calls idempotent.
 
-    The processed / processed_at flag is the caller's responsibility
+    The state='completed' transition is the caller's responsibility
     (run_pipeline for single-file mode, run_batch for batch mode).
 
     Args:

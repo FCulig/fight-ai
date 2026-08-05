@@ -1,10 +1,12 @@
+import asyncio
+import json
 import os
 import re
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from app.models.fight import FightResponse
 from app.models.fighter_frame import FighterFrameResponse
@@ -18,6 +20,7 @@ from app.services import (
     round_service,
 )
 from app.services.pipeline_runner import extract_video_meta, run_pipeline_async
+from app.utils.fight_state_listener import register_queue, unregister_queue
 
 router = APIRouter()
 
@@ -57,8 +60,41 @@ def _unique_path(directory: Path, filename: str) -> Path:
 
 
 @router.get("/", response_model=List[FightResponse])
-async def get_fights():
+def get_fights():
     return fight_service.get_all_fights()
+
+
+@router.get("/stream")
+async def stream_fight_state(request: Request):
+    async def event_generator():
+        q: asyncio.Queue = asyncio.Queue()
+        register_queue(q)
+        try:
+            snapshot = await asyncio.to_thread(fight_service.get_all_fights)
+            data = json.dumps([
+                {"id": f.id, "state": f.state} for f in snapshot
+            ])
+            yield f"event: snapshot\ndata: {data}\n\n"
+
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(q.get(), timeout=15.0)
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        finally:
+            unregister_queue(q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/upload", response_model=FightResponse, status_code=201)
@@ -93,12 +129,17 @@ async def upload_fight(
 
     safe_name = _sanitize_filename(file.filename or "video.mp4")
     dest = _unique_path(fight_videos_dir, safe_name)
+    tmp_dest = dest.with_name(f".{dest.name}.part")
 
     try:
-        with open(dest, "wb") as f:
+        with open(tmp_dest, "wb") as f:
             while chunk := await file.read(_UPLOAD_CHUNK_SIZE):
                 f.write(chunk)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp_dest.rename(dest)
     except Exception:
+        tmp_dest.unlink(missing_ok=True)
         if dest.exists():
             dest.unlink()
         raise
@@ -132,17 +173,17 @@ async def upload_fight(
 
 
 @router.get("/{fight_id}/rounds/", response_model=List[RoundResponse])
-async def get_rounds(fight_id: int):
+def get_rounds(fight_id: int):
     return round_service.get_rounds(fight_id)
 
 
 @router.get("/{fight_id}/frames/", response_model=List[FighterFrameResponse])
-async def get_fighter_frames(fight_id: int):
+def get_fighter_frames(fight_id: int):
     return fighter_frame_service.get_fighter_frames(fight_id)
 
 
 @router.get("/{fight_id}/events/", response_model=List[FightEventResponse])
-async def get_fight_events(
+def get_fight_events(
     fight_id: int,
     fighter_id: Optional[int] = None,
     action: Optional[str] = None,
@@ -152,7 +193,7 @@ async def get_fight_events(
 
 
 @router.get("/{fight_id}/video")
-async def get_fight_video(fight_id: int):
+def get_fight_video(fight_id: int):
     fight = fight_service.get_fight_by_id(fight_id)
     if fight is None:
         raise HTTPException(status_code=404, detail="Fight not found")
@@ -163,7 +204,7 @@ async def get_fight_video(fight_id: int):
 
 
 @router.delete("/{fight_id}", status_code=204)
-async def delete_fight(fight_id: int):
+def delete_fight(fight_id: int):
     video_path = fight_service.delete_fight(fight_id)
     if video_path is None:
         raise HTTPException(status_code=404, detail="Fight not found")

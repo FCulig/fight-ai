@@ -7,5 +7,5 @@ from app.models.fight_event import FightEventResponse
 router = APIRouter()
 
 @router.get("/", response_model=List[FightEventResponse])
-async def get_fight_events():
+def get_fight_events():
     return event_service.get_fight_events()

@@ -41,7 +41,7 @@ export default function Player() {
   const fps = selectedFight?.fps ?? 30;
   fpsRef.current = fps;
 
-  const isProcessing = selectedFight !== null && !selectedFight.processed;
+  const isProcessing = selectedFight !== null && selectedFight.state !== 'completed';
 
   useEffect(() => {
     const video = videoRef.current;

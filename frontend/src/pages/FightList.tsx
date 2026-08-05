@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useFights } from '../hooks/useFights';
+import { useFightStream } from '../hooks/useFightStream';
 import { useWindowWidth } from '../hooks/useWindowWidth';
 
 import type { Fight } from '../types/Fight';
+import { STATE_PROGRESS, STATE_LABELS } from '../types/Fight';
 
 function fightLabel(fight: Fight): string {
   if (fight.red_fighter_name && fight.blue_fighter_name) {
@@ -12,32 +14,20 @@ function fightLabel(fight: Fight): string {
   return fight.video_path.split('/').pop()?.replace(/\.[^/.]+$/, '') ?? fight.video_path;
 }
 
-function fmtDate(iso: string | null) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
 export default function FightList() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { fights, loading, error, refetch } = useFights();
+  const { fights, setFights, loading, error, refetch } = useFights();
   const width = useWindowWidth();
   const isMobile = width < 640;
-  const pollRef = useRef<ReturnType<typeof setInterval>>();
 
   const uploadedAt = (location.state as { uploaded?: number } | null)?.uploaded;
   useEffect(() => {
     if (uploadedAt) refetch();
   }, [uploadedAt, refetch]);
 
-  const hasUnprocessed = fights.some(f => !f.processed);
-
-  useEffect(() => {
-    if (hasUnprocessed) {
-      pollRef.current = setInterval(refetch, 10_000);
-    }
-    return () => clearInterval(pollRef.current);
-  }, [hasUnprocessed, refetch]);
+  const hasInProgress = fights.some(f => f.state !== 'completed' && f.state !== 'failed');
+  useFightStream(fights, setFights, hasInProgress);
 
   const glassCard: React.CSSProperties = {
     background: 'rgba(255,255,255,0.04)',
@@ -97,32 +87,36 @@ export default function FightList() {
         gap: 14,
       }}>
         {fights.map((fight, i) => {
-          const processed = fight.processed;
+          const completed = fight.state === 'completed';
+          const failed = fight.state === 'failed';
+          const progress = STATE_PROGRESS[fight.state] ?? 0;
+          const stateLabel = STATE_LABELS[fight.state] ?? fight.state;
+
           return (
             <button
               key={fight.id}
               className={`anim-fade-up anim-delay-${Math.min(i + 2, 5)}`}
-              onClick={processed ? () => navigate(`/fights/${fight.id}`) : undefined}
-              disabled={!processed}
+              onClick={completed ? () => navigate(`/fights/${fight.id}`) : undefined}
+              disabled={!completed}
               style={{
                 ...glassCard,
                 padding: '18px 20px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 14,
-                cursor: processed ? 'pointer' : 'default',
+                cursor: completed ? 'pointer' : 'default',
                 textAlign: 'left',
                 width: '100%',
                 transition: 'border-color 0.15s, background 0.15s',
-                opacity: processed ? 1 : 0.6,
+                opacity: completed ? 1 : 0.6,
               }}
               onMouseEnter={e => {
-                if (!processed) return;
+                if (!completed) return;
                 (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0,218,243,0.35)';
                 (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,218,243,0.06)';
               }}
               onMouseLeave={e => {
-                if (!processed) return;
+                if (!completed) return;
                 (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.07)';
                 (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
               }}
@@ -131,8 +125,8 @@ export default function FightList() {
                 width: 44,
                 height: 44,
                 borderRadius: 12,
-                background: processed ? 'rgba(0,218,243,0.08)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${processed ? 'rgba(0,218,243,0.15)' : 'rgba(255,255,255,0.07)'}`,
+                background: completed ? 'rgba(0,218,243,0.08)' : failed ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${completed ? 'rgba(0,218,243,0.15)' : failed ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.07)'}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -140,10 +134,10 @@ export default function FightList() {
               }}>
                 <span className="material-symbols-outlined" style={{
                   fontSize: 22,
-                  color: processed ? '#00daf3' : '#64748b',
-                  animation: processed ? undefined : 'spin 1.5s linear infinite',
+                  color: completed ? '#00daf3' : failed ? '#ef4444' : '#64748b',
+                  animation: (!completed && !failed) ? 'spin 1.5s linear infinite' : undefined,
                 }}>
-                  {processed ? 'play_circle' : 'progress_activity'}
+                  {completed ? 'play_circle' : failed ? 'error' : 'progress_activity'}
                 </span>
               </div>
 
@@ -152,22 +146,43 @@ export default function FightList() {
                   margin: '0 0 3px',
                   fontSize: 14,
                   fontWeight: 700,
-                  color: processed ? '#f1f5f9' : '#94a3b8',
+                  color: completed ? '#f1f5f9' : failed ? '#ef4444' : '#94a3b8',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}>
                   {fightLabel(fight)}
                 </p>
-                <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
-                  {processed
-                    ? `${fmtDate(fight.processed_at)} · ${fight.fps} fps · ${fight.width}×${fight.height}`
-                    : 'Processing…'
-                  }
-                </p>
+                {completed ? (
+                  <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
+                    {fight.fps} fps · {fight.width}×{fight.height}
+                  </p>
+                ) : (
+                  <div>
+                    <p style={{ margin: '0 0 5px', fontSize: 12, color: failed ? '#ef4444' : 'rgba(255,255,255,0.5)' }}>
+                      {stateLabel}
+                    </p>
+                    {!failed && (
+                      <div style={{
+                        height: 4,
+                        borderRadius: 2,
+                        background: 'rgba(255,255,255,0.08)',
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${progress}%`,
+                          borderRadius: 2,
+                          background: 'linear-gradient(90deg, #00daf3, #06b6d4)',
+                          transition: 'width 0.5s ease',
+                        }} />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {processed && (
+              {completed && (
                 <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>
                   chevron_right
                 </span>
