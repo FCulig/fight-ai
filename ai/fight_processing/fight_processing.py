@@ -159,6 +159,88 @@ def _flush_frame_batch(db, batch: list[dict]) -> None:
     db.flush()   # release memory; does NOT end the transaction
 
 
+def write_frames_and_rounds(
+    pose_data: dict,
+    fight_id: int,
+    fps: int,
+    rounds: Optional[list[tuple[int, int]]] = None,
+) -> None:
+    """
+    Lightweight counterpart to process_fight() for manually-labeled fights.
+
+    Writes fighter_frames (boxes + keypoints) and rounds only — skips the
+    strike/fight-state detection state machine entirely, since the user tags
+    those by hand on the Annotate screen instead. Still writes "Round N
+    started/ended" fight_events from the real segmentation boundaries, since
+    round detection isn't part of what's being manually replaced.
+
+    Same idempotent delete-then-insert-then-commit shape as process_fight().
+    """
+    db = SessionLocal()
+    try:
+        db.execute(text("DELETE FROM fight_events   WHERE fight_id = :fid"), {"fid": fight_id})
+        db.execute(text("DELETE FROM fighter_frames WHERE fight_id = :fid"), {"fid": fight_id})
+        db.execute(text("DELETE FROM rounds         WHERE fight_id = :fid"), {"fid": fight_id})
+
+        round_starts: dict[int, int] = {}
+        round_ends:   dict[int, int] = {}
+        if rounds:
+            for i, (start, end) in enumerate(rounds, 1):
+                db.execute(
+                    text(
+                        "INSERT INTO rounds (fight_id, round_number, start_frame, end_frame) "
+                        "VALUES (:fid, :rn, :sf, :ef)"
+                    ),
+                    {"fid": fight_id, "rn": i, "sf": start, "ef": end},
+                )
+                round_starts[start] = i
+                round_ends[end]     = i
+
+        frame_batch: list[dict] = []
+
+        for index, frame in enumerate(pose_data["frames"]):
+            frame_number = index + 1
+
+            if frame_number in round_starts:
+                description = f"Round {round_starts[frame_number]} started"
+                _insert_event(db, frame_number, description, fight_id, action="round_start")
+                print(description + f" at frame {frame_number}")
+
+            if frame_number in round_ends:
+                description = f"Round {round_ends[frame_number]} ended"
+                _insert_event(db, frame_number, description, fight_id, action="round_end")
+                print(description + f" at frame {frame_number}")
+
+            for d in frame["detections"]:
+                if d["class_id"] in (0, 1):
+                    bbox = d.get("bbox_xyxy") or []
+                    if len(bbox) == 4:
+                        raw_kp = d.get("keypoints")
+                        frame_batch.append({
+                            "fight_id":   fight_id,
+                            "frame":      frame_number,
+                            "corner":     d["class_id"],
+                            "x1": bbox[0], "y1": bbox[1],
+                            "x2": bbox[2], "y2": bbox[3],
+                            "confidence": d.get("confidence"),
+                            "keypoints":  json.dumps(raw_kp),
+                        })
+
+            if len(frame_batch) >= _FRAME_BATCH_SIZE:
+                _flush_frame_batch(db, frame_batch)
+                frame_batch.clear()
+
+        if frame_batch:
+            _flush_frame_batch(db, frame_batch)
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def process_fight(
     pose_data: dict,
     fight_id: int,

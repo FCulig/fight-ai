@@ -17,6 +17,7 @@ class Fight(Base):
     height = Column(Integer, nullable=False)
     created_at = Column(TIMESTAMP, nullable=False, server_default=text("now()"))
     state = Column(String(32), nullable=False, server_default=text("'queued'"))
+    pid = Column(Integer, nullable=True)
     red_fighter_id = Column(Integer, ForeignKey("fighters.id", ondelete="SET NULL"), nullable=True)
     blue_fighter_id = Column(Integer, ForeignKey("fighters.id", ondelete="SET NULL"), nullable=True)
 

@@ -32,7 +32,13 @@ ai/
 │   │                            #   tape + torso-histogram distance with hysteresis.
 │   │                            #   Falls back to legacy tape-vote when colors are indistinguishable.
 │   └── pose_tracking/
-│       └── pose_tracking.py  # YOLOv8x-pose on fighter crops → keypoints
+│       └── pose_tracking.py  # Pose model on FULL FRAMES, then greedy argmax-IoU
+│                             #   match of each fighter box to a pose box.
+│                             #   NOTE: the match has no mutual-exclusion
+│                             #   constraint, so both corners can be assigned the
+│                             #   SAME skeleton when their boxes overlap (clinch).
+│                             #   See eval/ sanity check "no simultaneous mutual
+│                             #   strikes", which currently fails because of this.
 ├── fight_processing/
 │   ├── fight_processing.py   # State machine + DB writes (fight_events, fighter_frames, rounds)
 │   └── fight_processing_util.py
@@ -44,6 +50,15 @@ ai/
 │   │                         #   Lives here (not in fight_processing) so corner_assignment
 │   │                         #   can import them without a layering inversion.
 │   └── constants.py          # All thresholds and label IDs
+├── eval/                     # Evaluation harness — see eval/README.md
+│   ├── schema.py             # Ground-truth label format (also the training set
+│   │                         #   format for the planned skeleton action model)
+│   ├── label.py              # Keyboard-driven OpenCV labelling tool
+│   ├── predictions.py        # Reads pipeline output back out of PostgreSQL
+│   ├── score.py              # Strike P/R/F1, state accuracy, round IoU
+│   ├── sanity.py             # Label-free artifact checks
+│   ├── cli.py                # python -m eval.cli {label,sanity,score,summary}
+│   └── labels/               # Hand-labelled ground truth — COMMITTED to git
 └── database.py               # SQLAlchemy SessionLocal
 ```
 
@@ -60,6 +75,13 @@ ai/
   purposes — use `ctx.save_image`, `ctx.save_json`, `ctx.log` instead.
 - **`constants.py`** is the single source of truth for all numeric thresholds.
   Never hardcode a threshold or frame-count in a processing module.
+- **Never change a threshold in `constants.py` without measuring it.** Run
+  `python -m eval.cli score <video>` before and after and put both numbers in the
+  commit message. The thresholds are heavily coupled — several existing values
+  are compensating for bugs elsewhere rather than describing anything physical
+  (see `eval/README.md`), so tuning by eye on one video reliably makes another
+  worse. `python -m eval.cli sanity <video>` needs no labels and should be run on
+  every processed video.
 
 ## Entry Points
 

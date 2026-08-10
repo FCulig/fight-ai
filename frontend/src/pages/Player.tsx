@@ -5,6 +5,7 @@ import { useFights } from '../hooks/useFights';
 import { useFighterFrames } from '../hooks/useFighterFrames';
 import { useRounds } from '../hooks/useRounds';
 import { useWindowWidth } from '../hooks/useWindowWidth';
+import { isFightViewable } from '../types/Fight';
 import VideoPlayer from '../components/VideoPlayer';
 import VideoControls from '../components/VideoControls';
 import FrameInfo from '../components/FrameInfo';
@@ -41,7 +42,7 @@ export default function Player() {
   const fps = selectedFight?.fps ?? 30;
   fpsRef.current = fps;
 
-  const isProcessing = selectedFight !== null && selectedFight.state !== 'completed';
+  const isProcessing = selectedFight !== null && !isFightViewable(selectedFight.state);
 
   useEffect(() => {
     const video = videoRef.current;

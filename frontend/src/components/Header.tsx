@@ -103,6 +103,9 @@ export default function Header() {
           </button>
         ))}
       </div>
+      {/* Both AI and manual uploads land on FightList — manual mode still needs
+          detection/tracking/pose/corners/scoreboard/segmentation to run before
+          the fight is ready to label, same live-progress UX as AI mode. */}
       <UploadDialog
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}

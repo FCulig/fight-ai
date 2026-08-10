@@ -4,6 +4,7 @@ import Header from './components/Header';
 import FightList from './pages/FightList';
 import Player from './pages/Player';
 import Library from './pages/Library';
+import Annotate from './pages/Annotate';
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<FightList />} />
           <Route path="/fights/:id" element={<Player />} />
+          <Route path="/fights/:id/annotate" element={<Annotate />} />
           <Route path="/library" element={<Library />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

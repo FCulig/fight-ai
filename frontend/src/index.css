@@ -81,6 +81,13 @@ button:active {
   transform: scale(0.97);
 }
 
+/* Corner-select cards: state change (border/bg/glow) must be instant, no scale/transform. */
+.fighter-corner-btn,
+.fighter-corner-btn:active {
+  transition: none;
+  transform: none;
+}
+
 button:focus-visible {
   outline: 2px solid rgba(0, 218, 243, 0.6);
   outline-offset: 2px;
@@ -280,3 +287,67 @@ button:focus-visible {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ── Annotate screen ────────────────────────────────── */
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--border-glass);
+  border-bottom-width: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  font-family: 'Manrope', sans-serif;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.punch-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-size: 12px;
+  font-weight: 800;
+  font-family: 'Manrope', sans-serif;
+  flex-shrink: 0;
+}
+
+.tl-scroll::-webkit-scrollbar { height: 10px; }
+.tl-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
+.tl-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.16);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.tl-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.28);
+  background-clip: padding-box;
+}
+
+.tl-clip { padding: 0; transition: transform .1s; }
+.tl-clip:hover { transform: translateY(-1px) scale(1.08); }
+.tl-ruler:hover { background: rgba(255,255,255,0.025); }
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-glass);
+  color: var(--text-tertiary);
+  cursor: pointer;
+}

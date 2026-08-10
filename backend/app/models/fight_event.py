@@ -28,3 +28,11 @@ class FightEventResponse(BaseModel):
     fighter_id: Optional[int]
     action: Optional[str]
     success: Optional[bool]
+
+
+class FightEventCreate(BaseModel):
+    frame: int
+    description: str
+    fighter_id: Optional[int] = None
+    action: Optional[str] = None
+    success: Optional[bool] = None

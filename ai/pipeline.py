@@ -131,6 +131,8 @@ def run_pipeline(
     # ---- Debug flags (also skip process_fight) ----
     verify_pose: Optional[str]        = None,
     verify_scoreboard: bool           = False,
+    # ---- Manual-labeling mode ----
+    skip_events: bool                 = False,
     # ---- General ----
     debug_level: str                  = "verbose",
 ) -> dict:
@@ -292,7 +294,9 @@ def run_pipeline(
         ("Corner assign",   "SKIP — pose results supplied" if pose_results else "RUN"),
         ("Scoreboard OCR",  _ocr_label()),
         ("Segmentation",    _seg_label()),
-        ("Fight process",   "SKIP — debug flags present" if not run_fight else "RUN"),
+        ("Fight process",   "SKIP — debug flags present" if not run_fight
+                             else "RUN (events skipped — manual labeling)" if skip_events
+                             else "RUN"),
         ("Verify pose",     verify_pose if verify_pose else "no"),
         ("Verify scrbrd",   "yes" if verify_scoreboard else "no"),
         ("Debug level",     debug_level),
@@ -436,7 +440,18 @@ def run_pipeline(
         # ----------------------------------------------------------------
         # Step 6 — Fight processing
         # ----------------------------------------------------------------
-        if run_fight:
+        if run_fight and skip_events:
+            # Manual-labeling mode: write fighter_frames + rounds only, skip
+            # the strike/fight-state detection state machine entirely — the
+            # user tags those by hand on the Annotate screen. The fight stays
+            # in labeling_in_progress until they finish (no COMPLETED here).
+            set_fight_state(fight_id, S.LABELING_IN_PROGRESS)
+            from fight_processing.fight_processing import write_frames_and_rounds
+            print("Writing fighter frames + rounds (event detection skipped) …")
+            t0 = time.perf_counter()
+            write_frames_and_rounds(pose_data, fight_id=fight_id, fps=fps, rounds=rounds)
+            timings["fight_processing"] = time.perf_counter() - t0
+        elif run_fight:
             set_fight_state(fight_id, S.ANALYZING)
             from fight_processing.fight_processing import process_fight
             print("Running fight processing …")
@@ -563,7 +578,9 @@ def run_batch(
         rows = db.execute(
             text(
                 "SELECT id, video_path, fps, width, height "
-                "FROM fights WHERE state != 'completed' ORDER BY id"
+                "FROM fights WHERE state NOT IN "
+                "('completed', 'labeling_in_progress', 'labeling_complete') "
+                "ORDER BY id"
             )
         ).fetchall()
     finally:

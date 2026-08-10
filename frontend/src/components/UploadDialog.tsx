@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Fighter } from '../types/Fighter';
+import type { Fight } from '../types/Fight';
 import { uploadFight } from '../services/api';
 import CornerSelect from './CornerSelect';
 import ModeCard from './ModeCard';
@@ -8,7 +9,7 @@ import ModeCard from './ModeCard';
 interface UploadDialogProps {
   open: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (fight: Fight, mode: 'ai' | 'manual') => void;
 }
 
 export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogProps) {
@@ -54,8 +55,8 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
     setUploading(true);
     setError(null);
     try {
-      await uploadFight(file, redF.id, blueF.id);
-      onSuccess();
+      const fight = await uploadFight(file, redF.id, blueF.id, mode);
+      onSuccess(fight, mode);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
       setUploading(false);
@@ -68,7 +69,9 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
       ? 'Add a video to continue'
       : !redF || !blueF
         ? 'Assign both corner fighters'
-        : 'AI will process after upload';
+        : mode === 'manual'
+          ? 'Fighters will be detected, then it\'s ready for you to label'
+          : 'AI will process after upload';
 
   return createPortal(
     <div
@@ -189,7 +192,6 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
             <ModeCard
               active={mode === 'manual'}
               onClick={() => !uploading && setMode('manual')}
-              comingSoon
               icon="draw"
               title="Self-annotate"
               desc="You tag every strike, takedown and position change yourself on the timeline."
@@ -254,8 +256,8 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
                 </>
               ) : (
                 <>
-                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>auto_awesome</span>
-                  Upload & analyze
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{mode === 'manual' ? 'draw' : 'auto_awesome'}</span>
+                  {mode === 'manual' ? 'Upload video' : 'Upload & analyze'}
                 </>
               )}
             </button>

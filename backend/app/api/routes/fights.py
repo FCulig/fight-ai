@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from app.models.fight import FightResponse
 from app.models.fighter_frame import FighterFrameResponse
-from app.models.fight_event import FightEventResponse
+from app.models.fight_event import FightEventCreate, FightEventResponse
 from app.models.round import RoundResponse
 from app.services import (
     event_service,
@@ -19,7 +19,7 @@ from app.services import (
     fighter_service,
     round_service,
 )
-from app.services.pipeline_runner import extract_video_meta, run_pipeline_async
+from app.services.pipeline_runner import extract_video_meta, run_pipeline_async, terminate_pipeline
 from app.utils.fight_state_listener import register_queue, unregister_queue
 
 router = APIRouter()
@@ -102,7 +102,11 @@ async def upload_fight(
     file: UploadFile = File(...),
     red_fighter_id: Optional[int] = Form(None),
     blue_fighter_id: Optional[int] = Form(None),
+    mode: str = Form("ai"),
 ):
+    if mode not in ("ai", "manual"):
+        raise HTTPException(status_code=400, detail="mode must be 'ai' or 'manual'")
+
     ext = Path(file.filename or "").suffix.lower()
     if ext not in _ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -167,7 +171,8 @@ async def upload_fight(
             raise HTTPException(status_code=409, detail="A fight with this video already exists")
         raise
 
-    run_pipeline_async(relative_path)
+    pid = run_pipeline_async(relative_path, skip_events=(mode == "manual"))
+    fight_service.set_fight_pid(fight.id, pid)
 
     return fight
 
@@ -192,6 +197,34 @@ def get_fight_events(
     return event_service.get_events_by_fight(fight_id, fighter_id, action, success)
 
 
+@router.post("/{fight_id}/events/", response_model=FightEventResponse, status_code=201)
+def create_fight_event(fight_id: int, payload: FightEventCreate):
+    fight = fight_service.get_fight_by_id(fight_id)
+    if fight is None:
+        raise HTTPException(status_code=404, detail="Fight not found")
+    if (
+        payload.fighter_id is not None
+        and payload.fighter_id != fight.red_fighter_id
+        and payload.fighter_id != fight.blue_fighter_id
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="fighter_id must be one of this fight's assigned corners",
+        )
+    return event_service.create_event(fight_id, payload)
+
+
+@router.post("/{fight_id}/finish-labeling", response_model=FightResponse)
+def finish_labeling(fight_id: int):
+    fight = fight_service.finish_labeling(fight_id)
+    if fight is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Fight is not currently in labeling_in_progress state",
+        )
+    return fight
+
+
 @router.get("/{fight_id}/video")
 def get_fight_video(fight_id: int):
     fight = fight_service.get_fight_by_id(fight_id)
@@ -205,6 +238,10 @@ def get_fight_video(fight_id: int):
 
 @router.delete("/{fight_id}", status_code=204)
 def delete_fight(fight_id: int):
+    pid = fight_service.get_fight_pid(fight_id)
+    if pid is not None:
+        terminate_pipeline(pid)
+
     video_path = fight_service.delete_fight(fight_id)
     if video_path is None:
         raise HTTPException(status_code=404, detail="Fight not found")

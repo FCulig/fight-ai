@@ -22,6 +22,8 @@ export const STATE_PROGRESS: Record<string, number> = {
   segmenting: 85,
   analyzing: 92,
   completed: 100,
+  labeling_in_progress: 96,
+  labeling_complete: 100,
   failed: 0,
 };
 
@@ -35,5 +37,23 @@ export const STATE_LABELS: Record<string, string> = {
   segmenting: 'Segmenting rounds',
   analyzing: 'Processing fight',
   completed: 'Completed',
+  labeling_in_progress: 'Labeling in progress',
+  labeling_complete: 'Labeling complete',
   failed: 'Failed',
 };
+
+/** States where the pipeline has stopped moving on its own — no more live SSE updates expected. */
+export const TERMINAL_STATES = new Set([
+  'completed',
+  'failed',
+  'labeling_in_progress',
+  'labeling_complete',
+]);
+
+/** Fight has real analysis data (events/frames/rounds) ready to review in the Player. */
+export const isFightViewable = (state: string): boolean =>
+  state === 'completed' || state === 'labeling_complete';
+
+/** Fight has fighter_frames/rounds written and is waiting for the user to manually tag events. */
+export const isLabelingReady = (state: string): boolean =>
+  state === 'labeling_in_progress';

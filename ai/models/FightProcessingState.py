@@ -11,4 +11,6 @@ class FightProcessingState(str, Enum):
     SEGMENTING  = "segmenting"
     ANALYZING   = "analyzing"
     COMPLETED   = "completed"
+    LABELING_IN_PROGRESS = "labeling_in_progress"
+    LABELING_COMPLETE    = "labeling_complete"
     FAILED      = "failed"

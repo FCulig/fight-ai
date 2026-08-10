@@ -94,6 +94,17 @@ The pipeline never writes intermediate files — PostgreSQL is the only data sto
     g3.add_argument("--verify-scoreboard", action="store_true",
                     help="Render scoreboard OCR verification video")
 
+    # ---- Manual-labeling mode ----
+    g4 = p.add_argument_group("manual labeling")
+    g4.add_argument("--skip-events", action="store_true",
+                    help=(
+                        "Run detection/tracking/pose/corners/scoreboard/segmentation "
+                        "as normal, but skip strike/fight-state event detection — "
+                        "writes fighter_frames + rounds only. For fights the user "
+                        "will label by hand; leaves the fight in state "
+                        "'labeling_in_progress' instead of 'completed'."
+                    ))
+
     # ---- General ----
     p.add_argument("--debug-level", choices=["none", "normal", "verbose"],
                    default="verbose",
@@ -122,6 +133,7 @@ def main() -> None:
             rounds_arg         = args.rounds,
             verify_pose        = args.verify_pose,
             verify_scoreboard  = args.verify_scoreboard,
+            skip_events        = args.skip_events,
             debug_level        = args.debug_level,
         )
 
