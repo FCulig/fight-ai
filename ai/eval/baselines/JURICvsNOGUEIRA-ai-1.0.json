@@ -1,0 +1,69 @@
+{
+  "git_sha": "769e83f9c45b2da1ec57bc4d654831fb1a2c7459",
+  "constants_sha256": "d95ec9f668267560e8b0456cebe2859e232b1ea73d5e2ffd273fbed1d30c27bb",
+  "video": "fight_videos/JURICvsNOGUEIRA.mp4",
+  "tolerance_frames": null,
+  "generated_at": "2026-08-12T15:16:00.740513+00:00",
+  "report": {
+    "video": "fight_videos/JURICvsNOGUEIRA.mp4",
+    "fps": 50,
+    "round_minutes": 2.2503333333333333,
+    "checks": [
+      {
+        "name": "events inside rounds",
+        "value": 0.0,
+        "passed": true,
+        "detail": "0/93 strikes fall outside every detected round",
+        "band": "expected 0% (=< 0%)"
+      },
+      {
+        "name": "no simultaneous mutual strikes",
+        "value": 0.7526881720430108,
+        "passed": false,
+        "detail": "35 frames have BOTH fighters striking (70/93 events). Both corners sharing one pose skeleton produces exactly this.",
+        "band": "expected =< 2% of events"
+      },
+      {
+        "name": "no duplicate events",
+        "value": 4.0,
+        "passed": false,
+        "detail": "4 exact duplicate (frame, fighter, action) rows",
+        "band": "expected 0"
+      },
+      {
+        "name": "state does not flap",
+        "value": 19.55265886535328,
+        "passed": false,
+        "detail": "44 state transitions over 2.3 min = 19.6/min",
+        "band": "expected =< 15/min"
+      },
+      {
+        "name": "state dwell is physical",
+        "value": 0.76,
+        "passed": false,
+        "detail": "median 0.76s between state changes; 15/43 segments are under 0.5s",
+        "band": "expected >= 1.0s"
+      },
+      {
+        "name": "strike rate is plausible",
+        "value": 41.32721078358762,
+        "passed": true,
+        "detail": "93 in-round strikes over 2.3 min = 41.3/min",
+        "band": "expected 5\u201360/min"
+      }
+    ],
+    "type_counts": {
+      "clinch_punch": 27,
+      "hook_body": 7,
+      "jab_body": 6,
+      "hook_head": 2,
+      "clinch_knee": 2,
+      "ground_punch": 34,
+      "ground_knee": 8,
+      "uppercut_body": 2,
+      "cross_body": 3,
+      "uppercut_head": 2
+    },
+    "out_of_round_types": {}
+  }
+}

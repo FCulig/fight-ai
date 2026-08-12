@@ -42,6 +42,12 @@ def _cmd_sanity(args) -> int:
 
     rep = check(load_predictions(args.video))
     print(format_sanity(rep))
+
+    if args.json:
+        from .report_io import save_sanity_report
+        path = save_sanity_report(rep, args.json)
+        print(f"\n  wrote {path}")
+
     return 0 if (rep.passed and ok) else 1
 
 
@@ -60,6 +66,11 @@ def _cmd_score(args) -> int:
 
     if not args.no_sanity:
         print(format_sanity(check(preds)))
+
+    if args.json:
+        from .report_io import save_report
+        path = save_report(report, args.json)
+        print(f"\n  wrote {path}")
 
     return 0
 
@@ -117,6 +128,9 @@ def build_parser() -> argparse.ArgumentParser:
     san.add_argument("--skip-decode", action="store_true",
                      help="skip the full-decode video integrity check (it is slow "
                           "on long videos)")
+    san.add_argument("--json", metavar="PATH",
+                     help="write the report as JSON to PATH, alongside git_sha "
+                          "and constants_sha256")
     san.set_defaults(func=_cmd_sanity)
 
     sc = sub.add_parser("score", help="score pipeline output against ground truth")
@@ -130,6 +144,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="how many example FN/FP to list (default: 8)")
     sc.add_argument("--no-sanity", action="store_true",
                     help="skip the artifact checks appended to the report")
+    sc.add_argument("--json", metavar="PATH",
+                    help="write the report as JSON to PATH, alongside git_sha "
+                         "and constants_sha256")
     sc.set_defaults(func=_cmd_score)
 
     smy = sub.add_parser("summary", help="show labelling progress")
