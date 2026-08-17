@@ -16,12 +16,20 @@ ai/
 ├── manifest.py               # Builds run summary (returned in-memory, never written to disk)
 ├── video_processing/
 │   ├── video_processing.py   # YOLO detection → returns detection dict (no disk write)
-│   ├── fight_segmentation.py # Fuses OCR + detection signals → round list
+│   ├── fight_segmentation.py # Fuses clock + OCR + detection signals → round list
+│   ├── round_clock.py        # Fits the scoreboard countdown (slope known a priori =
+│   │                         #   -1/fps, so only the intercept is estimated) → the
+│   │                         #   authoritative round COUNT. See "Round segmentation".
 │   ├── scoreboard_overlay/   # Scoreboard overlay OCR package
 │   │   ├── __init__.py       # Re-exports + parse_roi_override()
 │   │   ├── calibration.py    # Bottom-strip OCR to auto-detect overlay ROI
 │   │   ├── extraction.py     # Per-frame OCR sampling + smoothing
-│   │   ├── parsers.py        # Org-agnostic round/timer regexes
+│   │   ├── parsers.py        # Org-agnostic round/timer parsing. Two routes to the
+│   │   │                     #   round: explicit prefix ("R1"/"ROUND 1") and, when
+│   │   │                     #   the overlay shows a bare digit, box GEOMETRY —
+│   │   │                     #   find_round_digit_box() locates the 1-char box beside
+│   │   │                     #   the timer. Calibration unions that box into the ROI,
+│   │   │                     #   or the crop clips the digit and it is never readable.
 │   │   ├── debug.py          # Heatmap / crop / matplotlib visualisation helpers
 │   │   └── scoreboard_verification.py  # Renders annotated verification MP4
 │   ├── fighter_tracking/
@@ -32,13 +40,12 @@ ai/
 │   │                            #   tape + torso-histogram distance with hysteresis.
 │   │                            #   Falls back to legacy tape-vote when colors are indistinguishable.
 │   └── pose_tracking/
-│       └── pose_tracking.py  # Pose model on FULL FRAMES, then greedy argmax-IoU
-│                             #   match of each fighter box to a pose box.
-│                             #   NOTE: the match has no mutual-exclusion
-│                             #   constraint, so both corners can be assigned the
-│                             #   SAME skeleton when their boxes overlap (clinch).
-│                             #   See eval/ sanity check "no simultaneous mutual
-│                             #   strikes", which currently fails because of this.
+│       └── pose_tracking.py  # Pose model on FULL FRAMES, then one-to-one Hungarian
+│                             #   assignment of fighter boxes to pose boxes (IoU floor
+│                             #   POSE_IOU_FLOOR = 0.5). One-to-one by construction, so
+│                             #   two fighter boxes can no longer be assigned the same
+│                             #   skeleton in a clinch — see eval/ sanity check "no
+│                             #   simultaneous mutual strikes".
 ├── fight_processing/
 │   ├── fight_processing.py   # State machine + DB writes (fight_events, fighter_frames, rounds)
 │   └── fight_processing_util.py
@@ -47,19 +54,33 @@ ai/
 │   ├── FighterTracker.py     # Constrained 2-slot tracker with Hungarian matching
 │   ├── geometry.py           # Shared pure-geometry helpers: get_torso_rectangle,
 │   │                         #   calculate_distance_between_fighters, get_fighter_scale.
-│   │                         #   Lives here (not in fight_processing) so corner_assignment
-│   │                         #   can import them without a layering inversion.
+│   │                         #   All three return None on insufficient keypoint
+│   │                         #   confidence rather than computing on a hallucinated
+│   │                         #   coordinate — callers must treat None as "unusable
+│   │                         #   this frame". Lives here (not in fight_processing) so
+│   │                         #   corner_assignment can import them without a layering
+│   │                         #   inversion.
 │   └── constants.py          # All thresholds and label IDs
 ├── eval/                     # Evaluation harness — see eval/README.md
 │   ├── schema.py             # Ground-truth label format (also the training set
 │   │                         #   format for the planned skeleton action model)
-│   ├── label.py              # Keyboard-driven OpenCV labelling tool
+│   ├── labels_db.py          # Builds FightLabels from label_events/label_spans (Postgres)
+│   ├── corner_swap_check.py  # Inject/measure corner-swap labelling recall (plan 0g)
+│   ├── corner_accuracy.py    # Label-free: does stored `corner` match the kit colour?
+│   │                         #   The only check that catches a red/blue inversion —
+│   │                         #   python -m eval.corner_accuracy <fight_id>
 │   ├── predictions.py        # Reads pipeline output back out of PostgreSQL
-│   ├── score.py              # Strike P/R/F1, state accuracy, round IoU
+│   ├── score.py              # Strike P/R/F1, state accuracy, round IoU, agreement scoring
 │   ├── sanity.py             # Label-free artifact checks
-│   ├── cli.py                # python -m eval.cli {label,sanity,score,summary}
+│   ├── videocheck.py         # Full-decode video integrity check (truncation detection)
+│   ├── report_io.py          # JSON persistence for sanity/score reports
+│   ├── cli.py                # python -m eval.cli {export,video,sanity,score,agreement,
+│   │                         #   inject-swap,corner-swap-recall,summary}
 │   └── labels/               # Hand-labelled ground truth — COMMITTED to git
-└── database.py               # SQLAlchemy SessionLocal
+└── database.py               # SQLAlchemy SessionLocal; also set_fight_state,
+                               #   set_video_check, set_fight_pid — the only way any
+                               #   AI-venv process (pipeline or upload validator) writes
+                               #   fights.state/pid, so the SSE stream stays in sync
 ```
 
 ## Architecture Rules
@@ -75,13 +96,37 @@ ai/
   purposes — use `ctx.save_image`, `ctx.save_json`, `ctx.log` instead.
 - **`constants.py`** is the single source of truth for all numeric thresholds.
   Never hardcode a threshold or frame-count in a processing module.
-- **Never change a threshold in `constants.py` without measuring it.** Run
-  `python -m eval.cli score <video>` before and after and put both numbers in the
-  commit message. The thresholds are heavily coupled — several existing values
+- **Never change a fight-state or strike-detection threshold in `constants.py`
+  without measuring it.** This covers the block running from
+  `FIGHT_STATE_SMOOTHING_WINDOW_SECS` down to `HEAD_ABOVE_SHOULDER_RATIO` — the
+  `determine_fight_state` classifier and everything `detect_strikes` reads. Run
+  `python -m eval.cli score <video>` before and after and put both numbers in
+  the commit message; score's FIGHT STATE and STRIKE DETECTION sections are what
+  measure these. These thresholds are heavily coupled — several existing values
   are compensating for bugs elsewhere rather than describing anything physical
   (see `eval/README.md`), so tuning by eye on one video reliably makes another
-  worse. `python -m eval.cli sanity <video>` needs no labels and should be run on
-  every processed video.
+  worse.
+- **The rule stops there — do not demand a `score` delta for the rest.**
+  Segmentation (`MIN_FIGHT_END_GAP_SECS` … `ROUND_DISENGAGED_RATIO`) and
+  scoreboard overlay (`SCOREBOARD_*`) constants are out of scope. Scoreboard OCR
+  has no `score` section at all. Segmentation does have one (ROUNDS), but its
+  ground truth is currently untrustworthy: `label_spans` of kind `round` are
+  **seeded from the pipeline's own `rounds` output** the first time the Annotate
+  page opens a fight (`backend/app/services/label_span_service.py`), so unless a
+  human has actually moved those boundaries, round IoU reads ~1.000 against the
+  prediction itself and a genuine improvement scores as a regression. Check that
+  the span differs from the `rounds` row before believing a round-IoU number.
+- **Measure those against the subsystem instead.** A scoreboard OCR change is
+  validated by timer coverage plus a label-free consistency check: the clock is
+  linear, so `k = frame/fps + seconds_remaining` is constant within a round and
+  a misread lands off that intercept. Establish the intercepts from readings the
+  current settings already accept, then confirm newly admitted readings agree —
+  that tests for false positives out-of-sample without needing any labels. Note
+  EasyOCR's line confidence is *not* a usable quality signal here: a ≤1px change
+  to the calibrated ROI moves it by a median of 0.117 (max 0.433), and the floor
+  feeds back into the ROI, since calibration only unions boxes that clear it.
+- `python -m eval.cli sanity <video>` needs no labels and should be run on every
+  processed video regardless of which constant changed.
 
 ## Entry Points
 
@@ -94,21 +139,31 @@ python main.py fight.mp4    # single-file mode
 1. Creates `fight_videos/` if absent and prints a hint, then returns early.
 2. Scans for `.mp4` / `.mkv` / `.mov`. For each file extracts `fps`, `width`, `height`
    via `cv2.VideoCapture` and upserts a `fights` row (`ON CONFLICT DO NOTHING` — never
-   disturbs an existing row's flag or metadata).
-3. Queries `SELECT … FROM fights WHERE processed = false ORDER BY id`.
+   disturbs an existing row's state or metadata).
+3. Queries `SELECT … FROM fights WHERE state NOT IN ('completed', 'labeling_in_progress',
+   'labeling_complete', 'validating', 'invalid')`. `'failed'` is deliberately included
+   (retried on the next run); `'validating'`/`'invalid'` are excluded so batch mode
+   never races the upload validator or reprocesses a file already rejected as truncated.
 4. Calls `run_pipeline(video_file, fight_id=row.id, …)` for each.
-5. On success: `UPDATE fights SET processed = true, processed_at = NOW()`.
-6. On exception: logs traceback, continues to next fight (row stays `processed = false`).
+5. On success: `set_fight_state(fight_id, COMPLETED)`.
+6. On exception: logs traceback, continues to next fight (row stays at whatever state
+   the exception left it in — typically `FAILED`, set by the caller).
 
 **Accepted limitation:** a file replaced at the same path is not re-detected by batch
 (row already exists, `DO NOTHING`). Re-running such a video requires single-file mode,
-whose upsert resets the `processed` flag.
+whose upsert resets `state` to `'queued'`.
 
 ### Single-file mode (`run_pipeline` with `fight_id=None`)
-Upserts the fight record (`ON CONFLICT DO UPDATE SET fps/width/height/processed=false`)
-so any existing child rows are treated as stale, then runs the full pipeline. After
-`process_fight` succeeds, `run_pipeline` itself issues
-`UPDATE fights SET processed = true, processed_at = NOW()`.
+Upserts the fight record (`ON CONFLICT DO UPDATE SET fps/width/height, state='queued'`)
+so any existing child rows are treated as stale, then runs the full pipeline through
+`set_fight_state` transitions (`QUEUED → DETECTING → … → ANALYZING → COMPLETED`, or
+`LABELING_IN_PROGRESS` when `--skip-events` is passed for the manual-labelling track).
+
+**Upload validation runs before either mode reaches `main.py`.** The backend spawns
+`eval.cli video --fight-id <id>` first (state `VALIDATING`), which full-decodes the
+video, and on a clean result spawns `main.py` itself and hands `pid` off to it — see
+`eval/cli.py`'s `_validate_and_dispatch` and plan 0b. A truncated file is marked
+`INVALID` and `main.py` never runs.
 
 ## Pipeline — fully in-memory data flow
 
@@ -137,6 +192,54 @@ appropriate step. The pipeline never *produces* these files.
 scoreboard calibration debug images) are opt-in artifacts and are not part of the data
 flow. They remain as explicitly-requested disk outputs and cause `process_fight` to be
 skipped.
+
+## Round segmentation — the clock is authoritative
+
+`segment_fights()` combines three signals. **They are not peers** — the order below
+is a strict authority ranking, and inverting it is what made round counts unreliable:
+
+1. **Scoreboard clock** (`round_clock.derive_rounds_from_clock`) — decides the round
+   **count** and **identity**. The timer is the only deterministic signal in the
+   pipeline: it advances one second per second of video, so its slope against frame
+   number is known a priori (`-1/fps`) and only the intercept is fitted, by median.
+   That makes it robust from ~3 readings anywhere in the round instead of needing
+   continuous coverage — which matters because broadcast overlays vanish during
+   replays, corner shots and ground close-ups.
+2. **Round number** — corroborates the clock and pins boundaries. Nothing may
+   *depend* on it: plenty of overlays render a bare digit or omit it entirely.
+3. **Fighter presence + engagement** — refines edges the clock could not pin, and is
+   the sole signal when OCR fails.
+
+**Detection alone cannot decide a round count.** It splits wherever "both fighters
+visible and close together" fails for `MIN_ROUND_GAP_SECS`, which a ground scramble or
+a camera cutaway produces routinely. When it is the only signal,
+`enforce_round_plausibility()` applies physical constraints that need no OCR:
+
+- only the **last** round may be short — only the last round can end in a finish, so a
+  short non-final segment is a walkout or a tracking dropout and is *dropped* (merging
+  it would drag the real round's start back across the walkout);
+- gaps below `MIN_ROUND_BREAK_SECS` are detection dropouts inside one round, not
+  breaks, so the halves are rejoined;
+- the video must be long enough to hold the rounds claimed.
+
+**Edges are only trusted where they were observed.** `ClockRound.start_anchored` /
+`end_anchored` record whether a reading was actually seen near the top of the round or
+near 0:00. An unanchored edge is extrapolation past all evidence — a round whose
+overlay appeared late cannot say where it began, and a round ended by a knockout never
+reaches 0:00, so clock-zero would fall *after* the fight stopped. `_reconcile_with_clock`
+takes those edges from detection instead.
+
+**The result carries its own verdict.** `quality.needs_review` / `review_reason` say
+whether the scoreboard actually corroborated the round list, keyed on how many
+mutually-consistent readings back each round (`ROUND_CLOCK_HEALTHY_SUPPORT`) rather
+than on raw OCR coverage — an overlay visible 8% of the time still pins its rounds
+exactly when every reading agrees. `pipeline.py` persists this via
+`database.set_segmentation_review`, and the Annotate page shows a banner. Without it a
+detection-only guess reaches the database indistinguishable from a verified one, which
+is how a 3-round split of a 1-round fight went unnoticed until a human spotted it.
+
+`eval/sanity.py` re-checks the same physical constraints label-free, so a regression
+shows up in `python -m eval.cli sanity <video>` rather than in the annotation UI.
 
 ## `fight_processing.py` — single-transaction, idempotent write
 
@@ -172,20 +275,55 @@ from disk or from a video file after registration.
 
 ```sql
 fighters       (id, first_name, last_name, nickname nullable, created_at)
-fights         (id, video_path UNIQUE, fps, width, height, created_at, processed, processed_at,
+fights         (id, video_path UNIQUE, fps, width, height, created_at,
+                state, pid nullable, labeled_at nullable,
+                reported_frames nullable, decoded_frames nullable,
+                segmentation_needs_review, segmentation_review_reason nullable,
                 red_fighter_id → fighters nullable, blue_fighter_id → fighters nullable)
+               -- state: validating|invalid|queued|detecting|tracking|pose|corners|
+               --   scoreboard|segmenting|analyzing|completed|failed|
+               --   labeling_in_progress|labeling_complete
+               -- labeled_at: durable "this fight has finalised ground truth" marker,
+               --   set once by finish_labeling and never touched by the pipeline —
+               --   state alone is NOT that marker, since re-running a labelled fight
+               --   through the AI pipeline (to score it) resets state but not this.
+               -- reported_frames/decoded_frames: full-decode validation result,
+               --   shown in the UI when state=invalid
+               -- segmentation_needs_review/_reason: segmentation's own verdict on
+               --   whether its round list was corroborated by the scoreboard, written
+               --   by database.set_segmentation_review. Never touched by labelling.
+               --   Surfaced as a banner on the Annotate page — see "Round segmentation".
 rounds         (id, fight_id → fights, round_number, start_frame, end_frame)
                UNIQUE (fight_id, round_number)
 fighter_frames (id, fight_id → fights, frame, corner, x1, y1, x2, y2, confidence, keypoints)
                -- `corner` is the appearance corner index (0=red, 1=blue), formerly `fighter_id`
 fight_events   (id, fight_id → fights, frame, description,
-                fighter_id → fighters nullable, action nullable, success nullable)
+                fighter_id → fighters nullable, action nullable, success nullable, state nullable)
+               -- PIPELINE PREDICTIONS ONLY. process_fight() DELETEs and rewrites this
+               --   table on every run — never write hand labels here.
+label_events   (id, fight_id → fights, frame, corner nullable, action nullable,
+                target nullable, success nullable, description, labeler nullable, created_at)
+               -- HAND LABELS ONLY, written by the Annotate frontend (backend
+               --   label_event_service.py / routes). `corner` matches
+               --   fighter_frames.corner (0=red, 1=blue). Never touched by the
+               --   pipeline — this is what makes re-running the AI pipeline over a
+               --   labelled fight safe.
+label_spans    (id, fight_id → fights, kind, start_frame, end_frame nullable, value nullable, created_at)
+               -- kind: 'round' (human-confirmed round bounds, seeded from the
+               --   `rounds` table) | 'corner_swap' (labeller-marked red/blue flip,
+               --   applied at export time, fighter_frames itself untouched) |
+               --   'excluded' (replay/camera-cut span, value=reason).
+               --   end_frame NULL means a start/end toggle is still open.
 ```
 
 `fight_events` carries both the free-form `description` (NOT NULL) and structured
 columns for querying: `fighter_id` (FK to `fighters`, resolved from the fight's
 corner assignment), `action` (strike type / `round_start` / `clinch_initiated` …),
-`success` (True=landed, False=missed, NULL=unknown — grappling/unconfirmed/non-strike).
+`success` (True=landed, False=missed, NULL=unknown — grappling/unconfirmed/non-strike),
+`state` (STRIKING/CLINCH/GROUND on a state-change row, else NULL — the structured
+counterpart of the free-text "Fight state changed to FightState.X" description;
+`eval/predictions.py` reads this column directly and only falls back to a regex over
+`description` for rows written before it existed).
 The red→`red_fighter_id` / blue→`blue_fighter_id` mapping is read from the `fights`
 row and threaded into `process_fight`; when corners are unassigned, `fighter_id` is NULL.
 
@@ -196,19 +334,34 @@ ix_rounds_fight_id              ON rounds (fight_id)
 ix_fight_events_fight_id        ON fight_events (fight_id)
 ix_fight_events_fighter_id      ON fight_events (fighter_id)
 ix_fight_events_fighter_action  ON fight_events (fighter_id, action)
+ix_label_events_fight_id        ON label_events (fight_id)
+ix_label_spans_fight_id         ON label_spans (fight_id)
 ```
 
 ## Key Conventions
 - Fighter labels: `fighter_red=0`, `fighter_blue=1`, `referee=2` (see `constants.py`)
 - Torso rectangle: built from COCO keypoints `[5,6,11,12]` (left/right shoulder, left/right hip) — primary grappling signal
 - **Fight-state classification (`determine_fight_state`) is three-way** — `STRIKING` / `CLINCH` / `GROUND`:
-  - **Proximity axis** — torso-rect distance ≥ `DISTANCE_GRAPPLING_THRESHOLD` (20px) → `STRIKING`; below it the fighters are entangled (clinch or ground).
-  - **Posture axis** (`is_fighter_grounded`, scale-invariant, OR of two signals) — when entangled, `GROUND` if *either* fighter reads as grounded (knockdown / sprawl / scramble), else `CLINCH`. Signals: torso vector tilt from vertical > `TORSO_VERTICAL_ANGLE_THRESHOLD` (50°), **or** head→ankle vertical span ÷ fighter scale < `GROUND_VERTICAL_SPAN_RATIO` (1.2).
-  - **Hysteresis** — per-candidate consecutive-frame counters (`{"striking","clinch","ground"}`). STRIKING/CLINCH transition after `MIN_GRAPPLING_THRESHOLD` (3) frames; GROUND after the slower `MIN_GROUND_THRESHOLD` (5).
+  - **Proximity axis** — torso-rect distance, normalised by average fighter scale, ≥ `DISTANCE_GRAPPLING_RATIO` (0.11) → `STRIKING`; below it the fighters are entangled (clinch or ground). When the distance or either fighter's scale is unusable (unconfident keypoints), no candidate is read at all for that frame — an unknown distance is never treated as "far apart".
+  - **Posture axis** (`is_fighter_grounded`) — when entangled, `GROUND` if *either* fighter reads as grounded (knockdown / sprawl / scramble), else `CLINCH`. Primary signal: torso vector tilt from vertical > `TORSO_VERTICAL_ANGLE_THRESHOLD` (50°) — scale-invariant, always evaluated. Backup signal: head→ankle vertical span ÷ fighter scale < `GROUND_VERTICAL_SPAN_RATIO` (1.2) — only used when nose + both ankles are confident and a scale is available, since a hallucinated occluded ankle (routine in a standing clinch) collapses this ratio and misreads GROUNDED while standing.
+  - **Temporal smoothing** — a majority vote (the categorical equivalent of a median filter) over a `FIGHT_STATE_SMOOTHING_WINDOW_SECS` (0.5s) rolling window of raw per-frame candidates, and a transition only commits once the smoothed candidate differs from the current state **and** at least `FIGHT_STATE_MIN_DWELL_SECS` (0.75s) has passed since the last transition.
   - `GRAPPLING_STATES = {CLINCH, GROUND}` is the set that replaces the old binary `GRAPPLING` check everywhere (clinch-strike detection, contact-gate skipping).
+  - **Strike/state detection only runs inside a detected round** — `process_fight`'s frame loop skips walkouts, between-round rest and the post-fight broadcast wrapper entirely (still writes `fighter_frames` for the whole video, for the frontend overlay).
+  - **Mid-round replays are also excluded.** `fight_segmentation.detect_replay_ranges()` scans the scoreboard OCR samples for a run of `MIN_REPLAY_SAMPLES` (3) consecutive readings tagged `parse_error = "timer_smoothed_out"` by `scoreboard_overlay/extraction.py`'s `_smooth_samples()` — i.e. the on-screen timer jumped backward relative to the round's established direction, which is what a slow-motion replay clip looks like to the OCR. `segment_fights()` returns these as `excluded_ranges` alongside `rounds`; `pipeline.py` threads them into `process_fight(..., excluded_ranges=...)`, gated in the frame loop the same way as the round check. Requires OCR to actually be calibrating on the source video — falls back to `[]` (no exclusion) when scoreboard detection fails, same as segmentation's own OCR fallback.
 - **Fighter identity pipeline (two-stage):**
   1. `FighterTracker` (geometry-only, `models/FighterTracker.py`): constrained 2-slot tracker with IoU + centroid-distance cost matrix solved by Hungarian matching. Assigns a stable *provisional* `track_id` (0 or 1) per frame. Clinch frames (inter-fighter IoU > `CLINCH_IOU_THRESHOLD`) freeze velocity updates to prevent identity swaps. Each detection also carries `model_class_id` (the original YOLO class) for the fallback below.
-  2. `assign_corners()` (`video_processing/corner_assignment/`): **per-frame appearance-anchored re-ID.** Pass 1 reads the video once, builds per-detection descriptors (glove-tape `net_red`/`tape_total` + torso HSV hue histogram), identifies *clean frames* (fighters separated ≥ `DISTANCE_GRAPPLING_THRESHOLD`, both well-posed, tape present), and bootstraps per-corner appearance templates from those frames. Pass 2 (no second video read — over cached descriptors) assigns each detection to a template using normalized tape + Bhattacharyya histogram distance with a hysteresis gate (`CORNER_SWAP_CONFIRM_FRAMES` consecutive frames before committing a flip). `corner` in `fighter_frames` now legitimately follows appearance across a mid-clinch tracker slot swap. Falls back to the original whole-fight tape-vote / model-class-vote path when template separation is below `CORNER_TEMPLATE_MIN_SEPARATION` (similar colors).
+  2. `assign_corners()` (`video_processing/corner_assignment/`): **per-frame appearance-anchored re-ID.** Pass 1 reads the video once, builds per-detection descriptors (glove-tape `net_red`/`tape_total` + torso HSV hue histogram), identifies *clean frames* (fighters separated ≥ `DISTANCE_GRAPPLING_RATIO × avg fighter scale`, both well-posed, tape present), and bootstraps per-corner appearance templates from those frames. Pass 2 (no second video read — over cached descriptors) assigns each detection to a template using normalized tape + Bhattacharyya histogram distance with a hysteresis gate (`CORNER_SWAP_CONFIRM_SECS` converted to frames via the video's fps, consecutive frames before committing a flip). `corner` in `fighter_frames` now legitimately follows appearance across a mid-clinch tracker slot swap. Falls back to a whole-fight paired tape vote / model-class-vote path when template separation is below `CORNER_TEMPLATE_MIN_SEPARATION` (similar colors).
+
+     **Verify with `python -m eval.corner_accuracy <fight_id>`.** It is label-free and needs no re-run — it reads the stored `corner` back and checks it against the fighters' kit colour. Corner assignment is the one output with a 50% failure mode that leaves everything self-consistent, so nothing else in `eval/` catches it: `sanity.py` checks structure, `score.py` needs labels, and hand labels inherit the error. Run it on every processed fight; treat `[FAIL]` (whole-fight inversion) and `[WARN]` (intermittent — uncorrected tracker swaps) as real, and treat "no decisive frames" as *unverified*, not as a pass.
+
+     **Colour is only ever read relatively.** The red HSV band unavoidably overlaps skin, so an absolute red-pixel count is not a corner signal: before this was fixed, *every* fight in `runs/upload_pipeline.log` came back with both tracks overwhelmingly "red", and 29% of a whole `JURICvsNOGUEIRA` frame classified as red tape. Three rules keep that from deciding a corner, and none of them should be relaxed without re-measuring:
+     - the wrist crop is sized to the **glove** (`TAPE_PATCH_RATIO`, small forearm multiplier) and gated at `TAPE_MIN_SATURATION = 150`, above the skin band;
+     - counts are converted to **coverage fractions** of the sampled crop, never summed as raw pixels across the fight — a sum ranks fighters by how long each spent in close-up, which is exactly how `MILIDRAGOVICvsMOOSMAN` was assigned backwards for its whole length;
+     - the two fighters are compared **within one frame** (they share lighting, exposure and skin tone, so the difference is the part that carries colour) and each frame contributes **one vote**.
+
+     **`_is_clean_frame` uses `STRIKING_CORE_KEYPOINT_INDICES`, not `STRIKE_KEYPOINT_INDICES`.** Demanding all 15 strike joints required confident knees and ankles, which a broadcast camera occludes constantly — it returned **zero** clean frames across all 18,518 frames of `NAZHANDvsSTAROPOLI`, so the appearance path never ran and every tracker identity swap went uncorrected. Same relaxation, same reason, as `frame_validity` (see "Frame validity").
+
+     **The slot→corner mapping is a bijection and hysteresis commits it atomically.** Confirming each slot on its own counter let one slot's flip commit while the other's was still pending, leaving *both* slots on the same corner in between; Pass 2 also has to relabel detections that produced no descriptor, or they keep a raw tracker slot id and collide with a relabelled opponent. Both bugs were live — fight 31 has 755 stored frames with duplicate corner ids. The `Invariant OK: no duplicate corner ids` line at the end of the step is what catches this; treat a `WARNING` there as a release blocker, not a diagnostic.
 - **Frame validity** — graded via `frame_validity(detections, fight_state) → "FULL" | "PARTIAL" | "INVALID"` in `fight_processing_util.py`:
   - `FULL` — both fighters have all strike-relevant joints (head, shoulders, elbows, wrists, hips, knees, ankles — `STRIKE_KEYPOINT_INDICES`) above `KEYPOINT_MIN_CONFIDENCE`. Open-range striking runs as normal.
   - `PARTIAL` — both fighters detected, below the strict `FULL` bar but with enough of the right joints to run strike detection:
@@ -223,14 +376,14 @@ ix_fight_events_fighter_action  ON fight_events (fighter_id, action)
 
 Strike detection runs in `fight_processing_util.detect_strikes()` on every valid frame and fires for both striking and grappling fight states. All thresholds are **scale- and fps-invariant**:
 
-- **Scale reference (`get_fighter_scale`):** torso length (shoulder midpoint → hip midpoint) in pixels, per fighter per frame. Falls back to shoulder width when the torso is foreshortened. Used to normalise all distance and velocity thresholds so they are invariant to camera zoom and fighter distance.
+- **Scale reference (`get_fighter_scale`):** torso length (shoulder midpoint → hip midpoint) in pixels, per fighter per frame. Falls back to shoulder width when the torso is foreshortened (torso length < `TORSO_SCALE_MIN_RATIO × shoulder width`) or hips aren't confident. Returns `None` when shoulders themselves aren't confident — the denominator of every normalised threshold below, so `detect_strikes` skips the whole frame rather than compute on a hallucinated scale (see `models/geometry.py`). Used to normalise all distance and velocity thresholds so they are invariant to camera zoom and fighter distance.
 - **Velocity:** distal-joint displacement against a **per-limb confident baseline** (the last frame in which *that* limb's joints were confident, stored in `strike_state[fighter][limb]["vel_base"]`), minus torso displacement over the same interval (removes locomotion), converted to px/sec (× `fps`) then normalised by attacker scale → `scale/sec`. Compared against `PUNCH_VELOCITY_RATIO` / `KICK_VELOCITY_RATIO`. The baseline is reset when older than ~0.3 s (`max(1, round(fps*0.3))` frames) so a long occlusion never produces a stale spike.
 - **Contact distance:** normalised by *defender* scale, compared against `HEAD_CONTACT_RATIO` / `TORSO_CONTACT_RATIO` / `LEG_CONTACT_RATIO`.
 
 **Three gates must all pass to record a strike:**
 
 1. **Extension / angle** — straight arm (angle > `ARM_EXTENSION_THRESHOLD` = 140°) *or* bent arm (`PUNCH_BENT_ANGLE_MIN`–`PUNCH_BENT_ANGLE_MAX` = 60–139°) for punches; straight leg for kicks. The bent-arm path catches hooks and uppercuts.
-2. **Scale-normalised velocity** — must exceed the ratio threshold for `STRIKE_EXTENSION_FRAMES` consecutive frames.
+2. **Scale-normalised velocity** — must exceed the ratio threshold for `STRIKE_EXTENSION_SECS` (converted to frames via fps) consecutive frames.
 3. **Contact proximity** — wrist/ankle must be within the ratio threshold of the target body zone. In grappling mode this open-range proximity gate is replaced by a **directional gate** (see below): a relaxed proximity sanity-check plus a velocity-alignment-toward-target check, because raw proximity no longer discriminates a strike from pummeling once fighters are entangled.
 
 **Per-limb keypoint confidence gating:** if any of the three joints (proximal/mid/distal) for a limb is below `KEYPOINT_MIN_CONFIDENCE`, that limb is skipped for the frame. Prevents velocity spikes from hallucinated keypoint coordinates during occlusion.
@@ -254,9 +407,9 @@ Final open-range punch event type: `{punch_type}_{target}` e.g. `jab_head`, `cro
 - `get_head_radius` uses the ear-to-ear span × `HEAD_RADIUS_EAR_FACTOR` when both ears are confident, else `HEAD_RADIUS_SCALE_RATIO × scale`, clamped to `[HEAD_RADIUS_MIN_RATIO, HEAD_RADIUS_MAX_RATIO] × scale`.
 - Kicks still use the original head/middle/low priority ladder, but benefit from the improved confidence-gated head centre.
 
-**Landed vs. attempted (`RECOIL_LOOKAHEAD_FRAMES`, `RECOIL_VELOCITY_RATIO`):** for each candidate open-range strike, `process_fight` defers the event write into a `pending_strikes` queue. After `RECOIL_LOOKAHEAD_FRAMES` frames it checks whether the defender's head moved at > `RECOIL_VELOCITY_RATIO × defender_scale / sec` — a proxy for head recoil on impact. The final event description is suffixed with `(landed)`, `(missed)`, or `(unconfirmed)` for strikes at the very end of the video.
+**Landed vs. attempted (`RECOIL_LOOKAHEAD_SECS`, `RECOIL_VELOCITY_RATIO`):** for each candidate open-range strike, `process_fight` defers the event write into a `pending_strikes` queue. After `RECOIL_LOOKAHEAD_SECS` (converted to frames via fps) it checks whether the defender's head moved at > `RECOIL_VELOCITY_RATIO × defender_scale / sec` — a proxy for head recoil on impact. The final event description is suffixed with `(landed)`, `(missed)`, or `(unconfirmed)` for strikes at the very end of the video.
 
-**`process_fight` signature:** `process_fight(pose_data, fight_id, fps, rounds=None)` — `fps` is a required parameter (previously missing), sourced from the `fights` row and passed by `pipeline.py`.
+**`process_fight` signature:** `process_fight(pose_data, fight_id, fps, rounds=None, excluded_ranges=None, red_fighter_id=None, blue_fighter_id=None)` — `fps` is required, sourced from the `fights` row and passed by `pipeline.py`. Strike/state detection is gated to frames inside `rounds` and outside every `excluded_ranges` span (mid-round replays — see above); `fighter_frames` are still written for the whole video regardless.
 
 **Event vocabulary in `fight_events.description`:**
 
