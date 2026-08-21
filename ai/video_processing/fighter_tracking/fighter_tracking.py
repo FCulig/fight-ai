@@ -28,7 +28,7 @@ def track_fighters(
     """
     fps     = detection_data.get("fps", 50.0)
     frames  = detection_data["frames"]
-    tracker = FighterTracker()
+    tracker = FighterTracker(fps=fps)
     output  = {"fps": fps, "frames": []}
     total   = len(frames)
 

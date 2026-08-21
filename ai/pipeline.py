@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from database import set_fight_state
+from database import set_fight_state, set_segmentation_review
 from debug import DebugContext
 from models.FightProcessingState import FightProcessingState as S
 from video_processing.video_processing import process_video
@@ -202,6 +202,8 @@ def run_pipeline(
                 {"id": fight_id},
             ).fetchone()
             fps = row.fps
+            width = row.width
+            height = row.height
             red_fighter_id = row.red_fighter_id
             blue_fighter_id = row.blue_fighter_id
         finally:
@@ -428,14 +430,35 @@ def run_pipeline(
             seg_result = segment_fights(
                 detection_data,
                 fps=fps,
+                width=width,
                 scoreboard_samples=scoreboard_data,
                 debug_ctx=DebugContext("runs", verbose=verbose),
             )
             timings["segmentation"] = time.perf_counter() - t0
             rounds                  = seg_result.get("rounds", [])
+            quality                 = seg_result.get("quality", {})
+            metrics                 = quality.get("metrics", {})
+
             print(f"\nSegmentation result:")
             print(f"  Rounds : {rounds}")
-            print(f"  Quality: {seg_result.get('quality', {})}")
+            print(f"  Source : {metrics.get('segmentation_source', 'unknown')}  "
+                  f"(timer coverage {metrics.get('ocr_timer_coverage', 0):.0%}, "
+                  f"round coverage {metrics.get('ocr_round_coverage', 0):.0%})")
+            print(f"  Excluded (replays): {seg_result.get('excluded_ranges', [])}")
+            print(f"  Quality: {quality}")
+            if quality.get("needs_review"):
+                print(f"  ** NEEDS REVIEW: {quality.get('review_reason', '')}")
+
+            # Record whether the scoreboard actually corroborated these rounds,
+            # so a detection-only guess arrives in the annotation UI visibly
+            # provisional instead of indistinguishable from a verified one.
+            set_segmentation_review(
+                fight_id,
+                bool(quality.get("needs_review", False)),
+                quality.get("review_reason") or None,
+            )
+
+        excluded_ranges: list[tuple[int, int]] = seg_result.get("excluded_ranges", [])
 
         # ----------------------------------------------------------------
         # Step 6 — Fight processing
@@ -457,6 +480,7 @@ def run_pipeline(
             print("Running fight processing …")
             t0 = time.perf_counter()
             process_fight(pose_data, fight_id=fight_id, fps=fps, rounds=rounds,
+                          excluded_ranges=excluded_ranges,
                           red_fighter_id=red_fighter_id, blue_fighter_id=blue_fighter_id)
             timings["fight_processing"] = time.perf_counter() - t0
 
@@ -507,7 +531,7 @@ def run_pipeline(
         )
         timings["verify_scoreboard"] = time.perf_counter() - t0
 
-    return {"rounds": rounds, "quality": seg_result.get("quality", {})}
+    return {"rounds": rounds, "excluded_ranges": excluded_ranges, "quality": seg_result.get("quality", {})}
 
 
 # ---------------------------------------------------------------------------
@@ -579,7 +603,8 @@ def run_batch(
             text(
                 "SELECT id, video_path, fps, width, height "
                 "FROM fights WHERE state NOT IN "
-                "('completed', 'labeling_in_progress', 'labeling_complete') "
+                "('completed', 'labeling_in_progress', 'labeling_complete', "
+                "'validating', 'invalid') "
                 "ORDER BY id"
             )
         ).fetchall()

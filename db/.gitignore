@@ -8,3 +8,9 @@ env.bak/
 venv.bak/
 
 .vscode/
+
+# Pycache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

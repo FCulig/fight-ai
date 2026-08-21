@@ -1,0 +1,49 @@
+{
+  "git_sha": "5ecd0ba5251bc06d5f5e6d4db1b22657bf221ecd",
+  "constants_sha256": "cc46a0ca667736a32d4fde40bcde3df5033334ab0d53c78568005fa4b6e679de",
+  "video": "fight_videos/JURICvsNOGUEIRA.mp4",
+  "tolerance_frames": null,
+  "generated_at": "2026-08-13T11:03:12.077984+00:00",
+  "report": {
+    "video": "fight_videos/JURICvsNOGUEIRA.mp4",
+    "fps": 50,
+    "round_minutes": 2.2503333333333333,
+    "checks": [
+      {
+        "name": "events inside rounds",
+        "value": 0.0,
+        "passed": true,
+        "detail": "0/7 strikes fall outside every detected round",
+        "band": "expected 0% (=< 0%)"
+      },
+      {
+        "name": "no simultaneous mutual strikes",
+        "value": 0.0,
+        "passed": true,
+        "detail": "0 frames have BOTH fighters striking (0/7 events). Both corners sharing one pose skeleton produces exactly this.",
+        "band": "expected =< 2% of events"
+      },
+      {
+        "name": "no duplicate events",
+        "value": 0.0,
+        "passed": true,
+        "detail": "0 exact duplicate (frame, fighter, action) rows",
+        "band": "expected 0"
+      },
+      {
+        "name": "strike rate is plausible",
+        "value": 3.1106502740334765,
+        "passed": false,
+        "detail": "7 in-round strikes over 2.3 min = 3.1/min",
+        "band": "expected 5\u201360/min"
+      }
+    ],
+    "type_counts": {
+      "uppercut_body": 1,
+      "low_kick": 1,
+      "hook_body": 3,
+      "cross_body": 2
+    },
+    "out_of_round_types": {}
+  }
+}

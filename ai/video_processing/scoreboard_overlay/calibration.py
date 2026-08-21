@@ -23,15 +23,69 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from .parsers import parse_timer, parse_round
+from .parsers import (
+    parse_timer,
+    parse_round,
+    parse_round_from_boxes,
+    find_round_digit_box,
+)
 from .debug import draw_roi
 from debug import DebugContext
 from models.constants import (
     SCOREBOARD_STRIP_Y_START,
     SCOREBOARD_STRIP_SEARCH_FRAMES,
+    SCOREBOARD_CAL_EDGE_SKIP_RATIO,
+    SCOREBOARD_CAL_VALIDATE_FRAMES,
+    SCOREBOARD_CAL_MIN_MATCH_RATE,
     SCOREBOARD_ROI_PADDING,
     SCOREBOARD_OCR_MIN_CONFIDENCE,
+    SCOREBOARD_OCR_UPSCALE,
 )
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _dominant_position_cluster(
+    boxes: list[tuple[int, int, int, int]],
+) -> list[tuple[int, int, int, int]]:
+    """
+    Keep only the boxes sitting at the overlay's own position.
+
+    A broadcast puts more than one timer-shaped string in the bottom strip —
+    ground-control clocks, stat panels and sponsor countdowns all read as MM:SS
+    — but only the round clock holds one fixed position for the whole fight.
+    Because the ROI is a min/max union, a *single* stray match is enough to
+    stretch it across half the frame, and the extraction crop then carries a
+    second clock that competes with the real one.
+
+    Boxes are grouped by centre proximity and the largest group wins: the round
+    clock is on screen far more often than any transient panel. The tolerance is
+    the median box size, so it scales with resolution and needs no constant.
+    """
+    if not boxes:
+        return boxes
+
+    tol_x = max(1.0, float(np.median([b[2] - b[0] for b in boxes])))
+    tol_y = max(1.0, float(np.median([b[3] - b[1] for b in boxes])))
+
+    def centre(b: tuple[int, int, int, int]) -> tuple[float, float]:
+        return (b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0
+
+    clusters: list[list[tuple[int, int, int, int]]] = []
+    for box in boxes:
+        cx, cy = centre(box)
+        for cluster in clusters:
+            mx = float(np.mean([centre(c)[0] for c in cluster]))
+            my = float(np.mean([centre(c)[1] for c in cluster]))
+            if abs(cx - mx) <= tol_x and abs(cy - my) <= tol_y:
+                cluster.append(box)
+                break
+        else:
+            clusters.append([box])
+
+    return max(clusters, key=len)
 
 
 # ---------------------------------------------------------------------------
@@ -105,8 +159,9 @@ def calibrate_scoreboard_overlay(
             f"Search strip: y={strip_y}–{H} "
             f"(bottom {100*(1-SCOREBOARD_STRIP_Y_START):.0f}% of frame)")
 
-    # Skip first/last 5 % (walkout / post-fight graphics differ from in-fight)
-    skip    = max(1, int(total * 0.05))
+    # Skip the head and tail (walkout, tale-of-the-tape and post-fight graphics
+    # carry text but no live scoreboard, and sampling them wastes OCR passes).
+    skip    = max(1, int(total * SCOREBOARD_CAL_EDGE_SKIP_RATIO))
     usable  = max(1, total - 2 * skip)
     n       = min(SCOREBOARD_STRIP_SEARCH_FRAMES, usable)
     indices = [skip + int(i * usable / n) for i in range(n)]
@@ -189,6 +244,19 @@ def calibrate_scoreboard_overlay(
                     f"  ROUND  frame={vid_idx}  text={text!r}  conf={conf:.2f}  box={aabb}"
                 )
 
+        # A bare round digit matches no text pattern, so it is found by its
+        # position beside the timer. It must be unioned into the ROI explicitly:
+        # on a typical overlay it sits just outside a timer-only crop, and a crop
+        # that clips it leaves the round number unreadable for the whole run.
+        digit = find_round_digit_box(results, SCOREBOARD_OCR_MIN_CONFIDENCE)
+        if digit is not None:
+            (dx1, dy1, dx2, dy2), value = digit
+            aabb = (int(dx1), int(dy1) + strip_y, int(dx2), int(dy2) + strip_y)
+            round_boxes.append(aabb)
+            log_lines.append(
+                f"  DIGIT  frame={vid_idx}  round={value}  box={aabb}  (positional)"
+            )
+
     cap.release()
 
     if ctx.verbose:
@@ -200,14 +268,23 @@ def calibrate_scoreboard_overlay(
             f"Collected {len(timer_boxes)} timer boxes  "
             f"{len(round_boxes)} round boxes across {n} frames")
 
-    if not timer_boxes:
+    if not timer_boxes and not round_boxes:
         ctx.log("calibration",
-                "ERROR: no timer pattern found in bottom strip across any sampled frame. "
+                "ERROR: no timer or round pattern found in bottom strip across any "
+                f"sampled frame ({n} sampled). "
                 "Check calibration_debug/strip_frame_*.jpg to see what EasyOCR found. "
                 "Possible causes: overlay absent, font unrecognised, EasyOCR on CPU (too slow).")
         return None
 
-    # --- Union all timer + round boxes → ROI ---
+    # --- Union the boxes at the overlay's own position → ROI ---
+    # Outliers are dropped first: a raw union stretches the ROI to cover every
+    # stray match, and one is enough to do it (see _dominant_position_cluster).
+    timer_boxes = _dominant_position_cluster(timer_boxes)
+    round_boxes = _dominant_position_cluster(round_boxes)
+    ctx.log("calibration",
+            f"After position clustering: {len(timer_boxes)} timer  "
+            f"{len(round_boxes)} round boxes")
+
     all_boxes = timer_boxes + round_boxes
     x1 = min(b[0] for b in all_boxes)
     y1 = min(b[1] for b in all_boxes)
@@ -223,8 +300,14 @@ def calibrate_scoreboard_overlay(
 
     ctx.log("calibration", f"Candidate ROI (union + padding): {roi_candidate}")
 
-    # --- Validate: re-OCR the candidate ROI on a few frames ---
-    validate_indices = indices[:5]
+    # --- Validate: re-OCR the candidate ROI on frames spread across the video ---
+    # This must mirror extract_scoreboard_samples() exactly — same upscale, same
+    # acceptance test. Validating on the raw tight crop while extraction OCRs a
+    # 3x upscale makes the gate stricter than the thing it is gating, and a
+    # small-digit ROI that production reads fine gets rejected here.
+    n_val = min(SCOREBOARD_CAL_VALIDATE_FRAMES, len(indices))
+    validate_indices = [indices[int(i * len(indices) / n_val)] for i in range(n_val)]
+
     matches = 0
     cap = cv2.VideoCapture(video_path)
     for vid_idx in validate_indices:
@@ -235,21 +318,31 @@ def calibrate_scoreboard_overlay(
         crop = frame[y1:y2, x1:x2]
         if crop.size == 0:
             continue
-        results = reader.readtext(crop)
+        upscaled = cv2.resize(
+            crop,
+            (crop.shape[1] * SCOREBOARD_OCR_UPSCALE, crop.shape[0] * SCOREBOARD_OCR_UPSCALE),
+            interpolation=cv2.INTER_CUBIC,
+        )
+        results = reader.readtext(upscaled)
         text = " ".join(t for (_, t, c) in results if c >= SCOREBOARD_OCR_MIN_CONFIDENCE)
-        if parse_timer(text) is not None:
+        # Either signal is enough: an overlay that yields only a round number is
+        # still worth extracting, and one that yields only a timer is the common
+        # case that drives round-clock segmentation.
+        if (parse_timer(text) is not None
+                or parse_round_from_boxes(results, SCOREBOARD_OCR_MIN_CONFIDENCE) is not None):
             matches += 1
     cap.release()
 
     match_rate = matches / len(validate_indices) if validate_indices else 0.0
     ctx.log("calibration",
-            f"Validation: timer found in {matches}/{len(validate_indices)} frames "
-            f"({match_rate:.0%})")
+            f"Validation: timer or round found in {matches}/{len(validate_indices)} "
+            f"frames ({match_rate:.0%})")
 
-    if match_rate < 0.2:
+    if match_rate < SCOREBOARD_CAL_MIN_MATCH_RATE:
         ctx.log("calibration",
-                f"ERROR: validation failed (match rate {match_rate:.0%} < 20%). "
-                "The union ROI does not reliably produce a timer. "
+                f"ERROR: validation failed (match rate {match_rate:.0%} < "
+                f"{SCOREBOARD_CAL_MIN_MATCH_RATE:.0%}). "
+                "The union ROI does not reliably produce a timer or round number. "
                 "Check calibration_debug/strip_frame_*.jpg")
         return None
 

@@ -1,4 +1,4 @@
-import { TOOL_GROUPS, PLAYBACK_KEYS, EDIT_KEYS } from './taxonomy';
+import { TOOL_GROUPS, PLAYBACK_KEYS, EDIT_KEYS, SPAN_KEYS } from './taxonomy';
 
 function KeyRow({ k, label }: { k: string[]; label: string }) {
   return (
@@ -27,6 +27,8 @@ export default function KeyboardLegend() {
         <div>
           <div className="label" style={{ fontSize: 9, marginBottom: 6 }}>Selection & edit</div>
           {EDIT_KEYS.map((r, i) => <KeyRow key={i} k={r.k} label={r.label} />)}
+          <div className="label" style={{ fontSize: 9, margin: '10px 0 6px' }}>Spans</div>
+          {SPAN_KEYS.map((r, i) => <KeyRow key={i} k={r.k} label={r.label} />)}
         </div>
         <div>
           <div className="label" style={{ fontSize: 9, marginBottom: 6 }}>Log event</div>

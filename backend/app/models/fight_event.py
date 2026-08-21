@@ -16,6 +16,7 @@ class FightEvent(Base):
     fighter_id = Column(Integer, ForeignKey("fighters.id", ondelete="SET NULL"), nullable=True)
     action = Column(String(50), nullable=True)
     success = Column(Boolean, nullable=True)
+    state = Column(String(20), nullable=True)
 
 
 class FightEventResponse(BaseModel):
@@ -28,11 +29,4 @@ class FightEventResponse(BaseModel):
     fighter_id: Optional[int]
     action: Optional[str]
     success: Optional[bool]
-
-
-class FightEventCreate(BaseModel):
-    frame: int
-    description: str
-    fighter_id: Optional[int] = None
-    action: Optional[str] = None
-    success: Optional[bool] = None
+    state: Optional[str]

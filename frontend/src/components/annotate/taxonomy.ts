@@ -8,14 +8,19 @@
 
 export type Corner = 'red' | 'blue';
 export type EventCat = 'strike' | 'grapple' | 'state' | 'round' | 'event';
+export type Target = 'head' | 'body' | 'leg';
 
 export interface ToolItem {
   key: string;
   num?: string;
   action: string;
   name: string;
-  text: (fighterName: string) => string;
+  text: (fighterName: string, target?: Target) => string;
   needsFighter: boolean;
+  /** Shift-modified: plain key = head, Shift+key = body. Read via e.code + e.shiftKey. */
+  hasTarget?: boolean;
+  /** Kicks already encode target in the action name — no modifier needed. */
+  fixedTarget?: Target;
 }
 
 export interface ToolGroup {
@@ -24,29 +29,62 @@ export interface ToolGroup {
   items: ToolItem[];
 }
 
+// Shared by every hand strike + elbow so the description always reflects the
+// real target instead of a value baked in per-action (right_hook used to be
+// hardcoded "to the body" regardless of where it actually landed).
+//
+// jab/cross are lead/rear-relative (boxing terms), not absolute-handed —
+// a southpaw's jab is thrown with their right hand. Hooks/uppercuts stay
+// absolute left/right: that's what you can directly see (which arm moved)
+// without first judging stance, and it's lossless either way since both
+// hands collapse to the same family (`hook`/`uppercut`) at export time.
+const HAND_STRIKE_NAMES: Record<string, string> = {
+  jab: 'jab',
+  cross: 'cross',
+  left_hook: 'left hook',
+  right_hook: 'right hook',
+  left_uppercut: 'left uppercut',
+  right_uppercut: 'right uppercut',
+  elbow: 'elbow',
+};
+
+function handStrikeText(action: string, fighterName: string, target: Target = 'head'): string {
+  return `${fighterName} ${HAND_STRIKE_NAMES[action]} to the ${target}`;
+}
+
 export const TOOL_GROUPS: ToolGroup[] = [
   {
     group: 'Strikes',
-    note: 'Hand strikes use boxing numbers',
+    note: 'Jab/cross = lead/rear hand (works for southpaws) · hooks/uppercuts = literal left/right · Shift = body',
     items: [
-      { key: '1', num: '1', action: 'jab', name: 'Jab', needsFighter: true, text: f => `${f} jab to the head` },
-      { key: '2', num: '2', action: 'straight_right', name: 'Straight right', needsFighter: true, text: f => `${f} straight right to the head` },
-      { key: '3', num: '3', action: 'left_hook', name: 'Left hook', needsFighter: true, text: f => `${f} left hook to the head` },
-      { key: '4', num: '4', action: 'right_hook', name: 'Right hook', needsFighter: true, text: f => `${f} right hook to the body` },
-      { key: '5', num: '5', action: 'left_uppercut', name: 'Left uppercut', needsFighter: true, text: f => `${f} left uppercut on the inside` },
-      { key: '6', num: '6', action: 'right_uppercut', name: 'Right uppercut', needsFighter: true, text: f => `${f} right uppercut on the inside` },
-      { key: 'c', action: 'calf_kick', name: 'Calf kick', needsFighter: true, text: f => `${f} calf kick` },
-      { key: 'l', action: 'low_kick', name: 'Low kick', needsFighter: true, text: f => `${f} low kick` },
-      { key: 'm', action: 'middle_kick', name: 'Middle kick', needsFighter: true, text: f => `${f} middle kick to the body` },
-      { key: 'h', action: 'high_kick', name: 'High kick', needsFighter: true, text: f => `${f} high kick to the head` },
-      { key: 'e', action: 'elbow', name: 'Elbow', needsFighter: true, text: f => `${f} elbow` },
-      { key: 'n', action: 'knee', name: 'Knee', needsFighter: true, text: f => `${f} knee in the clinch` },
+      { key: '1', num: '1', action: 'jab', name: 'Jab', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('jab', f, t) },
+      { key: '2', num: '2', action: 'cross', name: 'Cross', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('cross', f, t) },
+      { key: '3', num: '3', action: 'left_hook', name: 'Left hook', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('left_hook', f, t) },
+      { key: '4', num: '4', action: 'right_hook', name: 'Right hook', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('right_hook', f, t) },
+      { key: '5', num: '5', action: 'left_uppercut', name: 'Left uppercut', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('left_uppercut', f, t) },
+      { key: '6', num: '6', action: 'right_uppercut', name: 'Right uppercut', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('right_uppercut', f, t) },
+      { key: 'c', action: 'calf_kick', name: 'Calf kick', needsFighter: true, fixedTarget: 'leg', text: f => `${f} calf kick` },
+      { key: 'l', action: 'low_kick', name: 'Low kick', needsFighter: true, fixedTarget: 'leg', text: f => `${f} low kick` },
+      { key: 'm', action: 'middle_kick', name: 'Middle kick', needsFighter: true, fixedTarget: 'body', text: f => `${f} middle kick to the body` },
+      { key: 'h', action: 'high_kick', name: 'High kick', needsFighter: true, fixedTarget: 'head', text: f => `${f} high kick to the head` },
+      { key: 'e', action: 'elbow', name: 'Elbow', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('elbow', f, t) },
+      { key: 'n', action: 'clinch_knee', name: 'Clinch knee', needsFighter: true, text: f => `${f} knee in the clinch` },
+    ],
+  },
+  {
+    group: 'Ground & pound',
+    note: 'No target/hand breakdown — same reason MMA stats don’t: a scramble isn’t a clean jab/hook, so this is punch/knee volume only',
+    items: [
+      { key: 'u', action: 'clinch_punch', name: 'Clinch punch', needsFighter: true, text: f => `${f} punches in the clinch` },
+      { key: 'v', action: 'ground_punch', name: 'Ground and pound', needsFighter: true, text: f => `${f} lands ground and pound` },
+      { key: 'j', action: 'ground_knee', name: 'Ground knee', needsFighter: true, text: f => `${f} knees from the ground` },
     ],
   },
   {
     group: 'Grappling',
     items: [
       { key: 't', action: 'takedown_attempt', name: 'Takedown attempt', needsFighter: true, text: f => `${f} shoots for a takedown` },
+      { key: 'y', action: 'takedown_landed', name: 'Takedown landed', needsFighter: true, text: f => `${f} lands a takedown` },
       { key: 'd', action: 'takedown_defended', name: 'Takedown defended', needsFighter: true, text: f => `${f} defends the takedown` },
       { key: 's', action: 'submission_attempt', name: 'Submission', needsFighter: true, text: f => `${f} threatens a submission` },
     ],
@@ -61,7 +99,8 @@ export const TOOL_GROUPS: ToolGroup[] = [
     group: 'Fight state',
     items: [
       { key: 'w', action: 'state_striking', name: 'Striking', needsFighter: false, text: () => 'Fight state → STRIKING' },
-      { key: 'g', action: 'state_grappling', name: 'Grappling', needsFighter: false, text: () => 'Fight state → GRAPPLING' },
+      { key: 'f', action: 'state_clinch', name: 'Clinch', needsFighter: false, text: () => 'Fight state → CLINCH' },
+      { key: 'g', action: 'state_ground', name: 'Ground', needsFighter: false, text: () => 'Fight state → GROUND' },
     ],
   },
 ];
@@ -69,13 +108,12 @@ export const TOOL_GROUPS: ToolGroup[] = [
 export const KEYMAP: Record<string, ToolItem> = {};
 TOOL_GROUPS.forEach(g => g.items.forEach(it => { KEYMAP[it.key] = it; }));
 
-// The palette has no landed/blocked toggle — every strike it logs is "landed".
-// Grapple/outcome-adjacent actions (attempts, submissions) have no confirmed
-// landed/missed outcome, so success stays null/unknown for those.
-const SUCCESS_TRUE_ACTIONS = new Set([
-  'jab', 'straight_right', 'left_hook', 'right_hook', 'left_uppercut', 'right_uppercut',
-  'calf_kick', 'low_kick', 'middle_kick', 'high_kick', 'elbow', 'knee', 'knockdown',
-]);
+// Landed-vs-missed is deferred (MVP target is "count strikes thrown"), so every
+// strike logs success=null — outcome unknown, not a claim that it landed.
+// `knockdown` and `takedown_landed` are the exceptions: neither is a default
+// outcome of pressing the key (unlike a strike, which the palette has no
+// landed/missed toggle for), so a logged one genuinely happened.
+const SUCCESS_TRUE_ACTIONS = new Set(['knockdown', 'takedown_landed']);
 
 export function successForAction(action: string): boolean | null {
   return SUCCESS_TRUE_ACTIONS.has(action) ? true : null;
@@ -135,8 +173,16 @@ export const PLAYBACK_KEYS: { k: string[]; label: string }[] = [
 export const EDIT_KEYS: { k: string[]; label: string }[] = [
   { k: ['R'], label: 'Select red corner' },
   { k: ['B'], label: 'Select blue corner' },
-  { k: ['Esc'], label: 'Deselect fighter' },
-  { k: ['Z'], label: 'Undo last event' },
+  { k: ['Esc'], label: 'Deselect fighter / clip' },
+  { k: ['Z'], label: 'Undo last event (this session)' },
+  { k: ['Click', 'Delete'], label: 'Select a timeline clip, then delete it (Delete = undo if nothing selected)' },
+];
+
+// Span kinds (round/corner_swap/excluded) are start/end toggles: press once to
+// open a span at the playhead, press again to close it.
+export const SPAN_KEYS: { k: string[]; label: string }[] = [
+  { k: ['O'], label: 'Toggle corner-swap span' },
+  { k: ['P'], label: 'Toggle excluded span' },
 ];
 
 /** Frame (1-based) → "m:ss" clock, matching the currentFrame = floor(t*fps)+1 contract. */

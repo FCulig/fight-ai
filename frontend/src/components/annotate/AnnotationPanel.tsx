@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import type { Event } from '../../types/Event';
+import type { LabelEvent } from '../../types/LabelEvent';
+import type { LabelSpan } from '../../types/LabelSpan';
 import type { Round } from '../../types/Round';
 import { FILTERS, categoryForAction, matchFilter } from './taxonomy';
 import AnnotationTimeline from './AnnotationTimeline';
@@ -29,7 +30,8 @@ function ViewBtn({ active, onClick, icon, label }: ViewBtnProps) {
 }
 
 interface AnnotationPanelProps {
-  events: Event[];
+  events: LabelEvent[];
+  spans: LabelSpan[];
   rounds: Round[];
   duration: number;
   fps: number;
@@ -37,16 +39,18 @@ interface AnnotationPanelProps {
   onSeek: (frame: number) => void;
   onSetPlaying: (playing: boolean) => void;
   onDelete: (id: number) => void;
+  onUpdateSpan: (id: number, patch: { start_frame?: number; end_frame?: number }) => void;
+  onDeleteSpan: (id: number) => void;
   flashId: number | null;
-  redFighterId: number | null;
-  blueFighterId: number | null;
+  selectedEventId: number | null;
+  onSelectEvent: (id: number | null) => void;
   redName: string;
   blueName: string;
 }
 
 export default function AnnotationPanel({
-  events, rounds, duration, fps, currentFrame, onSeek, onSetPlaying, onDelete, flashId,
-  redFighterId, blueFighterId, redName, blueName,
+  events, spans, rounds, duration, fps, currentFrame, onSeek, onSetPlaying, onDelete, onUpdateSpan, onDeleteSpan,
+  flashId, selectedEventId, onSelectEvent, redName, blueName,
 }: AnnotationPanelProps) {
   const [view, setView] = useState<'timeline' | 'list'>(() => (localStorage.getItem('annot-view') as 'timeline' | 'list') || 'timeline');
   const [filter, setFilter] = useState('all');
@@ -77,16 +81,19 @@ export default function AnnotationPanel({
       {view === 'timeline' ? (
         <AnnotationTimeline
           events={events}
+          spans={spans}
           rounds={rounds}
           duration={duration}
           fps={fps}
           currentFrame={currentFrame}
           onSeek={onSeek}
           onSetPlaying={onSetPlaying}
+          onUpdateSpan={onUpdateSpan}
+          onDeleteSpan={onDeleteSpan}
           flashId={flashId}
+          selectedEventId={selectedEventId}
+          onSelectEvent={onSelectEvent}
           filter={filter}
-          redFighterId={redFighterId}
-          blueFighterId={blueFighterId}
           redName={redName}
           blueName={blueName}
         />

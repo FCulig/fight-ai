@@ -69,12 +69,25 @@ class StrikeScore:
     landed_total: int = 0
     nonspecific_matches: int = 0
     family_confusion: dict[tuple[str, str], int] = field(default_factory=dict)
+    # Signed (pred.frame - truth.frame) per matched pair, not absolute. A
+    # systematic lag (e.g. labeller reaction time) is a bias to subtract once,
+    # not spread to widen the tolerance window by — see bias/jitter below.
     matched_offsets: list[int] = field(default_factory=list)
     missed: list[Strike] = field(default_factory=list)
     spurious: list[PredictedStrike] = field(default_factory=list)
 
     def _acc(self, num: int, den: int) -> Optional[float]:
         return num / den if den else None
+
+    @property
+    def offset_bias(self) -> Optional[float]:
+        """Median signed offset — a systematic lag, not spread."""
+        return statistics.median(self.matched_offsets) if self.matched_offsets else None
+
+    @property
+    def offset_jitter(self) -> Optional[float]:
+        """Median absolute offset — genuine temporal spread."""
+        return statistics.median(abs(o) for o in self.matched_offsets) if self.matched_offsets else None
 
     @property
     def fighter_accuracy(self) -> Optional[float]:
@@ -117,6 +130,19 @@ class RoundScore:
     @property
     def mean_iou(self) -> Optional[float]:
         return statistics.mean(m[1] for m in self.matched) if self.matched else None
+
+    @property
+    def count_correct(self) -> bool:
+        """
+        Whether the pipeline found the right *number* of rounds.
+
+        Scored separately from IoU because the two fail independently, and only
+        this one is visible to a user: splitting one round into three still
+        yields a healthy mean IoU, since the largest predicted segment overlaps
+        the real round fine — but the round list is plainly wrong. Round count
+        is the failure that had to be corrected by hand on fight 44.
+        """
+        return self.gt_count == self.pred_count
 
 
 @dataclass
@@ -193,7 +219,7 @@ def score_strikes(
 
     for i, j in pairs:
         g, p = gt[i], pred[j]
-        out.matched_offsets.append(abs(g.frame - p.frame))
+        out.matched_offsets.append(p.frame - g.frame)
 
         out.fighter_total += 1
         if g.fighter == p.fighter:
@@ -249,6 +275,13 @@ def score_state(labels: FightLabels, preds: Predictions) -> StateScore:
         if g is None:
             continue          # frame inside a round but not state-labelled
         p = preds.state_at(f)
+        if p is None:
+            # `preds` is sometimes a second FightLabels (agreement — see
+            # cli.py's `agreement` command), whose state_at() returns None
+            # outside a labelled span, unlike Predictions.state_at() which
+            # always falls back to initial_state. Either way, "no prediction
+            # here" is not a mismatch to grade.
+            continue
         out.frames_scored += 1
         if g == p:
             out.frames_correct += 1
@@ -338,8 +371,8 @@ def format_report(r: Report, show_examples: int = 8) -> str:
     add(f"  TP {d.tp:4d}   FP {d.fp:4d}   FN {d.fn:4d}")
     add(f"  precision {d.precision:6.1%}   recall {d.recall:6.1%}   F1 {d.f1:6.1%}")
     if s.matched_offsets:
-        add(f"  median temporal offset on matches: "
-            f"{statistics.median(s.matched_offsets):.0f} frames")
+        add(f"  temporal offset on matches: bias {s.offset_bias:+.1f}f "
+            f"(systematic lag)   jitter {s.offset_jitter:.1f}f (spread)")
 
     add("\nCLASSIFICATION   (matched strikes only)")
     add(f"  fighter attribution {_pct(s.fighter_accuracy)}  ({s.fighter_total} matches)")
@@ -376,9 +409,13 @@ def format_report(r: Report, show_examples: int = 8) -> str:
                 add(f"  {g:>8} " + "".join(f"{n:>10d}" for n in row))
 
     rd = r.rounds
-    add(f"\nROUNDS   truth {rd.gt_count}   predicted {rd.pred_count}")
+    verdict = "OK" if rd.count_correct else "WRONG"
+    add(f"\nROUNDS   truth {rd.gt_count}   predicted {rd.pred_count}   count {verdict}")
     for num, iou, dstart, dend in rd.matched:
         add(f"  round {num}: IoU {iou:5.1%}   start {dstart:+6.2f}s   end {dend:+6.2f}s")
+    if not rd.count_correct:
+        add("  NOTE: mean IoU stays high when one round is split into several — "
+            "the count is what catches that.")
 
     if show_examples and s.missed:
         add(f"\nWORST MISSES (first {show_examples} of {len(s.missed)} FN)")
@@ -391,8 +428,12 @@ def format_report(r: Report, show_examples: int = 8) -> str:
         add(f"\nWORST FALSE POSITIVES (first {show_examples} of {len(s.spurious)} FP)")
         for m in s.spurious[:show_examples]:
             t = m.frame / r.fps
+            # `m` is a plain Strike (no `.action`) when `preds` is a second
+            # FightLabels, i.e. scoring an agreement run rather than pipeline
+            # predictions — see cli.py's `agreement` command.
+            action = getattr(m, "action", f"{m.family}_{m.target}")
             add(f"  f{m.frame:<6d} {int(t // 60):d}:{t % 60:05.2f}  "
-                f"{m.fighter:<4} {m.action}")
+                f"{m.fighter:<4} {action}")
 
     add("")
     return "\n".join(L)

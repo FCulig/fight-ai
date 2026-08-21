@@ -17,7 +17,7 @@ import cv2
 import easyocr
 import numpy as np
 
-from .parsers import parse_round, parse_timer
+from .parsers import parse_round_from_boxes, parse_timer
 from .debug import save_crop_pair, plot_timer_series
 from debug import DebugContext
 from models.constants import (
@@ -125,7 +125,12 @@ def extract_scoreboard_samples(
         parse_error       = None
 
         if conf >= SCOREBOARD_OCR_MIN_CONFIDENCE or raw_text:
-            round_num         = parse_round(raw_text)
+            # Round is read from box geometry, not the joined string: most
+            # overlays render it as a bare digit beside the timer, which no text
+            # pattern can distinguish from a sponsor numeral. Coordinates are in
+            # upscaled-crop space, but every tolerance is relative to the timer
+            # box, so the upscale factor cancels.
+            round_num         = parse_round_from_boxes(result, SCOREBOARD_OCR_MIN_CONFIDENCE)
             seconds_remaining = parse_timer(raw_text)
             if   round_num is None and seconds_remaining is None:
                 parse_error = "no_match"
@@ -193,11 +198,20 @@ def _smooth_samples(samples: list[dict], ctx: DebugContext) -> list[dict]:
     W      = SCOREBOARD_SMOOTHING_WINDOW
 
     # --- Pass 1: round mode ---
+    # The window reads from a snapshot rather than from `result`. Writing into
+    # the same list it reads makes this a recursive filter: an imputed value
+    # feeds the next window, so a single genuine reading propagates forward
+    # indefinitely through samples that had none. On this project's own footage
+    # that turned 61 real round readings into 639, smearing a stale round number
+    # across minutes of unreadable overlay — and in a multi-round fight it would
+    # carry round 1 straight past the round 2 boundary, erasing the one
+    # transition this signal exists to locate.
+    source_rounds = [s["round_num"] for s in result]
     for i in range(len(result)):
         lo = max(0, i - W // 2)
         hi = min(len(result), i + W // 2 + 1)
-        window_rounds = [result[j]["round_num"] for j in range(lo, hi)
-                         if result[j]["round_num"] is not None]
+        window_rounds = [source_rounds[j] for j in range(lo, hi)
+                         if source_rounds[j] is not None]
         if not window_rounds:
             continue
         mode = statistics.mode(window_rounds)

@@ -6,7 +6,7 @@ from models.constants import (
     TRACK_MAX_FIGHTERS,
     TRACK_IOU_WEIGHT,
     TRACK_DISTANCE_WEIGHT,
-    TRACK_MAX_FRAMES_MISSING,
+    TRACK_MAX_MISSING_SECS,
     CLINCH_IOU_THRESHOLD,
 )
 
@@ -87,8 +87,9 @@ class FighterTracker:
     original YOLO model class so assign_corners() can use it as a fallback.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, fps: float = 50.0) -> None:
         self.slots: dict[int, _Slot] = {}
+        self.max_frames_missing = max(1, round(fps * TRACK_MAX_MISSING_SECS))
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -179,7 +180,7 @@ class FighterTracker:
         for sid in slot_ids:
             if sid not in assigned_slots:
                 self.slots[sid].coast()
-                if self.slots[sid].frames_since_seen > TRACK_MAX_FRAMES_MISSING:
+                if self.slots[sid].frames_since_seen > self.max_frames_missing:
                     stale.append(sid)
         for sid in stale:
             del self.slots[sid]
@@ -210,7 +211,7 @@ class FighterTracker:
                 slot.coast()
             stale = [
                 sid for sid, s in self.slots.items()
-                if s.frames_since_seen > TRACK_MAX_FRAMES_MISSING
+                if s.frames_since_seen > self.max_frames_missing
             ]
             for sid in stale:
                 del self.slots[sid]

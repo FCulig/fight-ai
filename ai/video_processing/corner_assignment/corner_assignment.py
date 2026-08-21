@@ -18,8 +18,16 @@ Strategy (appearance path):
   a label flip.
 
 Legacy fallback:
-  Preserves the original "aggregate over whole fight → one static corner_map"
-  logic exactly, guaranteeing no regression on footage with similar glove colors.
+  A whole-fight static corner_map from a per-frame *paired* tape vote (which of
+  the two fighters read redder in this frame), falling back to model-class votes.
+
+Everything colour here is measured as *coverage of the sampled glove crop* and
+compared *between the two fighters within one frame*, then aggregated one vote
+per frame. Absolute pixel counts summed over a fight do not work: the red HSV
+band overlaps skin, so both fighters read overwhelmingly "red" on every fight in
+runs/upload_pipeline.log, and the sum then ranks them by how long each spent in
+close-up. That is how MILIDRAGOVICvsMOOSMAN was assigned backwards for its whole
+length (22.8M vs 28.2M "red" pixels, essentially all skin).
 """
 
 import copy
@@ -28,18 +36,20 @@ import cv2
 import numpy as np
 
 from models.constants import (
-    TAPE_PATCH_HALF,
-    WRIST_EDGE_MARGIN,
+    TAPE_PATCH_RATIO,
+    WRIST_EDGE_MARGIN_RATIO,
     TAPE_MIN_SATURATION,
     TAPE_MIN_VALUE,
     RED_HUE_HIGH1,
     RED_HUE_LOW2,
     BLUE_HUE_LOW,
     BLUE_HUE_HIGH,
-    CORNER_MIN_TAPE_SAMPLES,
+    CORNER_TAPE_VOTE_MIN_MARGIN,
+    CORNER_MIN_TAPE_VOTES,
+    CORNER_TAPE_SEPARATION_FULL,
     KEYPOINT_MIN_CONFIDENCE,
-    STRIKE_KEYPOINT_INDICES,
-    DISTANCE_GRAPPLING_THRESHOLD,
+    STRIKING_CORE_KEYPOINT_INDICES,
+    DISTANCE_GRAPPLING_RATIO,
     TORSO_HIST_BINS,
     TORSO_MIN_SATURATION,
     TORSO_MIN_VALUE,
@@ -49,7 +59,7 @@ from models.constants import (
     CORNER_TAPE_WEIGHT,
     CORNER_HIST_WEIGHT,
     CORNER_HYSTERESIS_WEIGHT,
-    CORNER_SWAP_CONFIRM_FRAMES,
+    CORNER_SWAP_CONFIRM_SECS,
 )
 from models.geometry import (
     get_fighter_scale,
@@ -60,38 +70,69 @@ from models.geometry import (
 # COCO keypoint index pairs: (wrist, elbow) for left and right arms
 _WRIST_PAIRS = [(9, 7), (10, 8)]
 
+# Hysteresis state is keyed on the slot→corner mapping as a whole, not per
+# slot — the mapping is a bijection, so "slot 0 flips" and "slot 1 flips" are
+# the same event and must commit together. See _assign_frame_labels.
+_SWAP_KEY = "swap"
+
 
 # ---------------------------------------------------------------------------
-# Tape sampling (unchanged from original)
+# Tape sampling
 # ---------------------------------------------------------------------------
 
-def _patch_half(kp: list, wrist_idx: int, elbow_idx: int) -> int:
-    """Scale crop half-side by forearm length when elbow is visible."""
+def _patch_half(kp: list, wrist_idx: int, elbow_idx: int, scale: float) -> int:
+    """Scale crop half-side by forearm length when elbow is visible, else by
+    fighter scale directly (both expressed as a fraction via TAPE_PATCH_RATIO,
+    so this stays correct as the camera zooms in/out — see plan Stage 1 step 4).
+
+    The forearm multiplier is deliberately small: the target is the glove, and
+    a box that reaches back up the forearm counts skin, which swamps the tape.
+    """
+    base = TAPE_PATCH_RATIO * scale
     wx, wy = kp[wrist_idx][0], kp[wrist_idx][1]
     ex, ey = kp[elbow_idx][0], kp[elbow_idx][1]
     if ex == 0 and ey == 0:
-        return TAPE_PATCH_HALF
+        return int(base)
     forearm = ((wx - ex) ** 2 + (wy - ey) ** 2) ** 0.5
-    scaled = int(forearm * 0.35)
-    return max(TAPE_PATCH_HALF // 2, min(TAPE_PATCH_HALF * 2, scaled))
+    scaled = int(forearm * 0.18)
+    return max(int(base / 2), min(int(base * 1.5), scaled))
 
 
-def _sample_tape(frame_bgr: np.ndarray, kp: list, h: int, w: int) -> tuple[int, int]:
+def _sample_tape(frame_bgr: np.ndarray, kp: list, h: int, w: int) -> tuple[int, int, int]:
     """Count red and blue HSV pixels around both wrists.
-    Returns (red_pixels, blue_pixels)."""
+
+    Returns (red_pixels, blue_pixels, sampled_pixels). The third value is what
+    lets callers work in *coverage fractions* instead of raw counts — without
+    it, a fighter shot in close-up contributes proportionally more pixels than
+    one shot wide, and summing raw counts over a fight measures camera framing
+    rather than glove colour.
+    """
     red_total  = 0
     blue_total = 0
+    area_total = 0
+
+    scale = get_fighter_scale(kp)
+    if scale is None:
+        # No confident torso to size the crop against — unusable this frame,
+        # rather than falling back to a hallucinated/absolute crop size.
+        return red_total, blue_total, area_total
+
+    edge_margin = WRIST_EDGE_MARGIN_RATIO * w
 
     for wrist_idx, elbow_idx in _WRIST_PAIRS:
         wx, wy = kp[wrist_idx][0], kp[wrist_idx][1]
 
         if wx == 0 and wy == 0:
             continue
-        if (wx < WRIST_EDGE_MARGIN or wx > w - WRIST_EDGE_MARGIN or
-                wy < WRIST_EDGE_MARGIN or wy > h - WRIST_EDGE_MARGIN):
+        if (wx < edge_margin or wx > w - edge_margin or
+                wy < edge_margin or wy > h - edge_margin):
+            continue
+        # A wrist the pose model isn't sure about is usually occluded or
+        # hallucinated, and the crop then lands on whatever is behind it.
+        if kp[wrist_idx][2] < KEYPOINT_MIN_CONFIDENCE:
             continue
 
-        half = _patch_half(kp, wrist_idx, elbow_idx)
+        half = _patch_half(kp, wrist_idx, elbow_idx, scale)
         x1 = max(0, int(wx) - half)
         y1 = max(0, int(wy) - half)
         x2 = min(w, int(wx) + half)
@@ -115,8 +156,9 @@ def _sample_tape(frame_bgr: np.ndarray, kp: list, h: int, w: int) -> tuple[int, 
 
         red_total  += int(red_mask.sum())
         blue_total += int(blue_mask.sum())
+        area_total += patch.shape[0] * patch.shape[1]
 
-    return red_total, blue_total
+    return red_total, blue_total, area_total
 
 
 # ---------------------------------------------------------------------------
@@ -143,11 +185,17 @@ def _sample_torso_histogram(
     indices = [5, 6, 11, 12]
     pts = np.array([kp[i][:2] for i in indices], dtype=np.float32)
 
+    # Extend downward by half a fighter scale to include the shorts. A None
+    # scale means the shoulder/hip joints aren't confident enough to trust —
+    # the same joints this region's box is built from — so the region itself
+    # isn't trustworthy either.
+    scale = get_fighter_scale(kp)
+    if scale is None:
+        return None, 0
+
     x1 = max(0, int(pts[:, 0].min()))
     y1 = max(0, int(pts[:, 1].min()))
     x2 = min(w, int(pts[:, 0].max()))
-    # Extend downward by half a fighter scale to include the shorts.
-    scale = get_fighter_scale(kp)
     y2 = min(h, int(pts[:, 1].max()) + int(scale * 0.5))
 
     if x2 <= x1 or y2 <= y1:
@@ -186,7 +234,19 @@ def _is_clean_frame(
     descriptors: list,  # [{track_id, net_red, tape_total, hist, hist_weight}, ...]
 ) -> bool:
     """A clean frame has exactly 2 detections, both with confident pose joints,
-    fighters well-separated, and sufficient tape pixels."""
+    fighters well-separated, and sufficient tape pixels.
+
+    The joint bar is the **core trunk** set (head + shoulders + hips), not the
+    full strike set. Those five joints are all this check and its callers
+    actually consume — the torso rectangle, the fighter scale and the torso
+    histogram are built from shoulders/hips alone, and tape presence is gated
+    separately below. Requiring all 15 strike joints instead demanded confident
+    knees and ankles, which a broadcast camera occludes constantly: it returned
+    ZERO clean frames across all 18,518 frames of NAZHANDvsSTAROPOLI, so the
+    appearance path never ran and every tracker identity swap went uncorrected.
+    This is the same relaxation `frame_validity` already makes, for the same
+    reason — see ai/CLAUDE.md "Frame validity".
+    """
     if len(dets) != 2 or len(descriptors) != 2:
         return False
 
@@ -194,7 +254,8 @@ def _is_clean_frame(
         kp = d.get("keypoints")
         if kp is None or len(kp) < 17:
             return False
-        if not all(kp[i][2] >= KEYPOINT_MIN_CONFIDENCE for i in STRIKE_KEYPOINT_INDICES):
+        if not all(kp[i][2] >= KEYPOINT_MIN_CONFIDENCE
+                   for i in STRIKING_CORE_KEYPOINT_INDICES):
             return False
 
     for desc in descriptors:
@@ -206,7 +267,15 @@ def _is_clean_frame(
     rect0 = get_torso_rectangle(kp0)
     rect1 = get_torso_rectangle(kp1)
     dist  = calculate_distance_between_fighters(rect0, rect1)
-    if dist < DISTANCE_GRAPPLING_THRESHOLD:
+    scale0 = get_fighter_scale(kp0)
+    scale1 = get_fighter_scale(kp1)
+    # The core joint set required above is exactly the shoulders/hips these
+    # three read, so they should never be None in practice — but they are all
+    # allowed to return None, so a clean frame must not be declared on an
+    # unusable distance rather than a genuinely close one.
+    if dist is None or scale0 is None or scale1 is None:
+        return False
+    if dist < DISTANCE_GRAPPLING_RATIO * (scale0 + scale1) / 2:
         return False
 
     return True
@@ -218,22 +287,31 @@ def _is_clean_frame(
 
 def _bootstrap_templates(
     clean_descriptors: dict[int, list],  # track_id → list of per-frame descriptors
-) -> dict | None:
+) -> tuple[dict, float] | str:
     """Build per-corner appearance templates from clean-frame descriptors.
 
-    Accumulates per-slot (0/1) net-red sum and weighted-mean hue histogram.
-    Assigns the red corner by net-red sign (same rule as the legacy path).
+    Accumulates per-slot (0/1) mean net-red *coverage* and weighted-mean hue
+    histogram. Assigns the red corner by net-red sign (same rule as the legacy
+    path).
 
-    Returns None when template separation is below CORNER_TEMPLATE_MIN_SEPARATION
-    (degenerate / indistinguishable colors) → caller must use legacy fallback.
+    Returns (templates, separation, detail) on success, or a short string naming
+    the reason the appearance path cannot be used → caller falls back to legacy.
+    The reason is returned rather than a bare None because the three failures
+    are not interchangeable: "no clean frames" points at the pose/joint gate,
+    "ambiguous tape" at the colour sampler, and "low separation" at genuinely
+    similar kit. The old code collapsed all three into None and the caller
+    then guessed, reporting "low separation margin" for fights that had in
+    fact failed the ambiguous-sign check.
     """
     templates = {}
     for slot in (0, 1):
         descs = clean_descriptors.get(slot, [])
         if not descs:
-            return None
+            return "no clean frames for slot %d" % slot
 
-        net_red_sum  = sum(d["net_red"] for d in descs)
+        # Mean coverage, not sum: clean frames are not equally framed, and a
+        # sum lets a handful of close-ups outvote the rest of the fight.
+        net_red_sum  = sum(d["net_red"] for d in descs) / len(descs)
         net_red_sign = 1 if net_red_sum >= 0 else -1
 
         # Weighted-mean hue histogram (weight = pixel count).
@@ -254,6 +332,7 @@ def _bootstrap_templates(
 
         templates[slot] = {
             "net_red_sign": net_red_sign,
+            "net_red_mean": net_red_sum,
             "hist":         mean_hist,
             "hist_weight":  weight_sum,
         }
@@ -262,16 +341,21 @@ def _bootstrap_templates(
     slot0_sign = templates[0]["net_red_sign"]
     slot1_sign = templates[1]["net_red_sign"]
     if slot0_sign == slot1_sign:
-        # Ambiguous tape; fall back.
-        return None
+        # Both fighters read the same colour — the sampler found nothing that
+        # distinguishes them, so there is no basis for a template.
+        return "ambiguous tape (both slots read %s)" % (
+            "red" if slot0_sign == 1 else "blue")
 
-    # Measure separation: net-red gap + histogram distance (both [0,1]).
-    net_red_counts = {
-        slot: sum(abs(d["net_red"]) for d in clean_descriptors[slot])
-        for slot in (0, 1)
-    }
-    total_abs = sum(net_red_counts.values()) or 1
-    net_red_gap = abs(net_red_counts[0] - net_red_counts[1]) / total_abs
+    # Measure separation: how far apart the two slots' mean net-red coverages
+    # actually are, saturating at CORNER_TAPE_SEPARATION_FULL, plus histogram
+    # distance. Both terms are in [0, 1] and larger means more distinguishable.
+    #
+    # This replaces a comparison of sum(abs(net_red)) between the slots, which
+    # measured magnitude rather than difference and was therefore inverted: a
+    # textbook red-vs-blue split scored 0.0 and got rejected, while a slot with
+    # essentially no evidence scored 0.49 and got accepted.
+    gap = abs(templates[0]["net_red_mean"] - templates[1]["net_red_mean"])
+    net_red_gap = min(1.0, gap / CORNER_TAPE_SEPARATION_FULL)
 
     hist_dist = 0.0
     h0, h1 = templates[0]["hist"], templates[1]["hist"]
@@ -281,13 +365,19 @@ def _bootstrap_templates(
     separation = 0.5 * net_red_gap + 0.5 * hist_dist
 
     if separation < CORNER_TEMPLATE_MIN_SEPARATION:
-        return None  # colors too similar — use legacy
+        return "low separation margin (%.3f < %.3f)" % (
+            separation, CORNER_TEMPLATE_MIN_SEPARATION)
+
+    # Kept for tuning: shows whether the tape term is actually discriminating
+    # or has saturated at CORNER_TAPE_SEPARATION_FULL and gone inert.
+    detail = (f"tape gap {gap:.4f} (→{net_red_gap:.2f} of "
+              f"{CORNER_TAPE_SEPARATION_FULL}) · hist dist {hist_dist:.3f}")
 
     # Annotate templates with which corner (0=red, 1=blue) they represent.
     for slot in (0, 1):
         templates[slot]["corner"] = 0 if templates[slot]["net_red_sign"] == 1 else 1
 
-    return templates, separation
+    return templates, separation, detail
 
 
 # ---------------------------------------------------------------------------
@@ -336,14 +426,19 @@ def _assign_frame_labels(
     frame_descs: list,          # list of per-detection dicts, indexed by detection order
     templates: dict,            # {slot: {corner, net_red_sign, hist, hist_weight}}
     slot_to_corner: dict,       # {track_id/slot: current corner label 0/1}
-    confirm_counters: dict,     # {track_id/slot: consecutive frames pending flip}
-    pending_flip: dict,         # {track_id/slot: candidate new label while confirming}
+    confirm_counters: dict,     # {_SWAP_KEY: consecutive frames pending the swap}
+    pending_flip: dict,         # {_SWAP_KEY: candidate mapping while confirming}
+    confirm_frames: int,        # CORNER_SWAP_CONFIRM_SECS converted to frames at the caller
 ) -> dict:
     """Assign corner labels (0=red, 1=blue) to each detection for this frame.
 
     Uses a 2-template cost matrix (normalized tape + histogram distance) with
-    hysteresis: flips are only committed after CORNER_SWAP_CONFIRM_FRAMES
-    consecutive frames of agreement.
+    hysteresis: flips are only committed after `confirm_frames` consecutive
+    frames of agreement.
+
+    `slot_to_corner` is a bijection and stays one — two slots, two corners.
+    Hysteresis therefore confirms the mapping as a whole rather than each slot
+    on its own; see the comment at the commit step.
 
     Returns updated slot_to_corner (may be same object mutated in place).
     """
@@ -372,44 +467,51 @@ def _assign_frame_labels(
             base_cost += CORNER_HYSTERESIS_WEIGHT
         return base_cost
 
-    if len(frame_descs) == 2:
+    if len(frame_descs) == 2 and frame_descs[0]["slot"] != frame_descs[1]["slot"]:
         d0, d1 = frame_descs[0], frame_descs[1]
         # Direct 2×2 bijective comparison — no scipy needed.
         cost_straight = _cost(d0, 0) + _cost(d1, 1)
         cost_swap     = _cost(d0, 1) + _cost(d1, 0)
 
         if cost_straight <= cost_swap:
-            raw_assign = {d0["slot"]: 0, d1["slot"]: 1}
+            candidate = {d0["slot"]: 0, d1["slot"]: 1}
         else:
-            raw_assign = {d0["slot"]: 1, d1["slot"]: 0}
+            candidate = {d0["slot"]: 1, d1["slot"]: 0}
 
     else:
-        # Single detection: assign to closest template.
-        d = frame_descs[0]
-        c0 = _cost(d, 0)
-        c1 = _cost(d, 1)
-        raw_assign = {d["slot"]: 0 if c0 <= c1 else 1}
+        # Single detection: assign to the closest template and give the absent
+        # slot the other corner. With two slots and two corners a proposal
+        # about one slot is equally a proposal about the other, so writing the
+        # complement keeps the mapping a bijection instead of letting the two
+        # slots drift onto the same corner while one of them is unobserved.
+        d      = frame_descs[0]
+        slot   = d["slot"]
+        corner = 0 if _cost(d, 0) <= _cost(d, 1) else 1
+        candidate = {slot: corner, 1 - slot: 1 - corner}
 
-    # Apply hysteresis: a flip must persist for CORNER_SWAP_CONFIRM_FRAMES frames.
-    for slot, proposed_corner in raw_assign.items():
-        current_corner = slot_to_corner.get(slot)
-        if proposed_corner == current_corner:
-            # No flip — reset any pending confirmation.
-            confirm_counters[slot] = 0
-            pending_flip[slot]     = None
+    # Apply hysteresis: a flip must persist for `confirm_frames` frames.
+    #
+    # The whole mapping is confirmed as ONE event. Confirming each slot on its
+    # own counter let one slot's flip commit while the other's was still
+    # pending, so for the frames in between both slots carried the same corner
+    # — the "duplicate corner ids" the invariant check at the end reports.
+    if candidate == slot_to_corner:
+        # No flip — reset any pending confirmation.
+        confirm_counters[_SWAP_KEY] = 0
+        pending_flip[_SWAP_KEY]     = None
+    else:
+        # Proposed flip.
+        if pending_flip.get(_SWAP_KEY) == candidate:
+            confirm_counters[_SWAP_KEY] += 1
         else:
-            # Proposed flip.
-            if pending_flip.get(slot) == proposed_corner:
-                confirm_counters[slot] += 1
-            else:
-                pending_flip[slot]     = proposed_corner
-                confirm_counters[slot] = 1
+            pending_flip[_SWAP_KEY]     = candidate
+            confirm_counters[_SWAP_KEY] = 1
 
-            if confirm_counters[slot] >= CORNER_SWAP_CONFIRM_FRAMES:
-                # Flip confirmed — commit.
-                slot_to_corner[slot]   = proposed_corner
-                confirm_counters[slot] = 0
-                pending_flip[slot]     = None
+        if confirm_counters[_SWAP_KEY] >= confirm_frames:
+            # Flip confirmed — commit both slots together.
+            slot_to_corner.update(candidate)
+            confirm_counters[_SWAP_KEY] = 0
+            pending_flip[_SWAP_KEY]     = None
 
     return slot_to_corner
 
@@ -419,19 +521,29 @@ def _assign_frame_labels(
 # ---------------------------------------------------------------------------
 
 def _legacy_global_corner_map(
-    red_scores: dict, blue_scores: dict, model_votes: dict
+    tape_votes: dict, model_votes: dict
 ) -> dict:
-    """Original tape-vote / model-class-vote logic.  Returns corner_map {0:x,1:y}."""
-    total_samples = sum(red_scores.values()) + sum(blue_scores.values())
+    """Whole-fight fallback: paired per-frame tape vote, then model-class vote.
+    Returns corner_map {0:x,1:y}.
 
-    if total_samples >= CORNER_MIN_TAPE_SAMPLES:
-        net = {t: red_scores[t] - blue_scores[t] for t in (0, 1)}
-        corner_map = {0: 0, 1: 1} if net[0] >= net[1] else {0: 1, 1: 0}
-        print(f"  Decision: tape vote → {corner_map}")
+    `tape_votes[slot]` counts frames in which that slot read *redder than the
+    other fighter in the same frame*. Comparing the two within a frame cancels
+    the lighting, exposure and skin baseline they share, and one vote per frame
+    stops close-ups from outweighing the rest of the fight — the previous
+    version summed raw red/blue pixel counts across the whole video and so
+    decided the corner on framing rather than colour.
+    """
+    total_votes = tape_votes[0] + tape_votes[1]
+
+    if total_votes >= CORNER_MIN_TAPE_VOTES:
+        corner_map = {0: 0, 1: 1} if tape_votes[0] >= tape_votes[1] else {0: 1, 1: 0}
+        margin = abs(tape_votes[0] - tape_votes[1]) / total_votes
+        print(f"  Decision: paired tape vote {tape_votes[0]}/{tape_votes[1]} "
+              f"(margin {margin:.0%}) → {corner_map}")
     else:
         print(
-            f"  WARNING: insufficient tape samples ({total_samples} < "
-            f"{CORNER_MIN_TAPE_SAMPLES}) — falling back to model class votes"
+            f"  WARNING: insufficient tape votes ({total_votes} < "
+            f"{CORNER_MIN_TAPE_VOTES}) — falling back to model class votes"
         )
         corner_map = {}
         for track_id in (0, 1):
@@ -482,6 +594,7 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
     data   = copy.deepcopy(pose_data)
     frames = data["frames"]
     total  = len(frames)
+    confirm_frames = max(1, round(pose_data.get("fps", 50.0) * CORNER_SWAP_CONFIRM_SECS))
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -495,7 +608,11 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
     # descriptor_cache[frame_idx] = list of per-detection dicts
     descriptor_cache: list[list[dict]] = []
 
-    # Legacy accumulators (kept alongside so legacy fallback is free)
+    # Legacy accumulators (kept alongside so legacy fallback is free).
+    # tape_votes counts frames in which a slot read redder than the *other*
+    # fighter in that same frame — see _legacy_global_corner_map. red/blue_px
+    # are diagnostics only; nothing decides on them.
+    tape_votes:  dict[int, int] = {0: 0, 1: 0}
     red_scores:  dict[int, int] = {0: 0, 1: 0}
     blue_scores: dict[int, int] = {0: 0, 1: 0}
     model_votes: dict[int, dict[int, int]] = {0: {0: 0, 1: 0}, 1: {0: 0, 1: 0}}
@@ -528,10 +645,9 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
 
                 kp = det.get("keypoints")
                 if not kp or len(kp) < 11:
-                    descriptor_cache.append([])
                     continue
 
-                red_px, blue_px = _sample_tape(frame_bgr, kp, frame_h, frame_w)
+                red_px, blue_px, area_px = _sample_tape(frame_bgr, kp, frame_h, frame_w)
                 red_scores[slot]  += red_px
                 blue_scores[slot] += blue_px
 
@@ -539,7 +655,10 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
 
                 desc = {
                     "slot":        slot,
-                    "net_red":     red_px - blue_px,
+                    # Coverage fraction of the sampled glove crop, not a raw
+                    # pixel count — comparable between fighters and between
+                    # frames regardless of how close the camera is.
+                    "net_red":     (red_px - blue_px) / area_px if area_px else 0.0,
                     "tape_total":  red_px + blue_px,
                     "hist":        hist,
                     "hist_weight": hist_weight,
@@ -548,6 +667,15 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
                 frame_descriptors.append(desc)
 
         descriptor_cache.append(frame_descriptors)
+
+        # Paired tape vote: both fighters seen in the same frame under the same
+        # light, so the difference between them is the part that carries colour.
+        if len(frame_descriptors) == 2:
+            d0, d1 = frame_descriptors
+            if (d0["slot"] != d1["slot"]
+                    and abs(d0["net_red"] - d1["net_red"]) >= CORNER_TAPE_VOTE_MIN_MARGIN):
+                redder = d0 if d0["net_red"] > d1["net_red"] else d1
+                tape_votes[redder["slot"]] += 1
 
         # Accumulate clean-frame descriptors for template bootstrap.
         if len(frame_descriptors) == 2:
@@ -565,6 +693,8 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
     print(f"Corner assignment — total tape pixels sampled: {total_tape}")
     print(f"  Track 0: red={red_scores[0]}  blue={blue_scores[0]}")
     print(f"  Track 1: red={red_scores[1]}  blue={blue_scores[1]}")
+    print(f"  Paired tape votes (redder-in-frame): "
+          f"slot0={tape_votes[0]}  slot1={tape_votes[1]}")
 
     clean_count = sum(len(v) for v in clean_descs.values())
     print(f"  Clean frames (per slot): slot0={len(clean_descs[0])}  "
@@ -573,17 +703,21 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
     # -----------------------------------------------------------------------
     # Attempt to bootstrap appearance templates
     # -----------------------------------------------------------------------
-    bootstrap_result = _bootstrap_templates(clean_descs) if clean_count > 0 else None
+    bootstrap_result = (
+        _bootstrap_templates(clean_descs) if clean_count > 0
+        else "insufficient clean frames"
+    )
 
-    use_appearance = bootstrap_result is not None
+    use_appearance = not isinstance(bootstrap_result, str)
     if use_appearance:
-        templates, separation = bootstrap_result
+        templates, separation, detail = bootstrap_result
         print(f"  Appearance templates built — separation margin: {separation:.3f}")
+        print(f"    {detail}")
         print(f"  Red corner template: slot "
               f"{next(s for s,t in templates.items() if t['corner']==0)}")
     else:
-        reason = "insufficient clean frames" if clean_count == 0 else "low separation margin"
-        print(f"  WARNING: appearance path skipped ({reason}) — using legacy fallback")
+        print(f"  WARNING: appearance path skipped ({bootstrap_result}) "
+              f"— using legacy fallback")
 
     # -----------------------------------------------------------------------
     # Pass 2: assign final corner labels
@@ -591,34 +725,40 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
     if use_appearance:
         # Initial labels: use templates' corner assignment as the starting state.
         slot_to_corner  = {s: templates[s]["corner"] for s in (0, 1)}
-        confirm_counters = {0: 0, 1: 0}
-        pending_flip     = {0: None, 1: None}
+        confirm_counters = {_SWAP_KEY: 0}
+        pending_flip     = {_SWAP_KEY: None}
         confirmed_swaps  = 0
-        prev_labels      = dict(slot_to_corner)
 
-        for frame_descs in descriptor_cache:
-            if not frame_descs:
-                continue
-
-            old_labels = dict(slot_to_corner)
-            _assign_frame_labels(
-                frame_descs, templates, slot_to_corner, confirm_counters, pending_flip
-            )
-
-            for desc in frame_descs:
-                slot = desc["slot"]
-                new_corner = slot_to_corner[slot]
-                if old_labels.get(slot) != new_corner:
+        # descriptor_cache is built one entry per frame in Pass 1, so it lines
+        # up with data["frames"] index-for-index.
+        for frame, frame_descs in zip(data["frames"], descriptor_cache):
+            if frame_descs:
+                old_labels = dict(slot_to_corner)
+                _assign_frame_labels(
+                    frame_descs, templates, slot_to_corner, confirm_counters,
+                    pending_flip, confirm_frames,
+                )
+                if slot_to_corner != old_labels:
                     confirmed_swaps += 1
-                desc["det_ref"]["class_id"] = new_corner
 
-            prev_labels = dict(slot_to_corner)
+            # Relabel EVERY fighter detection in the frame, not just the ones
+            # that produced a descriptor. A detection whose keypoints were
+            # unusable (occluded, low confidence) yields no descriptor, and
+            # leaving it alone left it carrying a raw tracker slot id while its
+            # opponent carried an appearance corner — the two then collide on
+            # the same value, which is the rest of the duplicate corner ids.
+            # Frames with no descriptors at all simply carry the last confirmed
+            # mapping forward, which is the best available estimate.
+            for det in frame.get("detections", []):
+                slot = det.get("class_id")
+                if slot in (0, 1):
+                    det["class_id"] = slot_to_corner[slot]
 
         print(f"  Appearance path: {confirmed_swaps} confirmed corner swap(s)")
 
     else:
         # Legacy: build static corner_map and apply uniformly.
-        corner_map = _legacy_global_corner_map(red_scores, blue_scores, model_votes)
+        corner_map = _legacy_global_corner_map(tape_votes, model_votes)
         swaps = 0
         for frame in data["frames"]:
             for det in frame.get("detections", []):

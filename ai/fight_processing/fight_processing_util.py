@@ -2,15 +2,15 @@ import numpy as np
 from collections import deque
 from models.constants import (
     LABEL_ID,
-    MIN_HIP_DROP_THRESHOLD,
+    MIN_HIP_DROP_RATIO,
     PUNCH_VELOCITY_RATIO,
     KICK_VELOCITY_RATIO,
     ARM_EXTENSION_THRESHOLD,
     PUNCH_BENT_ANGLE_MIN,
     PUNCH_BENT_ANGLE_MAX,
     LEG_EXTENSION_THRESHOLD,
-    STRIKE_COOLDOWN_FRAMES,
-    STRIKE_EXTENSION_FRAMES,
+    STRIKE_COOLDOWN_SECS,
+    STRIKE_EXTENSION_SECS,
     HEAD_CONTACT_RATIO,
     TORSO_CONTACT_RATIO,
     LEG_CONTACT_RATIO,
@@ -32,9 +32,9 @@ from models.constants import (
     ONE_EURO_D_CUTOFF,
     TORSO_VERTICAL_ANGLE_THRESHOLD,
     GROUND_VERTICAL_SPAN_RATIO,
-    MIN_GRAPPLING_THRESHOLD,
-    MIN_GROUND_THRESHOLD,
-    DISTANCE_GRAPPLING_THRESHOLD,
+    FIGHT_STATE_SMOOTHING_WINDOW_SECS,
+    FIGHT_STATE_MIN_DWELL_SECS,
+    DISTANCE_GRAPPLING_RATIO,
     GRAPPLING_MIN_VISIBLE_KEYPOINTS,
 )
 from models.FightState import FightState, GRAPPLING_STATES
@@ -219,14 +219,20 @@ def get_hip_height(keypoints):
 
 def is_fighter_grounded(keypoints):
     """Returns True when a fighter's pose reads as on the canvas rather than
-    standing. Two scale-invariant signals, OR'd so either one is sufficient:
+    standing. Two signals; the second is only used when it's actually usable:
 
       1. Torso tilt — angle of the shoulder-midpoint → hip-midpoint vector away
          from the vertical axis. ~0° standing, ~90° lying. Robust on a side-on
-         broadcast view.
+         broadcast view. Scale-invariant (an angle, not a distance) so no
+         confidence gate is needed beyond what shoulders/hips already get
+         elsewhere in the pipeline.
       2. Vertical compression — head→ankle y-extent divided by fighter scale.
-         Collapses when the body is horizontal; backup for when the torso angle
-         is ambiguous (e.g. a more overhead camera).
+         Backup for when the torso angle is ambiguous (e.g. a more overhead
+         camera) — but ankles are routinely occluded in a standing clinch, and
+         a hallucinated ankle lands near the hips, collapsing this ratio and
+         misreading GROUNDED while standing. Dropped entirely (not
+         defaulted to False by a fake coordinate) unless nose + both ankles
+         are confident and a scale is available.
     """
     shoulder_mid = np.array([(keypoints[5][0] + keypoints[6][0]) / 2,
                              (keypoints[5][1] + keypoints[6][1]) / 2])
@@ -236,14 +242,21 @@ def is_fighter_grounded(keypoints):
     torso_vec = hip_mid - shoulder_mid
     # Angle from the vertical axis (0,1): 0° upright, 90° horizontal.
     torso_angle = np.degrees(np.arctan2(abs(torso_vec[0]), abs(torso_vec[1]) + 1e-6))
+    if torso_angle > TORSO_VERTICAL_ANGLE_THRESHOLD:
+        return True
 
-    # Vertical span across head and ankles, normalised by body scale.
+    scale = get_fighter_scale(keypoints)
+    ankles_confident = all(
+        len(keypoints[i]) > 2 and keypoints[i][2] >= KEYPOINT_MIN_CONFIDENCE
+        for i in (0, 15, 16)
+    )
+    if scale is None or not ankles_confident:
+        return False
+
     ys = [keypoints[0][1], keypoints[15][1], keypoints[16][1]]
     vertical_span = max(ys) - min(ys)
-    span_ratio = vertical_span / get_fighter_scale(keypoints)
-
-    return (torso_angle > TORSO_VERTICAL_ANGLE_THRESHOLD or
-            span_ratio < GROUND_VERTICAL_SPAN_RATIO)
+    span_ratio = vertical_span / scale
+    return span_ratio < GROUND_VERTICAL_SPAN_RATIO
 
 
 def determine_takedown_initiator(hip_history):
@@ -252,8 +265,9 @@ def determine_takedown_initiator(hip_history):
     over the buffered frames leading up to grappling state entry.
 
     Args:
-        hip_history: deque of dicts with keys 'red' and 'blue', each a hip y-coordinate.
-                     Most recent frame is last.
+        hip_history: deque of dicts with keys 'red'/'blue' (hip y-coordinate)
+                     and 'red_scale'/'blue_scale' (get_fighter_scale at that
+                     frame, possibly None). Most recent frame is last.
 
     Returns:
         'fighter_red', 'fighter_blue', or None if inconclusive.
@@ -267,10 +281,20 @@ def determine_takedown_initiator(hip_history):
     red_drop = newest["red"] - oldest["red"]   # positive = hips moved down (being taken down)
     blue_drop = newest["blue"] - oldest["blue"]
 
+    # MIN_HIP_DROP_RATIO is a fraction of fighter scale, not an absolute pixel
+    # count — average whatever confident scale readings are available at the
+    # two endpoints; fall back to 1.0 (degrading to the old absolute-pixel
+    # behaviour) only if none are usable, which is rare enough not to be
+    # worth discarding the whole comparison over.
+    scales = [s for s in (oldest.get("red_scale"), oldest.get("blue_scale"),
+                          newest.get("red_scale"), newest.get("blue_scale")) if s]
+    scale = sum(scales) / len(scales) if scales else 1.0
+    min_hip_drop = MIN_HIP_DROP_RATIO * scale
+
     # The fighter with the larger hip drop is the one being taken down — the other initiated
-    if red_drop - blue_drop > MIN_HIP_DROP_THRESHOLD:
+    if red_drop - blue_drop > min_hip_drop:
         return "fighter_blue"  # red was taken down, blue initiated
-    elif blue_drop - red_drop > MIN_HIP_DROP_THRESHOLD:
+    elif blue_drop - red_drop > min_hip_drop:
         return "fighter_red"   # blue was taken down, red initiated
 
     return None  # inconclusive — could be a clinch or both dropped
@@ -292,11 +316,16 @@ def get_head_center(keypoints):
     if pts:
         return np.array(pts).mean(axis=0)
 
-    # No confident head joint — estimate from the shoulder line.
+    # No confident head joint — estimate from the shoulder line. This is
+    # already a last-resort fallback operating on whatever shoulder
+    # coordinates exist regardless of their own confidence, so a missing
+    # scale (shoulders too unconfident to trust) falls back to the same 10px
+    # floor get_fighter_scale itself uses, rather than crashing.
     shoulder_mid = np.array([(keypoints[5][0] + keypoints[6][0]) / 2,
                              (keypoints[5][1] + keypoints[6][1]) / 2])
+    scale = get_fighter_scale(keypoints) or 10.0
     # Image y increases downward, so the head is above (smaller y) the shoulders.
-    return shoulder_mid - np.array([0.0, HEAD_ABOVE_SHOULDER_RATIO * get_fighter_scale(keypoints)])
+    return shoulder_mid - np.array([0.0, HEAD_ABOVE_SHOULDER_RATIO * scale])
 
 
 def get_head_radius(keypoints, scale):
@@ -417,10 +446,20 @@ def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state, fps
     red_scale  = get_fighter_scale(red_kp)
     blue_scale = get_fighter_scale(blue_kp)
 
+    if red_scale is None or blue_scale is None:
+        # Neither fighter's scale is safe to normalise against this frame —
+        # get_fighter_scale is the denominator of every threshold below, so a
+        # missing one must skip the frame rather than fall back to a
+        # hallucinated value that would silently rescale every check. See
+        # plan Stage 1 step 2.
+        return strikes
+
     # Max age (frames) of a per-limb velocity baseline before it is considered
     # stale and reset — keeps velocity meaningful when a limb has been occluded
     # for a long stretch. ~0.3 s of motion.
     max_base_gap = max(1, round(fps * 0.3))
+    strike_cooldown_frames = max(1, round(fps * STRIKE_COOLDOWN_SECS))
+    strike_extension_frames = max(1, round(fps * STRIKE_EXTENSION_SECS))
 
     checks = [
         # attacker label, attacker kp, attacker torso centre, attacker scale,
@@ -508,7 +547,7 @@ def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state, fps
                 state["extension_frames"] = 0
                 continue
 
-            if state["extension_frames"] < STRIKE_EXTENSION_FRAMES:
+            if state["extension_frames"] < strike_extension_frames:
                 continue
 
             # Contact check: distances normalised by defender scale.
@@ -604,39 +643,59 @@ def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state, fps
                     "type":     strike_type,
                     "defender": "fighter_blue" if fighter_label == "fighter_red" else "fighter_red",
                 })
-                state["cooldown"] = STRIKE_COOLDOWN_FRAMES
+                state["cooldown"] = strike_cooldown_frames
                 state["extension_frames"] = 0
 
     return strikes
 
 
-def determine_fight_state(detections, counters, current_fight_state):
+def determine_fight_state(detections, state, current_fight_state, fps):
     """
     Classifies the current fight state into STRIKING, CLINCH, or GROUND.
 
     Two axes:
-      * Proximity — torso-rectangle distance between fighters. At/above
-        DISTANCE_GRAPPLING_THRESHOLD the candidate is STRIKING; below it the
-        fighters are entangled (clinch or ground).
+      * Proximity — torso-rectangle distance between fighters, normalised by
+        fighter scale. At/above DISTANCE_GRAPPLING_RATIO the candidate is
+        STRIKING; below it the fighters are entangled (clinch or ground).
+        When the distance or either fighter's scale is unusable this frame
+        (unconfident keypoints), no candidate is read at all — an unknown
+        distance must not silently read as "far apart, therefore STRIKING".
       * Posture — when entangled, GROUND if *either* fighter reads as grounded
         (knockdown, sprawl, scramble), otherwise CLINCH (standing grapple).
 
-    Per-candidate consecutive-frame counters provide hysteresis: a candidate
-    must hold for its minimum frame count before the state transitions. STRIKING
-    and CLINCH use MIN_GRAPPLING_THRESHOLD; GROUND uses the slower
-    MIN_GROUND_THRESHOLD.
+    Temporal smoothing (two stages, replacing the old 3-/5-consecutive-frame
+    counters — 0.06-0.1s at 50fps was no real hysteresis at all):
+      1. A majority vote over a FIGHT_STATE_SMOOTHING_WINDOW_SECS rolling
+         window of raw per-frame candidates — the categorical equivalent of a
+         median filter (there's no numeric ordering to smooth a median over
+         across three state names).
+      2. The smoothed candidate only becomes the live state once it differs
+         from the current state AND at least FIGHT_STATE_MIN_DWELL_SECS has
+         passed since the last transition.
 
     Args:
         detections:          List of detected fighters with keypoints.
-        counters:            Dict {"striking": int, "clinch": int, "ground": int}
-                             of consecutive-frame counts (mutated and returned).
+        state:                Dict {"window": deque, "since_transition": int},
+                             mutated and returned. Callers should initialise
+                             with {} — the deque is (re)built on first use so
+                             it always matches the current fps.
         current_fight_state: The state carried over from the previous frame.
+        fps:                 Video frame rate, for converting the smoothing/
+                             dwell windows from seconds to frames.
 
     Returns:
-        tuple: (current_fight_state, counters)
+        tuple: (current_fight_state, state)
     """
-    red_fighter_keypoints, blue_fighter_keypoints = None, None
+    window_frames = max(1, round(fps * FIGHT_STATE_SMOOTHING_WINDOW_SECS))
+    min_dwell_frames = max(1, round(fps * FIGHT_STATE_MIN_DWELL_SECS))
 
+    if state.get("window") is None or state["window"].maxlen != window_frames:
+        state["window"] = deque(maxlen=window_frames)
+        # Allow a transition immediately once the window has real signal,
+        # rather than forcing a full dwell wait from a cold start.
+        state["since_transition"] = min_dwell_frames
+
+    red_fighter_keypoints, blue_fighter_keypoints = None, None
     for detection in detections:
         if detection["class_id"] == LABEL_ID["fighter_red"]:
             red_fighter_keypoints = detection["keypoints"]
@@ -645,29 +704,41 @@ def determine_fight_state(detections, counters, current_fight_state):
 
     candidate = None
     if red_fighter_keypoints is not None and blue_fighter_keypoints is not None:
-        red_torso = get_torso_rectangle(red_fighter_keypoints)
+        red_torso  = get_torso_rectangle(red_fighter_keypoints)
         blue_torso = get_torso_rectangle(blue_fighter_keypoints)
-        distance_between_fighters = calculate_distance_between_fighters(red_torso, blue_torso)
+        red_scale  = get_fighter_scale(red_fighter_keypoints)
+        blue_scale = get_fighter_scale(blue_fighter_keypoints)
+        distance   = calculate_distance_between_fighters(red_torso, blue_torso)
 
-        if distance_between_fighters >= DISTANCE_GRAPPLING_THRESHOLD:
-            candidate = "striking"
-        elif (is_fighter_grounded(red_fighter_keypoints) or
-              is_fighter_grounded(blue_fighter_keypoints)):
-            candidate = "ground"
-        else:
-            candidate = "clinch"
+        if distance is not None and red_scale is not None and blue_scale is not None:
+            avg_scale = (red_scale + blue_scale) / 2
+            if distance >= DISTANCE_GRAPPLING_RATIO * avg_scale:
+                candidate = "striking"
+            elif (is_fighter_grounded(red_fighter_keypoints) or
+                  is_fighter_grounded(blue_fighter_keypoints)):
+                candidate = "ground"
+            else:
+                candidate = "clinch"
+        # else: unusable this frame — candidate stays None, contributing no
+        # vote rather than a garbage one.
 
-    # Bump the active candidate, reset the others. If neither fighter is present
-    # (candidate is None) leave all counters unchanged and hold the prior state.
     if candidate is not None:
-        for key in counters:
-            counters[key] = counters[key] + 1 if key == candidate else 0
+        state["window"].append(candidate)
+    state["since_transition"] += 1
 
-    if counters["ground"] >= MIN_GROUND_THRESHOLD:
-        current_fight_state = FightState.GROUND
-    elif counters["clinch"] >= MIN_GRAPPLING_THRESHOLD:
-        current_fight_state = FightState.CLINCH
-    elif counters["striking"] >= MIN_GRAPPLING_THRESHOLD:
-        current_fight_state = FightState.STRIKING
+    if state["window"]:
+        counts: dict[str, int] = {}
+        for c in state["window"]:
+            counts[c] = counts.get(c, 0) + 1
+        smoothed = max(counts, key=counts.get)
+        target_state = {
+            "striking": FightState.STRIKING,
+            "clinch":   FightState.CLINCH,
+            "ground":   FightState.GROUND,
+        }[smoothed]
 
-    return current_fight_state, counters
+        if target_state != current_fight_state and state["since_transition"] >= min_dwell_frames:
+            current_fight_state = target_state
+            state["since_transition"] = 0
+
+    return current_fight_state, state

@@ -105,6 +105,12 @@ class Strike:
 
 
 @dataclass
+class Takedown:
+    frame: int
+    fighter: str          # red | blue — the fighter who landed it
+
+
+@dataclass
 class Span:
     start: int
     end: int
@@ -144,6 +150,20 @@ class FightLabels:
     excluded: list[Excluded] = field(default_factory=list)
     states: list[StateSpan] = field(default_factory=list)
     strikes: list[Strike] = field(default_factory=list)
+    # Labeller-marked "red/blue are flipped here" stretches (see 0a/0d in the
+    # plan) — corner_assignment's known failure mode. Applied at export time
+    # when joining labels to fighter_frames.keypoints for training (Stage 2);
+    # fighter_frames itself is never mutated, so this is the only record of
+    # the correction.
+    corner_swaps: list[Span] = field(default_factory=list)
+    # Landed takedowns only (`takedown_landed` in the palette) — `fighter` is
+    # unambiguous (the one who landed it). `takedown_attempt`/`_defended` are
+    # NOT captured here: `takedown_defended` logs the *defender* as `fighter`,
+    # not the attacker, so unifying all three into one outcome-tagged list
+    # needs its own design decision, not made here. Not yet scored against
+    # the pipeline's `takedown_initiated` predictions — captured so the data
+    # isn't silently dropped, scoring is a follow-up.
+    takedowns: list[Takedown] = field(default_factory=list)
 
     # -- exclusion / round helpers ----------------------------------------
 
@@ -189,20 +209,34 @@ class FightLabels:
             excluded=[Excluded(**e) for e in raw.get("excluded", [])],
             states=[StateSpan(**s) for s in raw.get("states", [])],
             strikes=[Strike(**s) for s in raw.get("strikes", [])],
+            corner_swaps=[Span(**c) for c in raw.get("corner_swaps", [])],
+            takedowns=[Takedown(**t) for t in raw.get("takedowns", [])],
         )
         labels.validate()
         return labels
 
     @classmethod
     def for_video(cls, video: str | Path) -> "FightLabels":
-        """Load the label file matching a video path by its stem."""
+        """Load the primary label file matching a video path by its stem."""
         path = LABELS_DIR / f"{Path(video).stem}.json"
         if not path.exists():
             raise FileNotFoundError(
-                f"No label file at {path}. Create one with:\n"
-                f"  python -m eval.cli label {video}"
+                f"No label file at {path}. Label the fight in the Annotate "
+                f"page, finish labeling, then create one with:\n"
+                f"  python -m eval.cli export {video}"
             )
         return cls.load(path)
+
+    @classmethod
+    def passes_for_video(cls, video: str | Path) -> list["FightLabels"]:
+        """Every label file for a video: the primary `labels/<stem>.json` plus
+        any `labels/<stem>.<labeler>.json` second passes (see plan 0e —
+        double-labelling one round to measure an agreement ceiling)."""
+        stem = Path(video).stem
+        primary = LABELS_DIR / f"{stem}.json"
+        extra = sorted(p for p in LABELS_DIR.glob(f"{stem}.*.json"))
+        paths = ([primary] if primary.exists() else []) + extra
+        return [cls.load(p) for p in paths]
 
     def save(self, path: str | Path | None = None) -> Path:
         path = Path(path) if path else LABELS_DIR / f"{Path(self.video).stem}.json"
@@ -211,6 +245,7 @@ class FightLabels:
         self.states.sort(key=lambda s: s.start)
         self.rounds.sort(key=lambda r: r.start)
         self.excluded.sort(key=lambda e: e.start)
+        self.takedowns.sort(key=lambda t: t.frame)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(asdict(self), f, indent=2)
         return path
@@ -233,6 +268,12 @@ class FightLabels:
             if s.target not in TARGETS:
                 errs.append(f"strikes[{i}]: target {s.target!r} not in {TARGETS}")
 
+        for i, t in enumerate(self.takedowns):
+            if t.frame < 1:
+                errs.append(f"takedowns[{i}]: frame {t.frame} is not 1-based")
+            if t.fighter not in FIGHTERS:
+                errs.append(f"takedowns[{i}]: fighter {t.fighter!r} not in {FIGHTERS}")
+
         for i, s in enumerate(self.states):
             if s.state not in STATES:
                 errs.append(f"states[{i}]: state {s.state!r} not in {STATES}")
@@ -250,6 +291,10 @@ class FightLabels:
         for i, r in enumerate(self.rounds):
             if r.end < r.start:
                 errs.append(f"rounds[{i}]: end {r.end} before start {r.start}")
+
+        for i, c in enumerate(self.corner_swaps):
+            if c.end < c.start:
+                errs.append(f"corner_swaps[{i}]: end {c.end} before start {c.start}")
 
         if errs:
             raise LabelError(
@@ -271,6 +316,6 @@ class FightLabels:
             f"{self.video}: {len(self.strikes)} strikes ({landed} landed) over "
             f"{mins:.1f} min of scored footage\n"
             f"  rounds={len(self.rounds)} state_spans={len(self.states)} "
-            f"excluded={len(self.excluded)}\n"
+            f"excluded={len(self.excluded)} takedowns={len(self.takedowns)}\n"
             f"  families: {fam or '(none)'}"
         )

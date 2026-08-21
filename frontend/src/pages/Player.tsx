@@ -6,6 +6,8 @@ import { useFighterFrames } from '../hooks/useFighterFrames';
 import { useRounds } from '../hooks/useRounds';
 import { useWindowWidth } from '../hooks/useWindowWidth';
 import { isFightViewable } from '../types/Fight';
+import { deleteFight } from '../services/api';
+import ConfirmDialog from '../components/ConfirmDialog';
 import VideoPlayer from '../components/VideoPlayer';
 import VideoControls from '../components/VideoControls';
 import FrameInfo from '../components/FrameInfo';
@@ -30,6 +32,9 @@ export default function Player() {
   const [duration, setDuration] = useState(0);
   const [showBoxes, setShowBoxes] = useState(true);
   const [showSkeletons, setShowSkeletons] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const { fights } = useFights();
   const selectedFight = fights.find(f => f.id === fightId) ?? null;
@@ -101,6 +106,28 @@ export default function Player() {
     video.currentTime = time;
     setCurrentTime(time);
     overlayRef.current?.draw(Math.floor(time * fpsRef.current) + 1);
+  };
+
+  const fightName = selectedFight
+    ? selectedFight.video_path.split('/').pop()?.replace(/\.[^/.]+$/, '') ?? ''
+    : '';
+
+  const handleDelete = async () => {
+    if (fightId === null) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      // The DELETE unlinks the file this <video> is streaming — stop playback
+      // (and the requestVideoFrameCallback loop) before pulling it out from under us.
+      videoRef.current?.pause();
+      setIsPlaying(false);
+      await deleteFight(fightId);
+      // replace: Back must not return to a now-dead /fights/{id}.
+      navigate('/', { replace: true });
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete fight');
+      setDeleting(false);
+    }
   };
 
   const currentRound =
@@ -175,10 +202,44 @@ export default function Player() {
         </button>
         {selectedFight && (
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {selectedFight.video_path.split('/').pop()?.replace(/\.[^/.]+$/, '')}
+            {fightName}
           </span>
         )}
+        {selectedFight && (
+          <button
+            onClick={() => { setDeleteError(null); setConfirmDelete(true); }}
+            title="Delete this fight"
+            style={{
+              marginLeft: 'auto', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: narrow ? '6px 8px' : '6px 12px', borderRadius: 8,
+              border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)',
+              color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
+            {!narrow && 'Delete'}
+          </button>
+        )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="DELETE FIGHT?"
+        message={
+          <>
+            <strong style={{ color: 'var(--text-primary)' }}>{fightName}</strong> will be permanently
+            deleted — the source video file, all pipeline predictions, hand labels, rounds, and
+            tracked fighter frames. This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete fight"
+        confirmIcon="delete_forever"
+        danger
+        busy={deleting}
+        error={deleteError}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={handleDelete}
+      />
 
       {/* TOP GRID: video | live feed */}
       <div style={{

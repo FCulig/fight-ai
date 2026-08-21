@@ -10,16 +10,20 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from app.models.fight import FightResponse
 from app.models.fighter_frame import FighterFrameResponse
-from app.models.fight_event import FightEventCreate, FightEventResponse
+from app.models.fight_event import FightEventResponse
+from app.models.label_event import LabelEventCreate, LabelEventResponse
+from app.models.label_span import LabelSpanCreate, LabelSpanResponse, LabelSpanUpdate
 from app.models.round import RoundResponse
 from app.services import (
     event_service,
     fight_service,
     fighter_frame_service,
     fighter_service,
+    label_event_service,
+    label_span_service,
     round_service,
 )
-from app.services.pipeline_runner import extract_video_meta, run_pipeline_async, terminate_pipeline
+from app.services.pipeline_runner import extract_video_meta, run_validation_async, terminate_pipeline
 from app.utils.fight_state_listener import register_queue, unregister_queue
 
 router = APIRouter()
@@ -171,7 +175,7 @@ async def upload_fight(
             raise HTTPException(status_code=409, detail="A fight with this video already exists")
         raise
 
-    pid = run_pipeline_async(relative_path, skip_events=(mode == "manual"))
+    pid = run_validation_async(relative_path, fight.id, skip_events=(mode == "manual"))
     fight_service.set_fight_pid(fight.id, pid)
 
     return fight
@@ -197,26 +201,67 @@ def get_fight_events(
     return event_service.get_events_by_fight(fight_id, fighter_id, action, success)
 
 
-@router.post("/{fight_id}/events/", response_model=FightEventResponse, status_code=201)
-def create_fight_event(fight_id: int, payload: FightEventCreate):
+@router.get("/{fight_id}/label-events/", response_model=List[LabelEventResponse])
+def get_label_events(fight_id: int):
+    return label_event_service.get_label_events(fight_id)
+
+
+@router.post("/{fight_id}/label-events/", response_model=LabelEventResponse, status_code=201)
+def create_label_event(fight_id: int, payload: LabelEventCreate):
     fight = fight_service.get_fight_by_id(fight_id)
     if fight is None:
         raise HTTPException(status_code=404, detail="Fight not found")
-    if (
-        payload.fighter_id is not None
-        and payload.fighter_id != fight.red_fighter_id
-        and payload.fighter_id != fight.blue_fighter_id
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="fighter_id must be one of this fight's assigned corners",
-        )
-    return event_service.create_event(fight_id, payload)
+    if payload.corner is not None and payload.corner not in (0, 1):
+        raise HTTPException(status_code=400, detail="corner must be 0 (red) or 1 (blue)")
+    return label_event_service.create_label_event(fight_id, payload)
+
+
+@router.delete("/{fight_id}/label-events/{event_id}", status_code=204)
+def delete_label_event(fight_id: int, event_id: int):
+    deleted = label_event_service.delete_label_event(fight_id, event_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Label event not found")
+    return Response(status_code=204)
+
+
+@router.get("/{fight_id}/label-spans/", response_model=List[LabelSpanResponse])
+def get_label_spans(fight_id: int):
+    return label_span_service.get_label_spans(fight_id)
+
+
+@router.post("/{fight_id}/label-spans/", response_model=LabelSpanResponse, status_code=201)
+def create_label_span(fight_id: int, payload: LabelSpanCreate):
+    fight = fight_service.get_fight_by_id(fight_id)
+    if fight is None:
+        raise HTTPException(status_code=404, detail="Fight not found")
+    from app.models.label_span import SPAN_KINDS
+    if payload.kind not in SPAN_KINDS:
+        raise HTTPException(status_code=400, detail=f"kind must be one of {SPAN_KINDS}")
+    return label_span_service.create_label_span(fight_id, payload)
+
+
+@router.put("/{fight_id}/label-spans/{span_id}", response_model=LabelSpanResponse)
+def update_label_span(fight_id: int, span_id: int, payload: LabelSpanUpdate):
+    span = label_span_service.update_label_span(fight_id, span_id, payload)
+    if span is None:
+        raise HTTPException(status_code=404, detail="Label span not found")
+    return span
+
+
+@router.delete("/{fight_id}/label-spans/{span_id}", status_code=204)
+def delete_label_span(fight_id: int, span_id: int):
+    deleted = label_span_service.delete_label_span(fight_id, span_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Label span not found")
+    return Response(status_code=204)
 
 
 @router.post("/{fight_id}/finish-labeling", response_model=FightResponse)
 def finish_labeling(fight_id: int):
-    fight = fight_service.finish_labeling(fight_id)
+    try:
+        fight = fight_service.finish_labeling(fight_id)
+    except fight_service.NotFullyAnnotated as e:
+        raise HTTPException(status_code=409, detail=str(e))
     if fight is None:
         raise HTTPException(
             status_code=409,

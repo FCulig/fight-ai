@@ -4,11 +4,10 @@ PostgreSQL is the pipeline's only data store, so predictions are read straight
 from ``fight_events`` / ``rounds`` — the harness scores exactly what the
 pipeline persisted, not a re-derived copy.
 
-Note on state events: the pipeline records fight-state transitions only in the
-free-text ``description`` column (``action`` is NULL for a STRIKING transition
-and ``clinch_initiated`` / ``takedown_initiated`` otherwise), so the state has
-to be recovered by regex. That is fragile — ``fight_events`` should grow a
-structured ``state`` column. Until it does, this parser is the contract.
+Note on state events: ``fight_events.state`` is the structured source of
+truth for a STRIKING/CLINCH/GROUND transition row. The free-text regex over
+``description`` is kept only as a fallback for rows written before that
+column existed — the pipeline itself always fills it in now.
 """
 
 import re
@@ -69,7 +68,7 @@ class Predictions:
         return any(r.start <= frame <= r.end for r in self.rounds)
 
 
-def _lookup_fight(db, video: str) -> tuple[int, str, int, int]:
+def lookup_fight(db, video: str) -> tuple[int, str, int, int]:
     """Resolve a video path/name to its fights row.
 
     Matches on the exact ``video_path`` first, then falls back to a filename
@@ -108,7 +107,7 @@ def load_predictions(video: str) -> Predictions:
     """Read every persisted event for a video and map it into the label taxonomy."""
     db = SessionLocal()
     try:
-        fight_id, video_path, fps, _ = _lookup_fight(db, video)
+        fight_id, video_path, fps, _ = lookup_fight(db, video)
 
         preds = Predictions(fight_id=fight_id, video=video_path, fps=fps)
 
@@ -122,7 +121,7 @@ def load_predictions(video: str) -> Predictions:
             )
 
         rows = db.execute(
-            text("SELECT frame, description, action, success FROM fight_events "
+            text("SELECT frame, description, action, success, state FROM fight_events "
                  "WHERE fight_id = :fid ORDER BY frame, id"),
             {"fid": fight_id},
         ).all()
@@ -145,6 +144,12 @@ def load_predictions(video: str) -> Predictions:
                 ))
                 continue
 
+            if row.state:
+                preds.state_changes.append(StateChange(frame=row.frame, state=row.state))
+                continue
+
+            # Fallback for rows written before the structured `state` column
+            # existed.
             m = _STATE_RE.search(desc)
             if m:
                 preds.state_changes.append(StateChange(frame=row.frame, state=m.group(1)))

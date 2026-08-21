@@ -1,0 +1,127 @@
+{
+  "video": "fight_videos/MILIDRAGOVICvsMOOSMAN.mp4",
+  "fps": 50,
+  "frame_count": 9489,
+  "labeler": "",
+  "labeled_at": "2026-08-15 19:07:42.205158",
+  "notes": "",
+  "rounds": [
+    {
+      "start": 932,
+      "end": 9489,
+      "round": 1
+    }
+  ],
+  "excluded": [
+    {
+      "start": 4324,
+      "end": 9489,
+      "reason": "post fight_end"
+    }
+  ],
+  "states": [
+    {
+      "start": 923,
+      "end": 1794,
+      "state": "STRIKING"
+    },
+    {
+      "start": 1795,
+      "end": 9489,
+      "state": "GROUND"
+    }
+  ],
+  "strikes": [
+    {
+      "frame": 1150,
+      "fighter": "blue",
+      "family": "jab",
+      "target": "head",
+      "landed": null
+    },
+    {
+      "frame": 1168,
+      "fighter": "red",
+      "family": "cross",
+      "target": "head",
+      "landed": null
+    },
+    {
+      "frame": 1333,
+      "fighter": "blue",
+      "family": "kick",
+      "target": "head",
+      "landed": null
+    },
+    {
+      "frame": 1403,
+      "fighter": "red",
+      "family": "kick",
+      "target": "body",
+      "landed": null
+    },
+    {
+      "frame": 1407,
+      "fighter": "blue",
+      "family": "jab",
+      "target": "head",
+      "landed": null
+    },
+    {
+      "frame": 1417,
+      "fighter": "red",
+      "family": "jab",
+      "target": "head",
+      "landed": null
+    },
+    {
+      "frame": 1427,
+      "fighter": "blue",
+      "family": "hook",
+      "target": "head",
+      "landed": null
+    },
+    {
+      "frame": 1494,
+      "fighter": "blue",
+      "family": "jab",
+      "target": "head",
+      "landed": null
+    },
+    {
+      "frame": 1882,
+      "fighter": "red",
+      "family": "punch",
+      "target": "unknown",
+      "landed": null
+    },
+    {
+      "frame": 1943,
+      "fighter": "red",
+      "family": "punch",
+      "target": "unknown",
+      "landed": null
+    },
+    {
+      "frame": 2787,
+      "fighter": "red",
+      "family": "punch",
+      "target": "unknown",
+      "landed": null
+    },
+    {
+      "frame": 2854,
+      "fighter": "red",
+      "family": "punch",
+      "target": "unknown",
+      "landed": null
+    }
+  ],
+  "corner_swaps": [],
+  "takedowns": [
+    {
+      "frame": 1784,
+      "fighter": "red"
+    }
+  ]
+}

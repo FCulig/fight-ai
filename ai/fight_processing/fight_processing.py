@@ -20,8 +20,8 @@ from fight_processing.fight_processing_util import (
 
 from models.FightState import FightState, GRAPPLING_STATES
 from models.constants import (
-    TAKEDOWN_LOOKBACK_FRAMES,
-    RECOIL_LOOKAHEAD_FRAMES,
+    TAKEDOWN_LOOKBACK_SECS,
+    RECOIL_LOOKAHEAD_SECS,
     RECOIL_VELOCITY_RATIO,
     HEAD_CONTACT_RATIO,
     TORSO_CONTACT_RATIO,
@@ -39,12 +39,13 @@ def _insert_event(
     action: Optional[str] = None,
     fighter_id: Optional[int] = None,
     success: Optional[bool] = None,
+    state: Optional[str] = None,
 ) -> None:
     db.execute(
         text(
             "INSERT INTO fight_events "
-            "(frame, description, fight_id, action, fighter_id, success) "
-            "VALUES (:frame, :description, :fight_id, :action, :fighter_id, :success)"
+            "(frame, description, fight_id, action, fighter_id, success, state) "
+            "VALUES (:frame, :description, :fight_id, :action, :fighter_id, :success, :state)"
         ),
         {
             "frame": frame,
@@ -53,6 +54,7 @@ def _insert_event(
             "action": action,
             "fighter_id": fighter_id,
             "success": success,
+            "state": state,
         },
     )
 
@@ -92,15 +94,18 @@ def _print_standing_punch_diag(validity_counts, striking_eval_frames, diag,
               f"one_det={missing_detcount['one_det']} "
               f"zero_dets={missing_detcount['zero_dets']}")
     if striking_both_visible:
-        sbv_full = striking_both_visible["full"]
-        sbv_low  = striking_both_visible["low_joints"]
-        sbv_tot  = sbv_full + sbv_low
+        sbv_full    = striking_both_visible["full"]
+        sbv_partial = striking_both_visible["partial"]
+        sbv_invalid = striking_both_visible["invalid"]
+        sbv_tot     = sbv_full + sbv_partial + sbv_invalid
         print(f"STRIKING + both fighters visible: {sbv_tot} frames "
-              f"(FULL/ran detection={sbv_full}, "
-              f"low-joints/dropped={sbv_low})")
+              f"(FULL={sbv_full}, PARTIAL/relaxed-bar={sbv_partial}, "
+              f"INVALID/dropped={sbv_invalid})")
         if sbv_tot:
-            print(f"  => {sbv_low/sbv_tot:.0%} of both-visible standing frames are "
-                  f"dropped purely by the all-15-joints bar (recoverable).")
+            ran = sbv_full + sbv_partial
+            print(f"  => {ran/sbv_tot:.0%} of both-visible standing frames run "
+                  f"detect_strikes (FULL or PARTIAL); "
+                  f"{sbv_invalid/sbv_tot:.0%} are genuinely dropped.")
     print(f"STRIKING frames evaluated by detect_strikes: {striking_eval_frames}")
 
     extended   = (diag or {}).get("extended", [])
@@ -246,6 +251,7 @@ def process_fight(
     fight_id: int,
     fps: int,
     rounds: Optional[list[tuple[int, int]]] = None,
+    excluded_ranges: Optional[list[tuple[int, int]]] = None,
     red_fighter_id: Optional[int] = None,
     blue_fighter_id: Optional[int] = None,
 ) -> None:
@@ -266,6 +272,11 @@ def process_fight(
         fight_id:   Primary key of the fights row for this video.
         fps:        Frames per second of the source video (from fights row).
         rounds:     List of (start_frame, end_frame) tuples from segment_fights().
+        excluded_ranges: List of (start_frame, end_frame) tuples — mid-round
+                    replays detected from the scoreboard timer jumping
+                    backward (segment_fights()'s detect_replay_ranges()).
+                    Strike/state detection is skipped inside these ranges,
+                    same as outside every round — see plan Stage 1 step 3.
         red_fighter_id:  fighters.id assigned to the red corner (or None).
         blue_fighter_id: fighters.id assigned to the blue corner (or None).
     """
@@ -310,13 +321,29 @@ def process_fight(
                 round_starts[start] = i
                 round_ends[end]     = i
 
+        # Sorted round bounds for the in-round gate below (plan Stage 1 step
+        # 3) — replays, walkouts and the post-fight broadcast wrapper are not
+        # inside any round, and running strike/state detection over them is
+        # where most spurious events came from (80% of strikes fell outside
+        # every detected round). `_round_idx` only ever advances, so the
+        # membership check below is a single O(n) pass over the frame loop.
+        _round_bounds = sorted(rounds) if rounds else []
+        _round_idx = 0
+
+        # Same pattern for mid-round replays (plan Stage 1 step 3, second
+        # half): a replay is inside a round's frame range but its footage is
+        # slow-motion, so velocity-based strike detection is meaningless
+        # there. `_excl_idx` only ever advances alongside frame_number.
+        _excl_bounds = sorted(excluded_ranges) if excluded_ranges else []
+        _excl_idx = 0
+
         # ------------------------------------------------------------------
         # State machine + fighter_frames collection
         # ------------------------------------------------------------------
         current_fight_state  = FightState.STRIKING
         previous_fight_state = FightState.STRIKING
 
-        state_counters = {"striking": 0, "clinch": 0, "ground": 0}
+        state_counters: dict = {}
         frames_spent_grappling = 0
         frames_spent_ground    = 0
 
@@ -342,12 +369,14 @@ def process_fight(
         # => the detector/tracker genuinely produced fewer than two fighters.
         missing_detcount = {"two_dets": 0, "one_det": 0, "zero_dets": 0}
         # The cohort you actually care about: STRIKING state with BOTH fighters
-        # visible. "full" = passed the strict joint bar and ran standing detection;
-        # "low_joints" = both visible but the all-15-joints bar rejected the frame
-        # so standing detection never ran (currently dropped as INVALID).
-        striking_both_visible = {"full": 0, "low_joints": 0}
+        # visible. "full" = passed the strict all-15-joints bar; "partial" =
+        # missed that bar but still cleared the relaxed STRIKING_CORE bar, so
+        # detect_strikes still ran; "invalid" = below even the relaxed bar,
+        # genuinely dropped.
+        striking_both_visible = {"full": 0, "partial": 0, "invalid": 0}
 
-        hip_history  = deque(maxlen=TAKEDOWN_LOOKBACK_FRAMES)
+        hip_history  = deque(maxlen=max(1, round(fps * TAKEDOWN_LOOKBACK_SECS)))
+        recoil_lookahead_frames = max(1, round(fps * RECOIL_LOOKAHEAD_SECS))
         prev_red_kp, prev_blue_kp = None, None
 
         smooth_red  = make_keypoint_smoother()
@@ -404,6 +433,28 @@ def process_fight(
                 _flush_frame_batch(db, frame_batch)
                 frame_batch.clear()
 
+            # Strike/state detection only runs inside a detected round —
+            # replays, walkouts, between-round rest and the post-fight
+            # broadcast wrapper are not training data and should not produce
+            # events. fighter_frames above are written for the whole video
+            # regardless (the frontend overlay needs them).
+            while _round_idx < len(_round_bounds) and frame_number > _round_bounds[_round_idx][1]:
+                _round_idx += 1
+            in_round = (_round_idx < len(_round_bounds) and
+                        _round_bounds[_round_idx][0] <= frame_number <= _round_bounds[_round_idx][1])
+            if not in_round:
+                continue
+
+            # Mid-round replay exclusion (plan Stage 1 step 3, second half) —
+            # same skip as the round gate above, but for a slow-motion replay
+            # shown inside a round's frame range rather than outside it.
+            while _excl_idx < len(_excl_bounds) and frame_number > _excl_bounds[_excl_idx][1]:
+                _excl_idx += 1
+            in_replay = (_excl_idx < len(_excl_bounds) and
+                         _excl_bounds[_excl_idx][0] <= frame_number <= _excl_bounds[_excl_idx][1])
+            if in_replay:
+                continue
+
             validity = frame_validity(frame["detections"], current_fight_state)
             validity_counts[validity] += 1
 
@@ -412,8 +463,12 @@ def process_fight(
             if (current_fight_state == FightState.STRIKING and _has_red and _has_blue):
                 if validity == "FULL":
                     striking_both_visible["full"] += 1
+                elif validity == "PARTIAL":
+                    # Still runs detect_strikes via the relaxed core-joint bar
+                    # (STRIKING_CORE_KEYPOINT_INDICES) — not dropped.
+                    striking_both_visible["partial"] += 1
                 else:
-                    striking_both_visible["low_joints"] += 1
+                    striking_both_visible["invalid"] += 1
 
             if validity == "INVALID":
                 if _has_red and _has_blue:
@@ -455,6 +510,8 @@ def process_fight(
                 hip_history.append({
                     "red":  get_hip_height(red_kp),
                     "blue": get_hip_height(blue_kp),
+                    "red_scale":  get_fighter_scale(red_kp),
+                    "blue_scale": get_fighter_scale(blue_kp),
                 })
 
                 # Resolve pending strikes that have now accumulated enough lookahead.
@@ -466,7 +523,7 @@ def process_fight(
                     # Check head recoil of the defender over the lookahead window.
                     cur_head = red_head if ps["defender"] == "red" else blue_head
                     head_disp = np.linalg.norm(cur_head - ps["head_at_contact"])
-                    head_speed = (head_disp / RECOIL_LOOKAHEAD_FRAMES) * fps
+                    head_speed = (head_disp / recoil_lookahead_frames) * fps
                     landed = head_speed >= (RECOIL_VELOCITY_RATIO * ps["def_scale"])
                     desc = ps["description"] + (" (landed)" if landed else " (missed)")
                     _insert_event(db, ps["contact_frame"], desc, fight_id,
@@ -500,7 +557,7 @@ def process_fight(
                             def_kp = red_kp if defender_key == "red" else blue_kp
                             pending_strikes.append({
                                 "contact_frame":   frame_number,
-                                "emit_at":         frame_number + RECOIL_LOOKAHEAD_FRAMES,
+                                "emit_at":         frame_number + recoil_lookahead_frames,
                                 "description":     description,
                                 "action":          strike["type"],
                                 "fighter_id":      attacker_id,
@@ -525,6 +582,7 @@ def process_fight(
                 frame["detections"],
                 state_counters,
                 current_fight_state,
+                fps,
             )
 
             # Only FULL frames count here; PARTIAL frames already incremented
@@ -551,7 +609,8 @@ def process_fight(
                     action = "clinch_initiated"
 
                 _insert_event(db, frame_number, description, fight_id,
-                              action=action, fighter_id=_fighter_id_for(initiator))
+                              action=action, fighter_id=_fighter_id_for(initiator),
+                              state=current_fight_state.name)
                 print(description + f" at frame {frame_number}")
                 previous_fight_state = current_fight_state
 

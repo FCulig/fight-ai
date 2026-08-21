@@ -35,6 +35,32 @@ def extract_video_meta(video_path: str) -> tuple[int, int, int]:
     return meta["fps"], meta["width"], meta["height"]
 
 
+def run_validation_async(video_path: str, fight_id: int, skip_events: bool = False) -> int:
+    """Spawn a full-decode validation pass for a freshly-uploaded video
+    (non-blocking). Returns the child PID.
+
+    Unlike `run_pipeline_async`, this process writes its own state
+    transitions to the DB (VALIDATING → QUEUED/INVALID) via `set_fight_state`
+    and, on a clean result, spawns the real pipeline itself and hands off
+    `pid` to it — see `eval.cli video --fight-id` / `_validate_and_dispatch`.
+    Full decode costs roughly a tenth of real time, so this runs in the
+    background rather than blocking the upload response.
+    """
+    log_dir = Path(AI_DIR) / "runs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log = open(log_dir / "upload_pipeline.log", "ab")
+    cmd = [AI_PYTHON, "-m", "eval.cli", "video", video_path, "--fight-id", str(fight_id)]
+    if skip_events:
+        cmd.append("--skip-events")
+    proc = subprocess.Popen(
+        cmd,
+        cwd=AI_DIR,
+        stdout=log,
+        stderr=log,
+    )
+    return proc.pid
+
+
 def run_pipeline_async(video_path: str, skip_events: bool = False) -> int:
     """Spawn the AI pipeline single-file mode (non-blocking). Returns the child PID.
 

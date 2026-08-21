@@ -58,6 +58,7 @@ def create_fight(
     height: int,
     red_fighter_id: int | None = None,
     blue_fighter_id: int | None = None,
+    state: str = "validating",
 ) -> Fight:
     def _query(session):
         fight = Fight(
@@ -67,13 +68,14 @@ def create_fight(
             height=height,
             red_fighter_id=red_fighter_id,
             blue_fighter_id=blue_fighter_id,
+            state=state,
         )
         session.add(fight)
         session.flush()
         import json
         session.execute(
             text("SELECT pg_notify('fight_state', :payload)"),
-            {"payload": json.dumps({"id": fight.id, "state": "queued"})},
+            {"payload": json.dumps({"id": fight.id, "state": state})},
         )
         session.commit()
         session.refresh(fight)
@@ -106,11 +108,12 @@ def get_fight_pid(fight_id: int) -> int | None:
 
 
 # States in which a pipeline subprocess may legitimately still be running.
-# ('labeling_in_progress'/'labeling_complete'/'completed'/'failed' all mean the
-# subprocess has already exited.)
+# ('labeling_in_progress'/'labeling_complete'/'completed'/'failed'/'invalid'
+# all mean the subprocess has already exited.) 'validating' covers the
+# full-decode validation pass, which owns `pid` before the real pipeline does.
 _ACTIVE_PIPELINE_STATES = (
-    "queued", "detecting", "tracking", "pose", "corners", "scoreboard",
-    "segmenting", "analyzing",
+    "validating", "queued", "detecting", "tracking", "pose", "corners",
+    "scoreboard", "segmenting", "analyzing",
 )
 
 
@@ -158,12 +161,27 @@ def fail_stale_pipeline(fight_id: int, expected_pid: int) -> None:
     run_db_query(_query)
 
 
+class NotFullyAnnotated(Exception):
+    """Raised by finish_labeling when a detected round has no `round`
+    label_span yet — see label_span_service.rounds_fully_annotated."""
+
+
 def finish_labeling(fight_id: int) -> Fight | None:
     def _query(session):
         import json
+        from app.services.label_span_service import rounds_fully_annotated
+
+        fight = session.query(Fight).filter(Fight.id == fight_id).first()
+        if fight is None or fight.state != "labeling_in_progress":
+            return None
+        if not rounds_fully_annotated(fight_id, session=session):
+            raise NotFullyAnnotated(
+                "Every round must have a confirmed round span before finishing labeling"
+            )
+
         row = session.execute(
             text(
-                "UPDATE fights SET state = 'labeling_complete' "
+                "UPDATE fights SET state = 'labeling_complete', labeled_at = now() "
                 "WHERE id = :id AND state = 'labeling_in_progress' "
                 "RETURNING id"
             ),

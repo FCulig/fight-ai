@@ -1,12 +1,32 @@
+import { useEffect, useState } from 'react';
 import { TOOL_GROUPS, colorForAction, iconForAction, type ToolItem } from './taxonomy';
 
 interface EventPaletteProps {
   selected: boolean;
-  onLog: (item: ToolItem) => void;
+  onLog: (item: ToolItem, shiftKey?: boolean) => void;
   onFightEnd: () => void;
 }
 
 export default function EventPalette({ selected, onLog, onFightEnd }: EventPaletteProps) {
+  // Live target preview while Shift is held — logTool() already resolves the
+  // correct target from e.shiftKey at log time, this is purely so the
+  // button/tooltip shows what's about to be logged before the key is pressed
+  // (TODO.md #5).
+  const [shiftHeld, setShiftHeld] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftHeld(true); };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftHeld(false); };
+    const onBlur = () => setShiftHeld(false); // e.g. alt-tab away while holding Shift
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {TOOL_GROUPS.map(g => (
@@ -19,11 +39,12 @@ export default function EventPalette({ selected, onLog, onFightEnd }: EventPalet
             {g.items.map(it => {
               const c = colorForAction(it.action);
               const blocked = it.needsFighter && !selected;
+              const previewTarget = it.hasTarget ? (shiftHeld ? 'Body' : 'Head') : null;
               return (
                 <button
                   key={it.key}
-                  onClick={e => { e.currentTarget.blur(); onLog(it); }}
-                  title={blocked ? 'Select a fighter first' : it.name}
+                  onClick={e => { e.currentTarget.blur(); onLog(it, e.shiftKey); }}
+                  title={blocked ? 'Select a fighter first' : previewTarget ? `${it.name} · ${previewTarget} (Shift = body)` : it.name}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', borderRadius: 10,
                     cursor: 'pointer', textAlign: 'left', border: '1px solid var(--border-subtle)',
@@ -38,7 +59,9 @@ export default function EventPalette({ selected, onLog, onFightEnd }: EventPalet
                     <span className="kbd">{it.key.toUpperCase()}</span>
                   )}
                   <span className="material-symbols-outlined" style={{ fontSize: 18, color: c }}>{iconForAction(it.action)}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', lineHeight: 1.1 }}>{it.name}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', lineHeight: 1.1 }}>
+                    {it.name}{previewTarget === 'Body' && <span style={{ color: 'var(--accent)' }}> · Body</span>}
+                  </span>
                 </button>
               );
             })}

@@ -2,6 +2,8 @@ from enum import Enum
 
 
 class FightProcessingState(str, Enum):
+    VALIDATING  = "validating"
+    INVALID     = "invalid"
     QUEUED      = "queued"
     DETECTING   = "detecting"
     TRACKING    = "tracking"

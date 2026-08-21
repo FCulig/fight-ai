@@ -1,9 +1,9 @@
 import { useRef, useEffect } from 'react';
-import type { Event } from '../../types/Event';
+import type { LabelEvent } from '../../types/LabelEvent';
 import { colorForAction, iconForAction, formatFrameClock } from './taxonomy';
 
 interface AnnotationListProps {
-  shown: Event[];
+  shown: LabelEvent[];
   fps: number;
   onSeek: (frame: number) => void;
   onDelete: (id: number) => void;

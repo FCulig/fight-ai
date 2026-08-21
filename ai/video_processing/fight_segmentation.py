@@ -1,12 +1,24 @@
 """
 Fight segmentation — splits a full fight video into rounds.
 
-Primary signal: scoreboard overlay OCR (round number + timer).
-Fallback signals: YOLO fighter presence + engagement (used when OCR unavailable).
+Three signals, in descending order of authority:
 
-Single streaming pass over the detection JSON; two deque-based sliding-window
-state machines (fight-level and round-level) with hysteresis. OCR-derived
-round transitions are used to snap boundaries to exact frames.
+1. **Scoreboard clock** (`round_clock.derive_rounds_from_clock`) — deterministic
+   and therefore authoritative for the round *count* and *identity*. See that
+   module for why the fit is robust from only a handful of readings.
+2. **Scoreboard round number** — corroborates the clock and pins boundaries, but
+   many overlays never render a parseable one, so nothing may depend on it.
+3. **YOLO fighter presence + engagement** — a single streaming pass with two
+   deque-based sliding-window state machines (fight-level and round-level) with
+   hysteresis. Used to refine edges the clock could not pin, and as the sole
+   signal when OCR is unavailable entirely.
+
+Detection alone cannot decide a round count: it splits on any sustained loss of
+"both fighters visible and close together", which a ground scramble or a camera
+cutaway produces routinely. When it is the only signal available,
+`enforce_round_plausibility` applies physical constraints on what a round list
+can look like, and the result is flagged for human review rather than silently
+committed.
 """
 
 import bisect
@@ -26,7 +38,7 @@ from models.constants import (
     MIN_ROUND_LENGTH_SECS,
     MIN_VALID_FRAME_RATIO,
     MIN_FIGHT_DURATION_SECS,
-    ROUND_ENGAGEMENT_DISTANCE,
+    ROUND_ENGAGEMENT_RATIO,
     FIGHT_PRESENCE_WINDOW_SECS,
     FIGHT_ENTER_RATIO,
     FIGHT_EXIT_RATIO,
@@ -37,7 +49,13 @@ from models.constants import (
     FUSION_WEIGHT_DETECTION,
     FUSION_WEIGHT_ENGAGEMENT,
     OCR_BOUNDARY_SNAP_SECS,
+    MIN_REPLAY_SAMPLES,
+    MIN_ROUND_NUMBER_RUN_SAMPLES,
+    MIN_INTERIOR_ROUND_SECS,
+    MIN_ROUND_BREAK_SECS,
+    ROUND_CLOCK_HEALTHY_SUPPORT,
 )
+from video_processing.round_clock import derive_rounds_from_clock
 from debug import DebugContext
 
 
@@ -48,6 +66,7 @@ from debug import DebugContext
 def segment_fights(
     detection_data: dict,
     fps: float,
+    width: float,
     scoreboard_samples: Optional[list[dict]] = None,
     debug_ctx: Optional[DebugContext] = None,
 ) -> dict:
@@ -58,6 +77,10 @@ def segment_fights(
         detection_data:     In-memory detection dict produced by process_video()
                             (or loaded from a --detection-file dev override).
         fps:                Frames per second, taken from the fights DB row.
+        width:              Video frame width in pixels, taken from the fights
+                            DB row — engagement distance is scored as a
+                            fraction of this rather than an absolute pixel
+                            count, so it isn't tied to one resolution/crop.
         scoreboard_samples: In-memory OCR samples list produced by
                             extract_scoreboard_samples() (optional; falls back
                             to detection-only segmentation when absent).
@@ -65,14 +88,14 @@ def segment_fights(
 
     Returns:
         {
-          "rounds":  [(start_frame, end_frame), ...],
-          "quality": {"is_valid": bool, "reason": str, "metrics": {...}}
+          "rounds":          [(start_frame, end_frame), ...],
+          "excluded_ranges": [(start_frame, end_frame), ...],  # replays — see detect_replay_ranges()
+          "quality":         {"is_valid": bool, "reason": str, "metrics": {...}}
         }
     """
     ctx = debug_ctx or DebugContext.disabled()
     ctx.log("segmentation", f"Video fps: {fps:.2f}")
 
-    min_round_length_frames   = int(MIN_ROUND_LENGTH_SECS  * fps)
     min_fight_duration_frames = int(MIN_FIGHT_DURATION_SECS * fps)
 
     ocr_samples: list[dict] = scoreboard_samples or []
@@ -81,22 +104,49 @@ def segment_fights(
 
     ocr_index  = _build_ocr_index(ocr_samples)
     ocr_bounds = _extract_ocr_boundaries(ocr_samples)   # hard round-transition frames
+    excluded_ranges = detect_replay_ranges(ocr_samples)
 
     ctx.log("segmentation",
             f"OCR index: {len(ocr_index)} entries  "
-            f"hard boundaries: {len(ocr_bounds)}")
+            f"hard boundaries: {len(ocr_bounds)}  "
+            f"replay ranges: {len(excluded_ranges)}")
 
     rounds, total_frames, valid_frames, debug_series = _segment_streaming(
-        detection_data, ocr_index, ctx, fps
+        detection_data, ocr_index, ctx, fps, width
     )
 
     # Snap boundaries to nearest OCR round transition
     rounds = _snap_to_ocr_boundaries(rounds, ocr_bounds, ctx, fps)
 
+    # Detection alone cannot be trusted with a round count, so clean the list to
+    # what a real fight could have produced before the clock gets a say.
+    rounds = enforce_round_plausibility(rounds, fps, total_frames, ctx)
+
+    # The clock is deterministic — where it fits, it decides how many rounds
+    # there are and detection is demoted to refining the edges it could not pin.
+    clock_rounds, clock_diag = derive_rounds_from_clock(
+        ocr_samples, fps, total_frames, ctx
+    )
+    rounds, segmentation_source = _reconcile_with_clock(
+        rounds, clock_rounds, total_frames, ctx
+    )
+
     # Quality metrics
     total_fight_duration = sum(e - s + 1 for s, e in rounds)
     valid_ratio          = valid_frames / total_frames if total_frames > 0 else 0.0
     round_count          = len(rounds)
+
+    n_samples          = len(ocr_samples)
+    ocr_timer_coverage = (clock_diag["timer_readings"] / n_samples) if n_samples else 0.0
+    # Round numbers are mode-smoothed across a sliding window, so a sample can
+    # carry one that OCR never actually read. Samples where OCR read nothing at
+    # all ("low_confidence") are excluded, or this reports the smoother's output
+    # rather than the overlay's.
+    genuine_rounds = sum(
+        1 for s in ocr_samples
+        if s.get("round_num") is not None and s.get("parse_error") != "low_confidence"
+    )
+    ocr_round_coverage = (genuine_rounds / n_samples) if n_samples else 0.0
 
     metrics = {
         "total_frames":               total_frames,
@@ -104,7 +154,11 @@ def segment_fights(
         "round_count":                round_count,
         "total_fight_duration_frames": total_fight_duration,
         "total_fight_duration_secs":  total_fight_duration / fps if fps > 0 else 0,
-        "ocr_samples_used":           len(ocr_samples),
+        "ocr_samples_used":           n_samples,
+        "ocr_timer_coverage":         round(ocr_timer_coverage, 3),
+        "ocr_round_coverage":         round(ocr_round_coverage, 3),
+        "clock_rounds_found":         len(clock_rounds),
+        "segmentation_source":        segmentation_source,
         "fps":                        fps,
     }
 
@@ -125,16 +179,72 @@ def segment_fights(
             reason = (f"Fight duration too short: "
                       f"{total_fight_duration/fps:.1f}s < {MIN_FIGHT_DURATION_SECS}s")
 
+    # A round list that no signal actually corroborated is the failure mode that
+    # reaches the database looking exactly like a good one, so say so explicitly
+    # rather than leaving it to be noticed by eye.
+    needs_review, review_reason = _review_verdict(
+        segmentation_source, clock_rounds, ocr_timer_coverage, is_valid
+    )
+    metrics["needs_review"]  = needs_review
+    metrics["review_reason"] = review_reason
+
     ctx.log("segmentation",
-            f"Result: {round_count} round(s)  valid={is_valid}  {reason or 'OK'}")
+            f"Result: {round_count} round(s)  source={segmentation_source}  "
+            f"valid={is_valid}  needs_review={needs_review}  "
+            f"{review_reason or reason or 'OK'}")
 
     # Debug outputs
     _save_debug_outputs(debug_series, rounds, ctx)
 
     return {
-        "rounds":  rounds,
-        "quality": {"is_valid": is_valid, "reason": reason, "metrics": metrics},
+        "rounds":          rounds,
+        "excluded_ranges": excluded_ranges,
+        "quality":         {
+            "is_valid":      is_valid,
+            "reason":        reason,
+            "needs_review":  needs_review,
+            "review_reason": review_reason,
+            "metrics":       metrics,
+        },
     }
+
+
+def _review_verdict(
+    source: str,
+    clock_rounds: list,
+    timer_coverage: float,
+    is_valid: bool,
+) -> tuple[bool, str]:
+    """
+    Whether a human should confirm the round list before it is trusted.
+
+    Keyed on how well each round is *supported*, not on raw sample coverage. A
+    scoreboard visible for only 8% of a fight still pins its rounds exactly when
+    every one of those readings agrees on a single intercept — coverage measures
+    how often the overlay was on screen, which is a property of the broadcast,
+    not of how much the answer can be trusted.
+    """
+    if not is_valid:
+        return True, "Segmentation quality gate failed"
+
+    if source != "clock":
+        return True, (
+            "Round count came from fighter detection alone — the scoreboard "
+            f"clock could not be fitted (timer read on {timer_coverage:.0%} of "
+            "samples). Detection splits a round at any long camera cutaway, so "
+            "the boundaries below are a guess."
+        )
+
+    thin = [r for r in clock_rounds if r.support < ROUND_CLOCK_HEALTHY_SUPPORT]
+    if thin:
+        worst = min(r.support for r in thin)
+        return True, (
+            f"{len(thin)} of {len(clock_rounds)} round(s) rest on fewer than "
+            f"{ROUND_CLOCK_HEALTHY_SUPPORT} scoreboard readings (thinnest: "
+            f"{worst}) — the clock fit is under-determined"
+        )
+
+    return False, ""
 
 
 # ---------------------------------------------------------------------------
@@ -148,56 +258,142 @@ def _build_ocr_index(samples: list[dict]) -> dict[int, dict]:
 
 def _extract_ocr_boundaries(samples: list[dict]) -> list[int]:
     """
-    Return frames where the round number changes in the smoothed sample list.
+    Return frames where the round number demonstrably *increments*.
     These are used later to snap detected round edges.
+
+    Any change used to count, which let OCR flapping manufacture boundaries: one
+    misread "R2" in the middle of round 1 produced a false transition, and the
+    following correct "R1" produced a second one. Round numbers only ever go up,
+    and never skip, so a transition is only accepted when the new value is
+    exactly one higher than the established one *and* holds for
+    MIN_ROUND_NUMBER_RUN_SAMPLES consecutive readings.
     """
+    numbered = [s for s in samples if s.get("round_num") is not None]
     boundaries: list[int] = []
-    prev_round: Optional[int] = None
-    for s in samples:
-        r = s.get("round_num")
-        if r is not None and prev_round is not None and r != prev_round:
-            boundaries.append(s["frame"])
-        if r is not None:
-            prev_round = r
+    if len(numbered) <= MIN_ROUND_NUMBER_RUN_SAMPLES:
+        return boundaries
+
+    established = numbered[0]["round_num"]
+    i = 1
+    while i < len(numbered):
+        candidate = numbered[i]["round_num"]
+        if candidate == established + 1:
+            run = 1
+            j   = i + 1
+            while (j < len(numbered)
+                   and run < MIN_ROUND_NUMBER_RUN_SAMPLES
+                   and numbered[j]["round_num"] == candidate):
+                run += 1
+                j   += 1
+            if run >= MIN_ROUND_NUMBER_RUN_SAMPLES:
+                boundaries.append(numbered[i]["frame"])
+                established = candidate
+                i = j
+                continue
+        i += 1
+
     return boundaries
 
 
-def _ocr_signal_at(frame_num: int, ocr_index: dict[int, dict], stride: int) -> float:
+def detect_replay_ranges(samples: list[dict]) -> list[tuple[int, int]]:
+    """Frame ranges where the on-screen round timer just jumped backward or
+    off its established trend — evidence of a slow-motion replay, where
+    velocity-based strike detection is meaningless (plan Stage 1 step 3).
+
+    `_smooth_samples()` (scoreboard_overlay/extraction.py) already runs this
+    exact check per-sample to decide what to reject as OCR noise during timer
+    smoothing, tagging each rejected sample `parse_error = "timer_smoothed_out"`
+    — this reuses that existing signal rather than re-deriving it, requiring
+    MIN_REPLAY_SAMPLES consecutive rejections (not one) before calling it a
+    replay instead of a single noisy OCR read.
+    """
+    ranges: list[tuple[int, int]] = []
+    run: list[dict] = []
+
+    def _flush():
+        if len(run) >= MIN_REPLAY_SAMPLES:
+            ranges.append((run[0]["frame"], run[-1]["frame"]))
+        run.clear()
+
+    for s in samples:
+        if s.get("parse_error") == "timer_smoothed_out":
+            run.append(s)
+        else:
+            _flush()
+    _flush()
+
+    return ranges
+
+
+def _nearest_sample(
+    frame_num: int,
+    ocr_index: dict[int, dict],
+    frames_list: list[int],
+) -> Optional[dict]:
+    """Sample closest to *frame_num*, with no distance limit. Debug output only."""
+    if not frames_list:
+        return None
+    idx  = bisect.bisect_left(frames_list, frame_num)
+    best = min(
+        (c for c in (idx - 1, idx) if 0 <= c < len(frames_list)),
+        key=lambda c: abs(frames_list[c] - frame_num),
+        default=None,
+    )
+    return ocr_index[frames_list[best]] if best is not None else None
+
+
+def _ocr_signal_at(
+    frame_num: int,
+    ocr_index: dict[int, dict],
+    frames_list: list[int],
+    stride: int,
+) -> float:
     """
     Return OCR in-round probability [0.0, 1.0] for *frame_num*.
 
-    1.0  — sample within half a stride, valid round + timer
-    0.6  — sample within half a stride, valid round only
+    1.0  — sample within half a stride, round number and timer both read
+    0.9  — timer only
+    0.6  — round number only
     0.0  — low confidence
     -1.0 — no nearby sample (caller should fall back to detection signal)
+
+    A timer-only reading used to return -1.0, i.e. "no OCR here at all". That
+    discarded the single strongest in-round signal the pipeline has: a running
+    clock is near-conclusive evidence of being inside a round, and it survives
+    on overlays that never render a parseable round number — which is most of
+    them. `frames_list` is the caller's presorted key list; sorting it per frame
+    made this O(n log n) on every frame of the video.
     """
-    if not ocr_index:
+    if not frames_list:
         return -1.0
 
-    # Find nearest sample frame by key proximity
-    frames = sorted(ocr_index.keys())
-    idx    = bisect.bisect_left(frames, frame_num)
+    idx = bisect.bisect_left(frames_list, frame_num)
 
     nearest: Optional[dict] = None
     best_dist = stride         # only consider samples within one stride
-    for cand_idx in [idx - 1, idx]:
-        if 0 <= cand_idx < len(frames):
-            dist = abs(frames[cand_idx] - frame_num)
+    for cand_idx in (idx - 1, idx):
+        if 0 <= cand_idx < len(frames_list):
+            dist = abs(frames_list[cand_idx] - frame_num)
             if dist < best_dist:
                 best_dist = dist
-                nearest   = ocr_index[frames[cand_idx]]
+                nearest   = ocr_index[frames_list[cand_idx]]
 
     if nearest is None:
         return -1.0
 
-    err = nearest.get("parse_error")
-    if err == "low_confidence":
+    if nearest.get("parse_error") == "low_confidence":
         return 0.0
-    if nearest.get("round_num") is None:
-        return -1.0
-    if nearest.get("seconds_remaining") is not None:
+
+    has_round = nearest.get("round_num") is not None
+    has_timer = nearest.get("seconds_remaining") is not None
+
+    if has_round and has_timer:
         return 1.0
-    return 0.6   # round found, timer missing
+    if has_timer:
+        return 0.9
+    if has_round:
+        return 0.6
+    return -1.0
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +405,7 @@ def _segment_streaming(
     ocr_index: dict[int, dict],
     ctx: DebugContext,
     fps: float,
+    width: float,
 ) -> tuple[list[tuple[int, int]], int, int, list[dict]]:
     """
     One-pass streaming segmenter.
@@ -256,12 +453,12 @@ def _segment_streaming(
         last_frame = frame_num
         total_frames += 1
 
-        both_present, engaged = _frame_signals(frame["detections"])
+        both_present, engaged = _frame_signals(frame["detections"], width)
         if both_present:
             valid_frames += 1
 
         # --- OCR signal ---
-        ocr_sig = _ocr_signal_at(frame_num, ocr_index, ocr_stride)
+        ocr_sig = _ocr_signal_at(frame_num, ocr_index, frames_list, ocr_stride)
 
         # --- Fused in-round probability ---
         det_sig = 1.0 if both_present else 0.0
@@ -278,10 +475,7 @@ def _segment_streaming(
 
         # Debug series (one sample every ~0.5 s)
         if total_frames % debug_sample_interval == 0:
-            nearest_sample = (
-                ocr_index.get(min(frames_list, key=lambda f: abs(f - frame_num)))
-                if frames_list else None
-            )
+            nearest_sample = _nearest_sample(frame_num, ocr_index, frames_list)
             debug_series.append({
                 "frame":        frame_num,
                 "both_present": both_present,
@@ -442,11 +636,165 @@ def _snap_to_ocr_boundaries(
 
 
 # ---------------------------------------------------------------------------
+# Round-list plausibility and clock reconciliation
+# ---------------------------------------------------------------------------
+
+def _max_rounds_for_duration(total_frames: int, fps: float) -> int:
+    """How many rounds could physically fit in a video of this length."""
+    if fps <= 0:
+        return 99
+    total_secs = total_frames / fps
+    per_round  = MIN_INTERIOR_ROUND_SECS + MIN_ROUND_BREAK_SECS
+    # The final round needs no break after it, hence the added slack.
+    return max(1, int((total_secs + MIN_ROUND_BREAK_SECS) // per_round))
+
+
+def enforce_round_plausibility(
+    rounds: list[tuple[int, int]],
+    fps: float,
+    total_frames: int,
+    ctx: DebugContext,
+) -> list[tuple[int, int]]:
+    """
+    Constrain a detection-derived round list to what a real fight could produce.
+
+    Detection splits a round wherever "both fighters visible and close together"
+    fails for long enough, which a ground scramble, a corner cutaway or a replay
+    causes routinely — so it both invents breaks inside a round and promotes
+    walkout footage to a round of its own. These rules describe how MMA actually
+    behaves and need no OCR at all, which is what makes them the backstop for
+    videos where the scoreboard is unreadable:
+
+      1. Only the *last* round may be short, because only the last round can end
+         in a finish. A short non-final segment is a walkout or a dropout, and
+         is dropped rather than merged — merging it would drag the real round's
+         start back across the walkout.
+      2. Rounds are separated by a real break (~60s). A far shorter gap is a
+         tracking dropout inside one round, so the two halves are rejoined.
+      3. The video has to be long enough to hold the rounds claimed.
+
+    Applied iteratively, because each edit can expose another.
+    """
+    if not rounds:
+        return rounds
+
+    min_interior = MIN_INTERIOR_ROUND_SECS * fps
+    min_break    = MIN_ROUND_BREAK_SECS    * fps
+    max_rounds   = _max_rounds_for_duration(total_frames, fps)
+
+    work = sorted(rounds)
+    changed = True
+    while changed and len(work) > 1:
+        changed = False
+
+        # Rule 1 — drop short non-final rounds.
+        for i in range(len(work) - 1):
+            start, end = work[i]
+            if end - start + 1 < min_interior:
+                ctx.log("segmentation",
+                        f"Plausibility: dropping non-final round {i+1} "
+                        f"{start}–{end} ({(end - start + 1) / fps:.1f}s < "
+                        f"{MIN_INTERIOR_ROUND_SECS:.0f}s) — too short to be a round")
+                work.pop(i)
+                changed = True
+                break
+        if changed:
+            continue
+
+        # Rule 2 — merge across gaps too short to be a between-round break.
+        for i in range(len(work) - 1):
+            gap = work[i + 1][0] - work[i][1]
+            if gap < min_break:
+                ctx.log("segmentation",
+                        f"Plausibility: merging rounds {i+1} and {i+2} across a "
+                        f"{gap / fps:.1f}s gap (< {MIN_ROUND_BREAK_SECS:.0f}s) — "
+                        f"a break that short is a detection dropout")
+                work[i] = (work[i][0], work[i + 1][1])
+                work.pop(i + 1)
+                changed = True
+                break
+        if changed:
+            continue
+
+        # Rule 3 — too many rounds for the video length; rejoin the closest pair.
+        if len(work) > max_rounds:
+            i = min(range(len(work) - 1),
+                    key=lambda k: work[k + 1][0] - work[k][1])
+            ctx.log("segmentation",
+                    f"Plausibility: {len(work)} rounds cannot fit in "
+                    f"{total_frames / fps:.0f}s (max {max_rounds}); merging "
+                    f"rounds {i+1} and {i+2}")
+            work[i] = (work[i][0], work[i + 1][1])
+            work.pop(i + 1)
+            changed = True
+
+    return work
+
+
+def _reconcile_with_clock(
+    det_rounds: list[tuple[int, int]],
+    clock_rounds: list,
+    total_frames: int,
+    ctx: DebugContext,
+) -> tuple[list[tuple[int, int]], str]:
+    """
+    Merge clock-derived rounds with detection-derived ones.
+
+    The clock decides *how many* rounds there are; detection only supplies edges
+    the clock could not pin (see round_clock.ClockRound.start_anchored). This is
+    the inverse of the original design, where the round count came from the
+    engagement state machine and OCR was reduced to nudging boundaries — so a
+    camera cutaway could invent a round while the scoreboard sat there reading
+    "1" the entire time.
+
+    Returns (rounds, source) where source is "clock" or "detection".
+    """
+    if not clock_rounds:
+        return det_rounds, "detection"
+
+    out: list[tuple[int, int]] = []
+    for cr in clock_rounds:
+        start, end = cr.start_frame, cr.end_frame
+
+        overlapping = [(s, e) for s, e in det_rounds if e >= start and s <= end]
+        if overlapping:
+            if not cr.start_anchored:
+                det_start = min(s for s, _ in overlapping)
+                ctx.log("segmentation",
+                        f"Round {cr.round_number}: clock start {start} is "
+                        f"extrapolated (overlay appeared late) — using detection "
+                        f"start {det_start}")
+                start = det_start
+            if not cr.end_anchored:
+                det_end = max(e for _, e in overlapping)
+                ctx.log("segmentation",
+                        f"Round {cr.round_number}: clock never reached 0:00 — "
+                        f"using detection end {det_end} instead of {end}")
+                end = det_end
+
+        start = max(1, start)
+        end   = min(total_frames, end)
+        if end > start:
+            out.append((start, end))
+
+    if not out:
+        ctx.log("segmentation",
+                "Clock rounds all collapsed after clamping — falling back to detection")
+        return det_rounds, "detection"
+
+    out.sort()
+    ctx.log("segmentation",
+            f"Clock is authoritative: {len(out)} round(s) "
+            f"(detection had {len(det_rounds)})")
+    return out, "clock"
+
+
+# ---------------------------------------------------------------------------
 # Per-frame signal helpers  (note: _read_fps and _iter_detection_frames
 # were removed — detection data and fps are now passed in-memory)
 # ---------------------------------------------------------------------------
 
-def _frame_signals(detections: list[dict]) -> tuple[bool, bool]:
+def _frame_signals(detections: list[dict], width: float) -> tuple[bool, bool]:
     """Return (both_present, engaged) for one frame's detections."""
     red_bbox  = None
     blue_bbox = None
@@ -463,7 +811,7 @@ def _frame_signals(detections: list[dict]) -> tuple[bool, bool]:
 
     red_cx  = (red_bbox[0]  + red_bbox[2])  / 2
     blue_cx = (blue_bbox[0] + blue_bbox[2]) / 2
-    engaged = abs(red_cx - blue_cx) < ROUND_ENGAGEMENT_DISTANCE
+    engaged = abs(red_cx - blue_cx) < ROUND_ENGAGEMENT_RATIO * width
     return True, engaged
 
 

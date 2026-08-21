@@ -1,5 +1,7 @@
 import cv2
+import numpy as np
 import torch
+from scipy.optimize import linear_sum_assignment
 from ultralytics import YOLO
 from fight_processing.fight_processing_util import compute_iou
 
@@ -10,9 +12,15 @@ _DEVICE = (
     "cpu"
 )
 
-IOU_MATCH_THRESHOLD = 0.1
-POSE_BATCH_SIZE     = 16
-LOG_INTERVAL        = 50   # log every N batches
+# Raised from 0.1: at 0.1, two overlapping fighter boxes in a clinch could
+# both greedily match the same pose box (both being "close enough"), giving
+# red and blue the same skeleton — torso distance 0, contact gate trivially
+# satisfied, identical velocities. See POSE_IOU_FLOOR below for the other
+# half of the fix: one-to-one assignment makes that structurally impossible
+# regardless of the floor.
+POSE_IOU_FLOOR   = 0.5
+POSE_BATCH_SIZE  = 16
+LOG_INTERVAL     = 50   # log every N batches
 
 
 def track_poses(
@@ -90,19 +98,24 @@ def track_poses(
             pose_boxes = result.boxes.xyxy.cpu().numpy()      # (N, 4)
             pose_kps   = result.keypoints.data.cpu().numpy()  # (N, 17, 3) — [x, y, conf]
 
-            for detection in frame["detections"]:
-                reid_box   = detection["bbox_xyxy"]
-                best_iou   = IOU_MATCH_THRESHOLD
-                best_index = -1
+            dets = frame["detections"]
+            n_dets, n_poses = len(dets), len(pose_boxes)
+            if n_dets and n_poses:
+                # One-to-one assignment, not greedy argmax-IoU: this is what
+                # makes it structurally impossible for two fighter boxes to
+                # be assigned the same pose box, rather than merely unlikely.
+                size = max(n_dets, n_poses)
+                cost = np.full((size, size), 1.0)  # 1 - iou; unmatchable pairs stay at max cost
+                for i, det in enumerate(dets):
+                    for j, pose_box in enumerate(pose_boxes):
+                        cost[i, j] = 1.0 - compute_iou(det["bbox_xyxy"], pose_box.tolist())
 
-                for i, pose_box in enumerate(pose_boxes):
-                    iou = compute_iou(reid_box, pose_box.tolist())
-                    if iou > best_iou:
-                        best_iou   = iou
-                        best_index = i
-
-                if best_index >= 0:
-                    detection["keypoints"] = pose_kps[best_index].tolist()
+                row_ind, col_ind = linear_sum_assignment(cost)
+                for r, c in zip(row_ind, col_ind):
+                    if r >= n_dets or c >= n_poses:
+                        continue
+                    if 1.0 - cost[r, c] >= POSE_IOU_FLOOR:
+                        dets[r]["keypoints"] = pose_kps[c].tolist()
 
         if (batch_idx + 1) % LOG_INTERVAL == 0:
             done = min(batch_start + POSE_BATCH_SIZE, total)

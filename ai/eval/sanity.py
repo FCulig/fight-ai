@@ -13,6 +13,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Optional
 
+from models.constants import MIN_INTERIOR_ROUND_SECS, MIN_ROUND_BREAK_SECS
+
 from .predictions import Predictions
 
 # --- Plausibility bands ---------------------------------------------------
@@ -159,7 +161,77 @@ def check(preds: Predictions) -> SanityReport:
             band=f"expected {MIN_STRIKES_PER_MIN:.0f}–{MAX_STRIKES_PER_MIN:.0f}/min",
         ))
 
+    # --- 6. Round structure ------------------------------------------------
+    rep.checks.extend(_round_structure_checks(preds))
+
     return rep
+
+
+def _round_structure_checks(preds: Predictions) -> list[Check]:
+    """
+    Label-free checks that the round list describes a fight that could exist.
+
+    These catch the failure mode where detection-only segmentation invents a
+    round break at a camera cutaway, or promotes walkout footage to a round —
+    output that scores a perfectly healthy strike F1 while the round list is
+    plainly wrong. They mirror `enforce_round_plausibility` in
+    fight_segmentation.py: this is the check, that is the fix, and a failure
+    here means the fix did not run or did not go far enough.
+    """
+    checks: list[Check] = []
+    rounds = sorted(preds.rounds, key=lambda r: r.start)
+    if not rounds or not preds.fps:
+        return checks
+
+    fps = preds.fps
+
+    # Only the last round may be short — only the last round can end in a finish.
+    short = [
+        (i + 1, r.length / fps)
+        for i, r in enumerate(rounds[:-1])
+        if r.length / fps < MIN_INTERIOR_ROUND_SECS
+    ]
+    checks.append(Check(
+        name="no short interior rounds",
+        value=float(len(short)),
+        passed=not short,
+        detail=(f"{len(short)} non-final round(s) under {MIN_INTERIOR_ROUND_SECS:.0f}s"
+                + (f": {', '.join(f'round {n} = {s:.0f}s' for n, s in short)}" if short else "")
+                + " — a walkout or a tracking dropout, not a round"),
+        band=f"expected 0 (non-final rounds >= {MIN_INTERIOR_ROUND_SECS:.0f}s)",
+    ))
+
+    # Rounds are separated by a real break.
+    gaps = [
+        (i + 1, (b.start - a.end) / fps)
+        for i, (a, b) in enumerate(zip(rounds, rounds[1:]))
+    ]
+    tight = [(i, g) for i, g in gaps if g < MIN_ROUND_BREAK_SECS]
+    checks.append(Check(
+        name="round breaks are real breaks",
+        value=float(len(tight)),
+        passed=not tight,
+        detail=(f"{len(tight)} gap(s) under {MIN_ROUND_BREAK_SECS:.0f}s"
+                + (f": {', '.join(f'after round {n} = {g:.0f}s' for n, g in tight)}" if tight else "")
+                + " — too short to be a between-round break"),
+        band=f"expected 0 (breaks >= {MIN_ROUND_BREAK_SECS:.0f}s)",
+    ))
+
+    # The video has to be long enough to hold the rounds claimed.
+    if preds.frame_count:
+        total_secs = preds.frame_count / fps
+        per_round  = MIN_INTERIOR_ROUND_SECS + MIN_ROUND_BREAK_SECS
+        max_rounds = max(1, int((total_secs + MIN_ROUND_BREAK_SECS) // per_round))
+        checks.append(Check(
+            name="round count fits video length",
+            value=float(len(rounds)),
+            passed=len(rounds) <= max_rounds,
+            detail=f"{len(rounds)} round(s) in {total_secs:.0f}s of video "
+                   f"(at most {max_rounds} could fit)",
+            band=f"expected =< {max_rounds}",
+        ))
+
+    return checks
 
 
 def format_sanity(rep: SanityReport) -> str:

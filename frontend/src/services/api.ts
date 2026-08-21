@@ -2,14 +2,18 @@ import type { Event } from '../types/Event';
 import type { Fight } from '../types/Fight';
 import type { Fighter } from '../types/Fighter';
 import type { FighterFrame } from '../types/FighterFrame';
+import type { LabelEvent } from '../types/LabelEvent';
+import type { LabelSpan, SpanKind } from '../types/LabelSpan';
 import type { Round } from '../types/Round';
 
-export interface CreateEventPayload {
+export interface CreateLabelEventPayload {
   frame: number;
   description: string;
-  fighter_id?: number | null;
+  corner?: number | null;
   action?: string | null;
+  target?: string | null;
   success?: boolean | null;
+  labeler?: string | null;
 }
 
 export const fetchEvents = async (): Promise<Event[]> => {
@@ -91,20 +95,81 @@ export const finishLabeling = async (fightId: number): Promise<Fight> => {
   return response.json();
 };
 
-export const createEvent = async (fightId: number, payload: CreateEventPayload): Promise<Event> => {
-  const response = await fetch(`/fights/${fightId}/events/`, {
+export const deleteFight = async (fightId: number): Promise<void> => {
+  const response = await fetch(`/fights/${fightId}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(`Failed to delete fight: ${response.statusText}`);
+};
+
+export const fetchLabelEvents = async (fightId: number): Promise<LabelEvent[]> => {
+  const response = await fetch(`/fights/${fightId}/label-events/`);
+  if (!response.ok) throw new Error(`Failed to fetch label events: ${response.statusText}`);
+  return response.json();
+};
+
+export const createLabelEvent = async (fightId: number, payload: CreateLabelEventPayload): Promise<LabelEvent> => {
+  const response = await fetch(`/fights/${fightId}/label-events/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(body?.detail ?? `Failed to create event: ${response.statusText}`);
+    throw new Error(body?.detail ?? `Failed to create label event: ${response.statusText}`);
   }
   return response.json();
 };
 
-export const deleteEvent = async (eventId: number): Promise<void> => {
-  const response = await fetch(`/events/${eventId}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error(`Failed to delete event: ${response.statusText}`);
+export const deleteLabelEvent = async (fightId: number, eventId: number): Promise<void> => {
+  const response = await fetch(`/fights/${fightId}/label-events/${eventId}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(`Failed to delete label event: ${response.statusText}`);
+};
+
+export interface CreateLabelSpanPayload {
+  kind: SpanKind;
+  start_frame: number;
+  end_frame?: number | null;
+  value?: string | null;
+}
+
+export interface UpdateLabelSpanPayload {
+  start_frame?: number;
+  end_frame?: number;
+  value?: string;
+}
+
+export const fetchLabelSpans = async (fightId: number): Promise<LabelSpan[]> => {
+  const response = await fetch(`/fights/${fightId}/label-spans/`);
+  if (!response.ok) throw new Error(`Failed to fetch label spans: ${response.statusText}`);
+  return response.json();
+};
+
+export const createLabelSpan = async (fightId: number, payload: CreateLabelSpanPayload): Promise<LabelSpan> => {
+  const response = await fetch(`/fights/${fightId}/label-spans/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail ?? `Failed to create label span: ${response.statusText}`);
+  }
+  return response.json();
+};
+
+export const updateLabelSpan = async (fightId: number, spanId: number, payload: UpdateLabelSpanPayload): Promise<LabelSpan> => {
+  const response = await fetch(`/fights/${fightId}/label-spans/${spanId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail ?? `Failed to update label span: ${response.statusText}`);
+  }
+  return response.json();
+};
+
+export const deleteLabelSpan = async (fightId: number, spanId: number): Promise<void> => {
+  const response = await fetch(`/fights/${fightId}/label-spans/${spanId}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(`Failed to delete label span: ${response.statusText}`);
 };
