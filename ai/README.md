@@ -4,20 +4,25 @@ A Python library that processes MMA fight videos to detect fight events (grappli
 
 ## How It Works
 
-Raw video → YOLO fighter detection → ReID tracking → Pose estimation → Grappling detection → PostgreSQL
+Raw video → YOLO fighter detection → Geometry tracking → Pose estimation → Corner assignment → Grappling detection → PostgreSQL
 
 ### Pipeline Steps
 
 1. **Fighter Detection** (`video_processing/video_processing.py`)
    Custom-trained YOLO model detects fighters and referee in each frame.
 
-2. **Re-Identification** (`video_processing/fighter_reidentification/`)
-   torchreid (`osnet_x1_0`) assigns stable identities (red=0, blue=1) to each fighter across frames using cosine similarity + EMA embeddings.
+2. **Fighter Tracking** (`video_processing/fighter_tracking/`)
+   A constrained 2-slot online tracker (`models/FighterTracker.py`) assigns each fighter a stable *provisional* track ID (0 or 1) across frames. Matching is geometry-only — a cost matrix blending IoU against the slot's velocity-predicted box with normalised centroid distance, resolved by Hungarian assignment. No video frames are read and no appearance embeddings are computed. Unmatched slots coast on their last velocity and are pruned after `TRACK_MAX_MISSING_SECS`; while the two boxes overlap heavily (a clinch) velocity is frozen to prevent identity swaps. The original YOLO class is preserved as `model_class_id` for later fallback.
+
+   These IDs are provisional: track 0/1 is *not* red/blue. Corner labelling happens in step 4.
 
 3. **Pose Estimation** (`video_processing/pose_tracking/`)
    Each fighter's bounding box is cropped and run through `yolo26x-pose.pt`. Keypoints are shifted back to full-frame coordinates.
 
-4. **Fight State Detection** (`fight_processing/`)
+4. **Corner Assignment** (`video_processing/corner_assignment/`)
+   Rewrites provisional track IDs into final red/blue corner labels using a glove-tape HSV vote, falling back to a majority model-class vote when the two corners' colours are too similar to separate.
+
+5. **Fight State Detection** (`fight_processing/`)
    Torso rectangles (built from shoulder/hip keypoints) are compared per frame. When fighters' torsos are within a distance threshold for 3+ consecutive frames, the state transitions to `GRAPPLING`. State changes are written to PostgreSQL.
 
 ## Full-Fight Upload Processing
@@ -34,7 +39,7 @@ For end-user uploads of complete fight videos (including walkouts and multiple r
 3. **Scoreboard OCR extraction** — samples at 2 fps, parses round number and timer, smooths results.
 4. **Fight segmentation** — fuses OCR + detection signals through hysteresis state machines; snaps round boundaries to OCR-detected round transitions.
 
-Then process each detected round through the ReID → Pose → Fight State pipeline.
+Then process each detected round through the Tracking → Pose → Corner assignment → Fight State pipeline.
 
 ### Usage
 
@@ -108,14 +113,15 @@ ai/
 │   │   ├── parsers.py             # Org-agnostic round/timer regexes
 │   │   ├── debug.py               # Visualisation helpers
 │   │   └── scoreboard_verification.py
-│   ├── fighter_reidentification/
+│   ├── fighter_tracking/          # Geometry-only 2-slot tracker
+│   ├── corner_assignment/         # Provisional track IDs → red/blue corners
 │   └── pose_tracking/
 ├── fight_processing/
 │   ├── fight_processing.py
 │   └── fight_processing_util.py
 ├── models/
 │   ├── FightState.py              # Enum: STRIKING=1, GRAPPLING=2
-│   ├── IdentityMemory.py          # EMA cosine-similarity ReID tracker
+│   ├── FighterTracker.py          # IoU + centroid Hungarian 2-slot tracker
 │   └── constants.py               # All thresholds and label IDs
 └── database.py                    # SQLAlchemy SessionLocal
 ```
@@ -171,21 +177,26 @@ Place the following model files in the project:
 
 ## Running
 
-> Note: the pipeline currently runs in steps. Each step reads from and writes to `runs/`.
+`run_pipeline()` chains the stages in-memory — each hands the next a Python dict, and no intermediate stage artifact is written to `runs/` (only `manifest.json` and debug output land there). The stages therefore take dicts, not paths, and are not usefully callable as standalone shell one-liners. Drive the pipeline through the CLI instead:
 
 ```bash
-# Step 1: Detect fighters
-python -c "from video_processing.video_processing import process_video; process_video('your_video.mp4')"
-
-# Step 2: ReID tracking (requires frames extracted to frames/frame_N.jpg)
-python -c "from video_processing.fighter_reidentification.fighter_reidentification import track_fighters; track_fighters('runs/detection_results.json')"
-
-# Step 3: Pose estimation
-python -c "from video_processing.pose_tracking.pose_tracking import track_poses; track_poses('runs/output_reidentification.json')"
-
-# Step 4: Fight state processing → DB writes
-python -c "from fight_processing.fight_processing import process_fight; process_fight('runs/pose_results.json')"
+python main.py fight.mp4 --segment
 ```
+
+To skip early stages, hand the pipeline a previously captured artifact and it will load that dict from JSON rather than recomputing it:
+
+```bash
+# Skip YOLO
+python main.py fight.mp4 --detection-file runs/detection_results.json
+
+# Skip YOLO + tracking
+python main.py fight.mp4 --track-file runs/track_results.json
+
+# Skip YOLO + tracking + pose
+python main.py fight.mp4 --pose-results runs/pose_results.json
+```
+
+> These are load-only dev overrides: the pipeline reads these files but never writes them, so the paths are whatever you saved earlier. `--reid-file` is a deprecated alias for `--track-file`.
 
 ## Database Schema
 
@@ -203,8 +214,10 @@ CREATE TABLE fight_events (
 |---|---|---|
 | `DISTANCE_GRAPPLING_THRESHOLD` | 20px | Torso-rect distance below which fighters are considered grappling |
 | `MIN_GRAPPLING_THRESHOLD` | 3 frames | Consecutive frames required to trigger state transition |
-| ReID sim threshold | 0.75 | Cosine similarity cutoff for matching fighter identity |
-| ReID EMA | 0.9 | Embedding update rate |
+| `TRACK_IOU_WEIGHT` | 0.6 | Share of the tracking cost matrix from the IoU term |
+| `TRACK_DISTANCE_WEIGHT` | 0.4 | Share of the tracking cost matrix from the centroid-distance term |
+| `TRACK_MAX_MISSING_SECS` | 0.6s | How long a slot coasts unmatched before it is pruned |
+| `CLINCH_IOU_THRESHOLD` | 0.3 | Inter-fighter IoU above which velocity is frozen to avoid ID swaps |
 
 ## Fight State Logic
 

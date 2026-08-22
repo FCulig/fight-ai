@@ -24,26 +24,26 @@ LOG_INTERVAL     = 50   # log every N batches
 
 
 def track_poses(
-    reid_data: dict,
+    track_data: dict,
     video_path: str | None = None,
 ) -> dict:
     """
     Run pose estimation on every fighter detection.
 
     Args:
-        reid_data:  In-memory reid dict produced by track_fighters()
-                    (or loaded from a --reid-file dev override).
+        track_data: In-memory track dict produced by track_fighters()
+                    (or loaded from a --track-file dev override).
         video_path: Path to the source .mp4. When supplied, frames are read
                     directly from the video (no frames/ directory needed).
                     Falls back to cv2.imread(image_name) when None.
 
     Returns:
-        Pose dict in-memory — same structure as reid_data but with
+        Pose dict in-memory — same structure as track_data but with
         keypoints added to each detection.
         No file is written to disk.
     """
     import copy
-    data   = copy.deepcopy(reid_data)
+    data   = copy.deepcopy(track_data)
     frames = data["frames"]
     model  = YOLO("yolo26x-pose.pt")
     total  = len(frames)
