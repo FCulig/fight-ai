@@ -15,7 +15,13 @@ ai/
 ├── debug.py                  # DebugContext — centralised debug output router
 ├── manifest.py               # Builds run summary (returned in-memory, never written to disk)
 ├── video_processing/
-│   ├── video_processing.py   # YOLO detection → returns detection dict (no disk write)
+│   ├── fighter_detection/
+│   │   └── fighter_detection.py # XL pose model supplies EVERY box + skeleton; the
+│   │                         #   nano detector (weights.pt) is only a MASK saying
+│   │                         #   which detected people are the fighters, since
+│   │                         #   yolo26x-pose is COCO person-only and cannot tell a
+│   │                         #   fighter from the referee. Nano's red/blue class head
+│   │                         #   is IGNORED — corner is assign_corners' job.
 │   ├── fight_segmentation.py # Fuses clock + OCR + detection signals → round list
 │   ├── round_clock.py        # Fits the scoreboard countdown (slope known a priori =
 │   │                         #   -1/fps, so only the intercept is estimated) → the
@@ -40,12 +46,9 @@ ai/
 │   │                            #   tape + torso-histogram distance with hysteresis.
 │   │                            #   Falls back to legacy tape-vote when colors are indistinguishable.
 │   └── pose_tracking/
-│       └── pose_tracking.py  # Pose model on FULL FRAMES, then one-to-one Hungarian
-│                             #   assignment of fighter boxes to pose boxes (IoU floor
-│                             #   POSE_IOU_FLOOR = 0.5). One-to-one by construction, so
-│                             #   two fighter boxes can no longer be assigned the same
-│                             #   skeleton in a clinch — see eval/ sanity check "no
-│                             #   simultaneous mutual strikes".
+│       └── pose_verification.py # Renders the --verify-pose debug MP4. The pose
+│                             #   *model* now runs inside fighter_detection; only this
+│                             #   debug renderer is left in this package.
 ├── fight_processing/
 │   ├── fight_processing.py   # State machine + DB writes (fight_events, fighter_frames, rounds)
 │   └── fight_processing_util.py
@@ -172,9 +175,8 @@ the next step consumes it directly. PostgreSQL is the only persistent data store
 
 | Step | Function | Returns |
 |------|----------|---------|
-| YOLO detection | `process_video()` | detection dict |
+| Fighter detection | `detect_fighters()` | detection dict (XL boxes + keypoints, fighters only, ≤2/frame) |
 | Fighter tracking | `track_fighters()` | track dict (provisional track_id 0/1) |
-| Pose tracking | `track_poses()` | pose dict (+ keypoints) |
 | Corner assignment | `assign_corners()` | pose dict (class_id remapped to red=0/blue=1) |
 | Scoreboard OCR | `extract_scoreboard_samples()` | samples dict |
 | Segmentation | `segment_fights()` | rounds list |
@@ -182,6 +184,17 @@ the next step consumes it directly. PostgreSQL is the only persistent data store
 
 `fps` is read once from the `fights` row (extracted from the video at registration time)
 and threaded in-memory to every step that needs it. No step re-reads fps from disk.
+
+**Detection and pose are one step.** They used to be two: a nano detector
+(`yolov8n`, 3.0M params, 640px) emitted the boxes that survived to the database,
+and `yolo26x-pose` ran afterwards over every frame purely to have its keypoints
+copied onto them — its own, much better, boxes were discarded. Worse, the nano
+box was the *lookup key* for those keypoints (attached only above an IoU floor),
+so a bad nano box did not merely degrade the box, it dropped the skeleton
+entirely and the row reached `fighter_frames` with a box and no keypoints.
+Skeletons are the training signal, so that was silent data loss concentrated on
+the hardest frames. The XL model now supplies both, and a box and its skeleton
+can no longer disagree about who they describe.
 
 **Developer skip-flags** (`--detection-file`, `--track-file`, `--pose-results`,
 `--scoreboard-samples`) load a developer-supplied file into the in-memory dict at the
@@ -339,7 +352,11 @@ ix_label_spans_fight_id         ON label_spans (fight_id)
 ```
 
 ## Key Conventions
-- Fighter labels: `fighter_red=0`, `fighter_blue=1`, `referee=2` (see `constants.py`)
+- `LABEL_ID`: `fighter_red=0`, `fighter_blue=1`, `referee=2` (see `constants.py`).
+  These are **corner ids as written to `fighter_frames.corner`**, decided by
+  `assign_corners` from appearance — not detector classes. The nano model happens
+  to share the numbering, but `fighter_detection` collapses its 0/1 into a single
+  "fighter" concept and never propagates the distinction.
 - Torso rectangle: built from COCO keypoints `[5,6,11,12]` (left/right shoulder, left/right hip) — primary grappling signal
 - **Fight-state classification (`determine_fight_state`) is three-way** — `STRIKING` / `CLINCH` / `GROUND`:
   - **Proximity axis** — torso-rect distance, normalised by average fighter scale, ≥ `DISTANCE_GRAPPLING_RATIO` (0.11) → `STRIKING`; below it the fighters are entangled (clinch or ground). When the distance or either fighter's scale is unusable (unconfident keypoints), no candidate is read at all for that frame — an unknown distance is never treated as "far apart".
@@ -349,10 +366,13 @@ ix_label_spans_fight_id         ON label_spans (fight_id)
   - **Strike/state detection only runs inside a detected round** — `process_fight`'s frame loop skips walkouts, between-round rest and the post-fight broadcast wrapper entirely (still writes `fighter_frames` for the whole video, for the frontend overlay).
   - **Mid-round replays are also excluded.** `fight_segmentation.detect_replay_ranges()` scans the scoreboard OCR samples for a run of `MIN_REPLAY_SAMPLES` (3) consecutive readings tagged `parse_error = "timer_smoothed_out"` by `scoreboard_overlay/extraction.py`'s `_smooth_samples()` — i.e. the on-screen timer jumped backward relative to the round's established direction, which is what a slow-motion replay clip looks like to the OCR. `segment_fights()` returns these as `excluded_ranges` alongside `rounds`; `pipeline.py` threads them into `process_fight(..., excluded_ranges=...)`, gated in the frame loop the same way as the round check. Requires OCR to actually be calibrating on the source video — falls back to `[]` (no exclusion) when scoreboard detection fails, same as segmentation's own OCR fallback.
 - **Fighter identity pipeline (two-stage):**
-  1. `FighterTracker` (geometry-only, `models/FighterTracker.py`): constrained 2-slot tracker with IoU + centroid-distance cost matrix solved by Hungarian matching. Assigns a stable *provisional* `track_id` (0 or 1) per frame. Clinch frames (inter-fighter IoU > `CLINCH_IOU_THRESHOLD`) freeze velocity updates to prevent identity swaps. Each detection also carries `model_class_id` (the original YOLO class) for the fallback below.
+  0. `fighter_detection.detect_fighters()`: the XL pose model detects every person in the frame with a box and 17 keypoints; the nano detector supplies a per-frame **mask** of fighter regions, and pose persons are matched one-to-one against it (Hungarian, `FIGHTER_SELECT_IOU_FLOOR`) to pick out the fighters. The referee and cornermen find no mask region and are dropped. Nano's red/blue class head is deliberately unused: it is an independent per-frame colour guess with no temporal consistency, which is the reason step 2 exists. Ignoring it also collapses a real failure mode — ultralytics NMS is class-aware by default, so a fighter the nano model is torn between red and blue on can survive NMS *twice*, as two overlapping boxes; one-to-one matching folds that pair back onto the single person it always was.
+  1. `FighterTracker` (geometry-only, `models/FighterTracker.py`): constrained 2-slot tracker with IoU + centroid-distance cost matrix solved by Hungarian matching. Assigns a stable *provisional* `track_id` (0 or 1) per frame. Clinch frames (inter-fighter IoU > `CLINCH_IOU_THRESHOLD`) freeze velocity updates to prevent identity swaps. Keypoints ride along on the detection they arrived attached to — there is no box↔skeleton association step left to get wrong.
   2. `assign_corners()` (`video_processing/corner_assignment/`): **per-frame appearance-anchored re-ID.** Pass 1 reads the video once, builds per-detection descriptors (glove-tape `net_red`/`tape_total` + torso HSV hue histogram), identifies *clean frames* (fighters separated ≥ `DISTANCE_GRAPPLING_RATIO × avg fighter scale`, both well-posed, tape present), and bootstraps per-corner appearance templates from those frames. Pass 2 (no second video read — over cached descriptors) assigns each detection to a template using normalized tape + Bhattacharyya histogram distance with a hysteresis gate (`CORNER_SWAP_CONFIRM_SECS` converted to frames via the video's fps, consecutive frames before committing a flip). `corner` in `fighter_frames` now legitimately follows appearance across a mid-clinch tracker slot swap. Falls back to a whole-fight paired tape vote / model-class-vote path when template separation is below `CORNER_TEMPLATE_MIN_SEPARATION` (similar colors).
 
      **Verify with `python -m eval.corner_accuracy <fight_id>`.** It is label-free and needs no re-run — it reads the stored `corner` back and checks it against the fighters' kit colour. Corner assignment is the one output with a 50% failure mode that leaves everything self-consistent, so nothing else in `eval/` catches it: `sanity.py` checks structure, `score.py` needs labels, and hand labels inherit the error. Run it on every processed fight; treat `[FAIL]` (whole-fight inversion) and `[WARN]` (intermittent — uncorrected tracker swaps) as real, and treat "no decisive frames" as *unverified*, not as a pass.
+
+     **When even the tape vote has too little evidence, corner is UNDETERMINED.** The fallback used to break that tie with the detector's red/blue class vote; `fighter_detection` no longer propagates it, so the mapping is left as identity and logged as unverified. Identity mapping keeps the two corners distinct and self-consistent — it does *not* claim they are the right way round, and a whole-fight inversion looks identical from inside the pipeline. `python -m eval.corner_accuracy <fight_id>` is what catches it.
 
      **Colour is only ever read relatively.** The red HSV band unavoidably overlaps skin, so an absolute red-pixel count is not a corner signal: before this was fixed, *every* fight in `runs/upload_pipeline.log` came back with both tracks overwhelmingly "red", and 29% of a whole `JURICvsNOGUEIRA` frame classified as red tape. Three rules keep that from deciding a corner, and none of them should be relaxed without re-measuring:
      - the wrist crop is sized to the **glove** (`TAPE_PATCH_RATIO`, small forearm multiplier) and gated at `TAPE_MIN_SATURATION = 150`, above the skin band;
@@ -435,5 +455,9 @@ non-strike events.
 
 ## Environment
 - `.env` file required with `DATABASE_URL=postgresql://...`
-- Model weights: `video_processing/weights.pt` (custom YOLO), `yolo26x-pose.pt` (pose, expected in working dir)
+- Model weights: `yolo26x-pose.pt` (XL pose — supplies every box and skeleton;
+  expected in the working dir) and `video_processing/weights.pt` (custom nano
+  YOLO — used *only* as the fighter/referee mask). Retraining the mask model
+  single-class ("fighter" vs not) would lose nothing the pipeline uses: its
+  red/blue head is already ignored.
 - Videos placed in `fight_videos/` for batch processing

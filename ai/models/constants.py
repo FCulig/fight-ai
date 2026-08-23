@@ -1,3 +1,8 @@
+# Corner ids as written to fighter_frames.corner, AFTER assign_corners has
+# decided them from appearance.  These are NOT detector classes: the nano
+# detector's own red/blue head is ignored by fighter_detection (see its module
+# docstring), and `referee` survives here only as the mask class that keeps the
+# referee out of the tracked pair.
 LABEL_ID = {
     "fighter_red": 0,
     "fighter_blue": 1,
@@ -244,6 +249,55 @@ TRACK_IOU_WEIGHT         = 0.6   # fraction of cost matrix from IoU term
 TRACK_DISTANCE_WEIGHT    = 0.4   # fraction of cost matrix from centroid-distance term
 TRACK_MAX_MISSING_SECS   = 0.6   # 30 frames @ 50fps — time a slot coasts before being pruned
 CLINCH_IOU_THRESHOLD     = 0.3   # inter-fighter IoU above which velocity is frozen
+
+# --- Fighter detection (fighter_detection/fighter_detection.py) ---
+# The XL pose model supplies every box and every skeleton.  The nano detector
+# (weights.pt) is kept only as a MASK answering "which of these people are the
+# fighters" — yolo26x-pose is COCO person-only and cannot separate a fighter
+# from the referee or a cornerman.  Nano's red/blue class head is ignored;
+# corner is decided downstream by assign_corners from appearance, which is a
+# temporally consistent decision where a per-frame colour guess never was.
+FIGHTER_MASK_CONF        = 0.25  # nano confidence floor for the fighter mask
+# IoU a pose person must reach against a mask region to count as a fighter.
+# Deliberately looser than the old POSE_IOU_FLOOR (0.5) it replaces, because it
+# now gates a different question.  That floor decided whether a skeleton was
+# attached to a box at all, so a near-miss silently dropped the skeleton — the
+# training signal — on exactly the frames where the nano box was worst.  Here a
+# near-miss only means mask and person disagree on extent, and the box that
+# survives is the pose model's regardless, so the cost of a loose match is much
+# lower than the cost of a missed one.
+FIGHTER_SELECT_IOU_FLOOR = 0.35
+POSE_BATCH_SIZE          = 16    # frames per pose-model forward pass
+
+# --- Box smoothing (fighter_tracking/box_smoothing.py) ---
+# Tracking emits the raw per-frame detector box, and nothing at all on a frame
+# the detector missed, so boxes jitter in position and size and blink out on
+# dropped detections. Both are worst in a clinch: heavy mutual occlusion is
+# exactly where the detector's box extent is least certain.
+# The pipeline is offline, so the smoother sees the whole sequence and can be
+# zero-phase (centred window, no lag) — something a causal filter inside
+# FighterTracker could not do. Savitzky-Golay fits a local polynomial rather
+# than flattening to the mean, so a genuine fast movement (a shot, a takedown)
+# survives where a moving average would smear it.
+BOX_SMOOTHING_ENABLED     = True
+# Median prefilter, applied before Savitzky-Golay. The clinch failure mode is
+# not zero-mean jitter but the occasional WILD box — one briefly engulfing both
+# fighters, or collapsing onto a limb. Savitzky-Golay is a least-squares fit and
+# has no resistance to those: it drags the curve toward the outlier, turning a
+# 2-frame blow-up into ~10 frames of mediocre boxes. A median discards an
+# outlier run shorter than half its window instead of averaging it in, so the
+# cascade is median-then-smooth. Window must exceed twice the longest outlier
+# run to be rejected: 5 frames @ 50fps clears runs of 1-2 frames.
+BOX_MEDIAN_WINDOW_SECS    = 0.1   # 5 frames @ 50fps
+BOX_SMOOTHING_WINDOW_SECS = 0.24  # 12 frames @ 50fps — centred on the frame
+BOX_SMOOTHING_POLYORDER   = 2
+# A hole longer than this is treated as a NEW appearance rather than the same
+# fighter continuing, and splits the track instead of being bridged. Slot ids
+# are reused after a prune (FighterTracker._assign), so bridging a long hole
+# would slide one box across the frame between two unrelated positions. Kept
+# below TRACK_MAX_MISSING_SECS so a gap the tracker itself only coasted through
+# is never turned into fabricated observations here.
+BOX_GAP_FILL_MAX_SECS     = 0.3
 
 # --- Glove-tape corner assignment ---
 # Both were absolute pixels — a camera zoomed further from the cage shrinks a

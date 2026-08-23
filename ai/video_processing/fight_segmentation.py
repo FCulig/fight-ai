@@ -32,7 +32,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from models.constants import (
-    LABEL_ID,
     MIN_FIGHT_END_GAP_SECS,
     MIN_ROUND_GAP_SECS,
     MIN_ROUND_LENGTH_SECS,
@@ -74,7 +73,7 @@ def segment_fights(
     Segment a full fight video into rounds.
 
     Args:
-        detection_data:     In-memory detection dict produced by process_video()
+        detection_data:     In-memory detection dict from detect_fighters()
                             (or loaded from a --detection-file dev override).
         fps:                Frames per second, taken from the fights DB row.
         width:              Video frame width in pixels, taken from the fights
@@ -795,23 +794,28 @@ def _reconcile_with_clock(
 # ---------------------------------------------------------------------------
 
 def _frame_signals(detections: list[dict], width: float) -> tuple[bool, bool]:
-    """Return (both_present, engaged) for one frame's detections."""
-    red_bbox  = None
-    blue_bbox = None
-    for d in detections:
-        cls = d.get("class_id")
-        if cls == LABEL_ID["fighter_red"]  and red_bbox  is None:
-            red_bbox  = d["bbox_xyxy"]
-        elif cls == LABEL_ID["fighter_blue"] and blue_bbox is None:
-            blue_bbox = d["bbox_xyxy"]
+    """Return (both_present, engaged) for one frame's detections.
 
-    both_present = red_bbox is not None and blue_bbox is not None
-    if not both_present:
+    Detections arrive fighter-only and capped at two by fighter_detection, so
+    "both fighters present" is simply two of them.
+
+    This used to require one detection carrying the detector's `fighter_red`
+    class and another carrying `fighter_blue`, which meant a frame where the
+    nano model happened to label both fighters the same colour read as "no
+    fighters present" — an unreliable per-frame colour guess deciding whether
+    segmentation could see a fight at all.  Corner is irrelevant to presence
+    and engagement, and is not known at this point in the pipeline anyway.
+    """
+    boxes = [
+        d["bbox_xyxy"] for d in detections
+        if len(d.get("bbox_xyxy") or []) == 4
+    ]
+    if len(boxes) < 2:
         return False, False
 
-    red_cx  = (red_bbox[0]  + red_bbox[2])  / 2
-    blue_cx = (blue_bbox[0] + blue_bbox[2]) / 2
-    engaged = abs(red_cx - blue_cx) < ROUND_ENGAGEMENT_RATIO * width
+    cx_a = (boxes[0][0] + boxes[0][2]) / 2
+    cx_b = (boxes[1][0] + boxes[1][2]) / 2
+    engaged = abs(cx_a - cx_b) < ROUND_ENGAGEMENT_RATIO * width
     return True, engaged
 
 

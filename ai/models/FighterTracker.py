@@ -19,17 +19,16 @@ def _centroid(bbox):
 class _Slot:
     __slots__ = (
         "slot_id", "bbox", "centroid", "velocity",
-        "frames_since_seen", "total_frames_seen", "model_class_counts",
+        "frames_since_seen", "total_frames_seen",
     )
 
-    def __init__(self, slot_id: int, bbox: list, model_class: int) -> None:
+    def __init__(self, slot_id: int, bbox: list) -> None:
         self.slot_id = slot_id
         self.bbox = list(bbox)
         self.centroid = _centroid(bbox)
         self.velocity = (0.0, 0.0)
         self.frames_since_seen = 0
         self.total_frames_seen = 1
-        self.model_class_counts: dict[int, int] = {model_class: 1}
 
     def predicted_bbox(self) -> list:
         x1, y1, x2, y2 = self.bbox
@@ -41,7 +40,7 @@ class _Slot:
         vx, vy = self.velocity
         return (cx + vx, cy + vy)
 
-    def update(self, bbox: list, model_class: int) -> None:
+    def update(self, bbox: list) -> None:
         """Full update: advance position and refresh velocity."""
         new_cx, new_cy = _centroid(bbox)
         old_cx, old_cy = self.centroid
@@ -50,9 +49,6 @@ class _Slot:
         self.bbox = list(bbox)
         self.frames_since_seen = 0
         self.total_frames_seen += 1
-        self.model_class_counts[model_class] = (
-            self.model_class_counts.get(model_class, 0) + 1
-        )
 
     def update_position_only(self, bbox: list) -> None:
         """Update position from detection but freeze velocity (used during clinch)."""
@@ -70,9 +66,21 @@ class _Slot:
         self.bbox = [x1 + vx, y1 + vy, x2 + vx, y2 + vy]
         self.frames_since_seen += 1
 
-    @property
-    def majority_model_class(self) -> int:
-        return max(self.model_class_counts, key=self.model_class_counts.get)
+
+def _emit(det: dict, slot_id: int) -> dict:
+    """Output detection for one matched slot.
+
+    Box, confidence and keypoints all come from the XL pose model via
+    fighter_detection; this stage adds nothing but the identity.  Keypoints are
+    carried rather than re-matched — they arrived attached to the very person
+    this box describes, so there is no association step left to get wrong.
+    """
+    return {
+        "bbox_xyxy":  det["bbox_xyxy"],
+        "confidence": det.get("confidence"),
+        "class_id":   slot_id,
+        "keypoints":  det.get("keypoints"),
+    }
 
 
 class FighterTracker:
@@ -83,8 +91,10 @@ class FighterTracker:
     fighter detections per frame.  Red/blue corner labelling is NOT done here —
     that is assign_corners()'s responsibility.
 
-    Each output detection gets a 'model_class_id' field that preserves the
-    original YOLO model class so assign_corners() can use it as a fallback.
+    Input detections carry no class of their own: fighter-vs-bystander was
+    already settled by the nano mask in fighter_detection, and corner is decided
+    downstream from appearance.  Slot ids are therefore arbitrary at this stage
+    and mean only "the same person as last frame".
     """
 
     def __init__(self, fps: float = 50.0) -> None:
@@ -106,22 +116,10 @@ class FighterTracker:
 
     def _cold_start(self, dets: list[dict]) -> list[dict]:
         """Initialise slots from the very first frame that contains fighters."""
-        used_ids: set[int] = set()
         out = []
-        for det in dets[:TRACK_MAX_FIGHTERS]:
-            # Seed slot_id from model class where possible (better initial map)
-            preferred = det["class_id"]
-            sid = preferred if preferred not in used_ids else next(
-                i for i in range(TRACK_MAX_FIGHTERS) if i not in used_ids
-            )
-            used_ids.add(sid)
-            self.slots[sid] = _Slot(sid, det["bbox_xyxy"], det["class_id"])
-            out.append({
-                "bbox_xyxy":      det["bbox_xyxy"],
-                "confidence":     det["confidence"],
-                "class_id":       sid,
-                "model_class_id": det["class_id"],
-            })
+        for sid, det in enumerate(dets[:TRACK_MAX_FIGHTERS]):
+            self.slots[sid] = _Slot(sid, det["bbox_xyxy"])
+            out.append(_emit(det, sid))
         return out
 
     def _assign(self, dets: list[dict], freeze_velocity: bool = False) -> list[dict]:
@@ -151,14 +149,9 @@ class FighterTracker:
             if freeze_velocity:
                 self.slots[sid].update_position_only(det["bbox_xyxy"])
             else:
-                self.slots[sid].update(det["bbox_xyxy"], det["class_id"])
+                self.slots[sid].update(det["bbox_xyxy"])
             assigned_slots.add(sid)
-            out[c] = {
-                "bbox_xyxy":      det["bbox_xyxy"],
-                "confidence":     det["confidence"],
-                "class_id":       sid,
-                "model_class_id": det["class_id"],
-            }
+            out[c] = _emit(det, sid)
 
         # Initialise a new slot for any unmatched detection (if under cap)
         for c, det in enumerate(dets):
@@ -166,14 +159,10 @@ class FighterTracker:
                 continue
             if len(self.slots) < TRACK_MAX_FIGHTERS:
                 new_id = next(i for i in range(TRACK_MAX_FIGHTERS) if i not in self.slots)
-                self.slots[new_id] = _Slot(new_id, det["bbox_xyxy"], det["class_id"])
-                out[c] = {
-                    "bbox_xyxy":      det["bbox_xyxy"],
-                    "confidence":     det["confidence"],
-                    "class_id":       new_id,
-                    "model_class_id": det["class_id"],
-                }
-            # 3rd+ detection with slots full → drop (mis-detected referee, etc.)
+                self.slots[new_id] = _Slot(new_id, det["bbox_xyxy"])
+                out[c] = _emit(det, new_id)
+            # 3rd+ detection with slots full → drop.  fighter_detection already
+            # caps at TRACK_MAX_FIGHTERS, so reaching here means the cap moved.
 
         # Coast any slot that had no match this frame; prune if too stale
         stale: list[int] = []
@@ -196,15 +185,14 @@ class FighterTracker:
         Assign provisional track_id (0 or 1) to each fighter detection.
 
         Args:
-            fighter_dets: Detections with class_id ∈ {0, 1} from the custom
-                          YOLO model.  Referee detections (class_id=2) must be
-                          filtered out by the caller.
+            fighter_dets: Detections from fighter_detection.detect_fighters() —
+                          already fighter-only and already capped at
+                          TRACK_MAX_FIGHTERS, each carrying its own keypoints.
 
         Returns:
             List of dicts with:
-              class_id       — provisional track_id (0 or 1), stable across frames
-              model_class_id — original YOLO class (0 or 1), preserved for fallback
-              bbox_xyxy, confidence — unchanged from input
+              class_id   — provisional track_id (0 or 1), stable across frames
+              bbox_xyxy, confidence, keypoints — carried through unchanged
         """
         if not fighter_dets:
             for slot in list(self.slots.values()):
@@ -228,8 +216,3 @@ class FighterTracker:
             freeze = iou > CLINCH_IOU_THRESHOLD
 
         return self._assign(fighter_dets, freeze_velocity=freeze)
-
-    @property
-    def model_class_votes(self) -> dict[int, int]:
-        """Majority model-class vote per slot — used as corner-assignment fallback."""
-        return {sid: slot.majority_model_class for sid, slot in self.slots.items()}

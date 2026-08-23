@@ -225,8 +225,8 @@ def write_frames_and_rounds(
                             "fight_id":   fight_id,
                             "frame":      frame_number,
                             "corner":     d["class_id"],
-                            "x1": bbox[0], "y1": bbox[1],
-                            "x2": bbox[2], "y2": bbox[3],
+                            "x1": float(bbox[0]), "y1": float(bbox[1]),
+                            "x2": float(bbox[2]), "y2": float(bbox[3]),
                             "confidence": d.get("confidence"),
                             "keypoints":  json.dumps(raw_kp),
                         })
@@ -267,7 +267,7 @@ def process_fight(
     (run_pipeline for single-file mode, run_batch for batch mode).
 
     Args:
-        pose_data:  In-memory pose dict produced by track_poses()
+        pose_data:  In-memory corner-assigned dict from assign_corners()
                     (or loaded from a --pose-results dev override).
         fight_id:   Primary key of the fights row for this video.
         fps:        Frames per second of the source video (from fights row).
@@ -423,8 +423,8 @@ def process_fight(
                             "fight_id":   fight_id,
                             "frame":      frame_number,
                             "corner":     d["class_id"],
-                            "x1": bbox[0], "y1": bbox[1],
-                            "x2": bbox[2], "y2": bbox[3],
+                            "x1": float(bbox[0]), "y1": float(bbox[1]),
+                            "x2": float(bbox[2]), "y2": float(bbox[3]),
                             "confidence": d.get("confidence"),
                             "keypoints":  json.dumps(raw_kp),  # [[x,y]*17] or null
                         })

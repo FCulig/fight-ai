@@ -20,13 +20,13 @@ Examples:
   # Single-file mode — process one video
   python main.py fight.mp4
 
-  # Skip YOLO (reuse an existing detection file)
+  # Skip detection+pose (reuse an existing detection file)
   python main.py fight.mp4 --detection-file runs/detection_results.json
 
-  # Skip YOLO + ReID (reuse an existing reid file)
-  python main.py fight.mp4 --reid-file runs/output_reidentification.json
+  # Skip detection+pose and tracking (reuse an existing track file)
+  python main.py fight.mp4 --track-file runs/track_results.json
 
-  # Skip YOLO + ReID + Pose (reuse an existing pose file)
+  # Skip detection+pose, tracking and corner assignment
   python main.py fight.mp4 --pose-results runs/pose_results.json
 
   # Skip OCR + segmentation (supply an existing manifest)
@@ -51,16 +51,18 @@ The pipeline never writes intermediate files — PostgreSQL is the only data sto
     g = p.add_argument_group("file overrides — supply to skip steps")
     g.add_argument("--detection-file", type=str, default=None,
                    metavar="PATH",
-                   help="Load detection dict from file — skips YOLO")
+                   help="Load detection dict (boxes + keypoints) from file "
+                        "— skips fighter detection")
     g.add_argument("--track-file", type=str, default=None,
                    metavar="PATH",
-                   help="Load track dict from file — skips YOLO + tracking")
+                   help="Load track dict from file — skips detection + tracking")
     g.add_argument("--reid-file", type=str, default=None,
                    metavar="PATH",
                    help="Deprecated alias for --track-file")
     g.add_argument("--pose-results", type=str, default=None,
                    metavar="PATH",
-                   help="Load pose dict from file — skips YOLO + ReID + Pose")
+                   help="Load corner-assigned dict from file — skips detection, "
+                        "tracking and corner assignment")
     g.add_argument("--scoreboard-samples", type=str, default=None,
                    metavar="PATH",
                    help="Load scoreboard samples from file — skips OCR calibration + extraction")

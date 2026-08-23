@@ -16,22 +16,27 @@ Philosophy
 
 Pipeline order
 --------------
-Track A (pose):     1. YOLO detection
+Track A (geometry): 1. Fighter detection (XL pose boxes + keypoints, fighters
+                       picked out by the nano mask — see fighter_detection)
                     2. Fighter tracking  (geometry-only, Hungarian matching)
-                    3. Pose tracking
-                    3b. Corner assignment (glove-tape HSV vote → red/blue remap)
-Track B (segments): 1. YOLO detection  (shared with A)
+                    3. Corner assignment (appearance → red/blue remap)
+Track B (segments): 1. Fighter detection  (shared with A)
                     4. Scoreboard OCR
                     5. Fight segmentation
 Common finish:      6. process_fight   (skipped when any debug flag present)
 Debug outputs:      7. Pose debug video        (--verify-pose only)
                     8. Scoreboard debug video  (--verify-scoreboard only)
 
+Detection and pose used to be separate steps, with a nano detector emitting the
+boxes that survived and the XL pose model running afterwards only to have its
+keypoints copied onto them.  They are one step now: the XL model supplies both,
+so a box and its skeleton can no longer disagree about who they describe.
+
 Skip matrix
 -----------
 --detection-file      skips step 1 (loads file into detection dict)
 --track-file          skips steps 1–2 (loads file into track dict)
---pose-results        skips steps 1–3 (loads file into pose dict)
+--pose-results        skips steps 1–3 (loads file into corner-assigned dict)
 --scoreboard-samples  skips step 4 (loads file into samples list)
 --manifest            skips steps 4–5
 --rounds "s,e …"      skips steps 4–5 (explicit round boundaries)
@@ -46,7 +51,7 @@ from typing import Optional
 from database import set_fight_state, set_segmentation_review
 from debug import DebugContext
 from models.FightProcessingState import FightProcessingState as S
-from video_processing.video_processing import process_video
+from video_processing.fighter_detection.fighter_detection import detect_fighters
 from video_processing.fight_segmentation import segment_fights
 
 
@@ -237,10 +242,10 @@ def run_pipeline(
     # Determine which steps to run
     # ----------------------------------------------------------------
 
-    # Track A — pose
-    run_detection_for_pose = track_file is None and pose_results is None
-    run_tracking           = track_file is None and pose_results is None
-    run_pose               = pose_results is None
+    # Track A — fighter geometry
+    run_detection_for_track = track_file is None and pose_results is None
+    run_tracking            = track_file is None and pose_results is None
+    run_corners             = pose_results is None
 
     # Track B — segmentation
     has_rounds = manifest_file is not None or rounds_arg is not None or _db_rounds is not None
@@ -252,7 +257,7 @@ def run_pipeline(
     # Detection is shared; run if either track needs it
     run_detection_for_seg = detection_file is None and run_segment
     run_detection         = (detection_file is None
-                             and (run_detection_for_pose or run_detection_for_seg))
+                             and (run_detection_for_track or run_detection_for_seg))
 
     # Fight processing skipped if any debug flag present
     run_fight = verify_pose is None and not verify_scoreboard
@@ -262,7 +267,7 @@ def run_pipeline(
     # ----------------------------------------------------------------
     def _det_label() -> str:
         if detection_file:            return f"SKIP — {detection_file}"
-        if not run_detection_for_pose and pose_results:
+        if not run_detection_for_track and pose_results:
             return "SKIP — pose results supplied"
         if not run_detection:         return "SKIP — not needed"
         return "RUN"
@@ -290,9 +295,8 @@ def run_pipeline(
         ("Fight ID",        str(fight_id)),
         ("Video",           video_file),
         ("FPS",             str(fps)),
-        ("Detection",       _det_label()),
+        ("Detect + pose",   _det_label()),
         ("Tracking",        _track_label()),
-        ("Pose",            f"SKIP — {pose_results}" if pose_results else "RUN"),
         ("Corner assign",   "SKIP — pose results supplied" if pose_results else "RUN"),
         ("Scoreboard OCR",  _ocr_label()),
         ("Segmentation",    _seg_label()),
@@ -314,13 +318,16 @@ def run_pipeline(
 
     try:
         # ----------------------------------------------------------------
-        # Step 1 — YOLO detection
+        # Step 1 — Fighter detection (XL pose geometry + nano fighter mask)
         # ----------------------------------------------------------------
         t0 = time.perf_counter()
         if run_detection:
             set_fight_state(fight_id, S.DETECTING)
-            print(f"Running YOLO detection: {video_file}")
-            detection_data = process_video(video_file)
+            print(f"Running fighter detection: {video_file}")
+            detection_data = detect_fighters(
+                video_file,
+                on_pose_start=lambda: set_fight_state(fight_id, S.POSE),
+            )
         elif detection_file:
             print(f"Reusing detection results: {detection_file}")
             detection_data = _load_json(detection_file)
@@ -341,28 +348,17 @@ def run_pipeline(
         timings["tracking"] = time.perf_counter() - t0
 
         # ----------------------------------------------------------------
-        # Step 3 — Pose tracking
+        # Step 3 — Corner assignment (appearance → red/blue)
         # ----------------------------------------------------------------
-        t0 = time.perf_counter()
-        if run_pose:
-            set_fight_state(fight_id, S.POSE)
-            from video_processing.pose_tracking.pose_tracking import track_poses
-            print("Running pose tracking …")
-            pose_data = track_poses(track_data, video_path=video_file)
-        elif pose_results:
+        if pose_results:
             print(f"Reusing pose results: {pose_results}")
             pose_data = _load_json(pose_results)
-        timings["pose"] = time.perf_counter() - t0
-
-        # ----------------------------------------------------------------
-        # Step 3b — Corner assignment (glove-tape HSV vote)
-        # ----------------------------------------------------------------
-        if pose_data is not None and not pose_results:
+        elif run_corners and track_data is not None:
             set_fight_state(fight_id, S.CORNERS)
             from video_processing.corner_assignment.corner_assignment import assign_corners
             print("Running corner assignment …")
             t0        = time.perf_counter()
-            pose_data = assign_corners(pose_data, video_path=video_file)
+            pose_data = assign_corners(track_data, video_path=video_file)
             timings["corner_assignment"] = time.perf_counter() - t0
 
         # ----------------------------------------------------------------

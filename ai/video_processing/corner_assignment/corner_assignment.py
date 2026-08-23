@@ -19,7 +19,10 @@ Strategy (appearance path):
 
 Legacy fallback:
   A whole-fight static corner_map from a per-frame *paired* tape vote (which of
-  the two fighters read redder in this frame), falling back to model-class votes.
+  the two fighters read redder in this frame).  When even that has too little
+  evidence the mapping is left as identity and reported as UNDETERMINED — the
+  detector's red/blue class head is deliberately not consulted, being a
+  per-frame colour guess rather than a corner signal.
 
 Everything colour here is measured as *coverage of the sampled glove crop* and
 compared *between the two fighters within one frame*, then aggregated one vote
@@ -520,10 +523,8 @@ def _assign_frame_labels(
 # Legacy global fallback (original logic preserved verbatim)
 # ---------------------------------------------------------------------------
 
-def _legacy_global_corner_map(
-    tape_votes: dict, model_votes: dict
-) -> dict:
-    """Whole-fight fallback: paired per-frame tape vote, then model-class vote.
+def _legacy_global_corner_map(tape_votes: dict) -> dict:
+    """Whole-fight fallback: paired per-frame tape vote.
     Returns corner_map {0:x,1:y}.
 
     `tape_votes[slot]` counts frames in which that slot read *redder than the
@@ -541,21 +542,23 @@ def _legacy_global_corner_map(
         print(f"  Decision: paired tape vote {tape_votes[0]}/{tape_votes[1]} "
               f"(margin {margin:.0%}) → {corner_map}")
     else:
+        # There is nothing left to decide on.  The detector's red/blue class
+        # head used to break this tie, but it was never a corner signal: it is
+        # an independent per-frame colour guess with no temporal consistency,
+        # which is the reason this whole stage exists.  fighter_detection now
+        # ignores that head entirely.
+        #
+        # Identity mapping keeps the two corners distinct and self-consistent.
+        # It does NOT claim they are the right way round — a whole-fight
+        # inversion looks identical from inside the pipeline, so this outcome
+        # must be treated as UNVERIFIED, not as a decision.
         print(
             f"  WARNING: insufficient tape votes ({total_votes} < "
-            f"{CORNER_MIN_TAPE_VOTES}) — falling back to model class votes"
+            f"{CORNER_MIN_TAPE_VOTES}) — corner is UNDETERMINED; using identity "
+            f"mapping, which may be inverted. Verify with "
+            f"python -m eval.corner_accuracy <fight_id>"
         )
-        corner_map = {}
-        for track_id in (0, 1):
-            votes  = model_votes[track_id]
-            winner = max(votes, key=votes.get) if any(votes.values()) else track_id
-            corner_map[track_id] = winner
-
-        if corner_map.get(0) == corner_map.get(1):
-            print("  WARNING: model vote tie — using identity mapping as last resort")
-            corner_map = {0: 0, 1: 1}
-
-        print(f"  Decision: model vote → {corner_map}")
+        corner_map = {0: 0, 1: 1}
 
     return corner_map
 
@@ -581,11 +584,12 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
 
     Legacy fallback:
       When the template separation is below CORNER_TEMPLATE_MIN_SEPARATION (colors
-      too similar to distinguish) the original whole-fight tape-vote / model-class-
-      vote logic is used, guaranteeing no regression.
+      too similar to distinguish) the whole-fight paired tape-vote is used, and
+      failing that the mapping is left as identity and reported as UNDETERMINED.
 
     Args:
-        pose_data:  In-memory pose dict from track_poses().
+        pose_data:  In-memory track dict from track_fighters(), whose detections
+                    already carry their own keypoints.
         video_path: Source video — read sequentially once; no seeking.
 
     Returns:
@@ -615,7 +619,6 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
     tape_votes:  dict[int, int] = {0: 0, 1: 0}
     red_scores:  dict[int, int] = {0: 0, 1: 0}
     blue_scores: dict[int, int] = {0: 0, 1: 0}
-    model_votes: dict[int, dict[int, int]] = {0: {0: 0, 1: 0}, 1: {0: 0, 1: 0}}
 
     # Clean-frame descriptor buckets: slot → list of descriptors
     clean_descs: dict[int, list] = {0: [], 1: []}
@@ -638,10 +641,6 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
         if frame_bgr is not None:
             for det in fighter_dets:
                 slot = det["class_id"]  # provisional track_id (0 or 1)
-
-                orig = det.get("model_class_id")
-                if orig in (0, 1):
-                    model_votes[slot][orig] += 1
 
                 kp = det.get("keypoints")
                 if not kp or len(kp) < 11:
@@ -758,7 +757,7 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
 
     else:
         # Legacy: build static corner_map and apply uniformly.
-        corner_map = _legacy_global_corner_map(tape_votes, model_votes)
+        corner_map = _legacy_global_corner_map(tape_votes)
         swaps = 0
         for frame in data["frames"]:
             for det in frame.get("detections", []):

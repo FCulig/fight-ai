@@ -101,7 +101,7 @@ def verify_pose_tracking(
         along with the start frame of the next round.
 
     Args:
-        pose_data:   In-memory pose dict produced by track_poses()
+        pose_data:   In-memory corner-assigned dict from assign_corners()
                      (or loaded from a --pose-results dev override).
         rounds:      List of (start_frame, end_frame) tuples from segment_fights().
         fps:         Frames per second, taken from the fights DB row.
