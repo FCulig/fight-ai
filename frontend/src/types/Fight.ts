@@ -107,7 +107,9 @@ export const isInvalid = (state: string): boolean => state === 'invalid';
  * Segmentation could not corroborate its own round list against the scoreboard,
  * so the rounds are a detection-only guess and should be confirmed by hand.
  * The pipeline sets this at segmentation time — see ai/video_processing/
- * fight_segmentation.py `_review_verdict`.
+ * fight_segmentation.py `_review_verdict`. Once labeling is complete, every
+ * round has a hand-confirmed label-span (finish-labeling requires it), so the
+ * guess has already been confirmed and the warning no longer applies.
  */
 export const needsRoundReview = (fight: Fight): boolean =>
-  fight.segmentation_needs_review === true;
+  fight.segmentation_needs_review === true && fight.state !== 'labeling_complete';
