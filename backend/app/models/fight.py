@@ -7,6 +7,12 @@ from pydantic import BaseModel, ConfigDict
 from app.utils.db import Base
 
 
+# What the video is for. Written once by POST /fights/upload and never again —
+# in particular the AI pipeline never touches it, so a `reference` fight keeps
+# its identity when it is re-run to produce predictions to score against.
+FIGHT_PURPOSES = ("training_data", "reference", "ai_labeled")
+
+
 class Fight(Base):
     __tablename__ = "fights"
 
@@ -19,6 +25,7 @@ class Fight(Base):
     state = Column(String(32), nullable=False, server_default=text("'queued'"))
     pid = Column(Integer, nullable=True)
     labeled_at = Column(TIMESTAMP, nullable=True)
+    purpose = Column(String(32), nullable=False, server_default=text("'ai_labeled'"))
     reported_frames = Column(Integer, nullable=True)
     decoded_frames = Column(Integer, nullable=True)
     # Segmentation's own verdict on its round list — see ai/database.py
@@ -42,6 +49,7 @@ class FightResponse(BaseModel):
     created_at: datetime
     state: str
     labeled_at: Optional[datetime]
+    purpose: str
     reported_frames: Optional[int]
     decoded_frames: Optional[int]
     segmentation_needs_review: bool = False

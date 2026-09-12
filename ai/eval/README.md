@@ -126,12 +126,19 @@ frame or two off is harmless — being systematically early or late is not.
 every strike is recorded with `success = null`. The model needs negatives too,
 so a punch that visibly misses still gets logged, not skipped.
 
-**Red vs. blue** is the fighter's corner as shown by glove tape / shorts, fixed
-for the whole video. Do *not* copy whatever the pipeline decided — corner
-assignment is one of the things being measured. If the overlay shows a
-swapped corner (most likely mid-clinch), mark it with a `corner_swap` span
-(`O` to open, `O` again to close) rather than trusting the overlay or
-excluding the stretch — those are exactly the frames the model most needs.
+**Red vs. blue means the box on screen, not the name.** Select the corner whose
+rectangle is currently drawn around the fighter who acted, even when the overlay
+has them swapped: if red is on Roy right now and Roy punches, select **red**.
+This keeps your label and the persisted skeleton pointing at the same human, so
+the training join is correct with no correction applied — and so a swap span
+whose edge is a few frames off costs nothing.
+
+**And mark the swap anyway.** When the overlay shows a swapped corner (most
+likely mid-clinch), open a `corner_swap` span over it (`O` to open, `O` again to
+close) — never `excluded`, those are exactly the frames the model most needs.
+The span is not a fix to your labels; it is the ground truth for how often
+corner assignment fails, which is one of the things being measured, and the
+slot → person map for per-fighter statistics.
 
 **Exclude mid-round replays and camera cuts** with an `excluded` span (`P` to
 open, `P` again to close). Excluded spans are dropped from every metric, so a
@@ -236,9 +243,10 @@ python -m eval.cli corner-swap-recall fight_videos/x.mp4 --start 3200 --end 3450
 python -m eval.cli inject-swap fight_videos/x.mp4 --start 3200 --end 3450   # restores
 ```
 
-Two numbers matter: whether it was detected at all, and the boundary error in
-frames per edge (a span that starts 30 frames late still exports 30 frames
-with the wrong corner). Until this has been run and passed, "fraction of
+Detection is the number that matters. Boundary error in frames per edge is worth
+recording but is *not* a training-data risk: labels are logged against the box,
+so a span that starts 30 frames late still exports 30 correct frames — the edge
+only shifts per-fighter attribution. Until this has been run and passed, "fraction of
 labelled frames covered by a `corner_swap` span" is a **lower bound** on the
 pipeline's corner-assignment error rate, not the real figure — report it as
 one.

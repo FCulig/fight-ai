@@ -25,6 +25,7 @@ import FightEndModal, { type FightEndResult } from '../components/annotate/Fight
 import KeyboardLegend from '../components/annotate/KeyboardLegend';
 import AnnotationPanel from '../components/annotate/AnnotationPanel';
 import SaveStatus from '../components/annotate/SaveStatus';
+import FightPurposeBadge from '../components/FightPurposeBadge';
 import { KEYMAP, colorForAction, iconForAction, successForAction, type Corner, type ToolItem } from '../components/annotate/taxonomy';
 
 export default function Annotate() {
@@ -478,7 +479,7 @@ export default function Annotate() {
   }
 
   return (
-    <div style={{ position: 'relative', zIndex: 1, maxWidth: 1560, margin: '0 auto', padding: narrow ? '16px 14px 48px' : '22px 30px 70px' }}>
+    <div style={{ position: 'relative', zIndex: 1, width: '100%', boxSizing: 'border-box', maxWidth: 1560, margin: '0 auto', padding: narrow ? '16px 14px 48px' : '22px 30px 70px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <button onClick={() => navigate('/')} className="icon-btn" style={{ width: 38, height: 38 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_back</span>
@@ -487,6 +488,7 @@ export default function Annotate() {
           <div className="font-display" style={{ fontSize: 30, letterSpacing: '0.03em', color: '#f1f5f9', lineHeight: 1 }}>SELF-ANNOTATE</div>
           <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, marginTop: 3 }}>{redName} vs {blueName}</div>
         </div>
+        <FightPurposeBadge purpose={selectedFight.purpose} />
         <span style={{ flex: 1 }} />
         <SaveStatus saving={savingCount > 0} />
         <button

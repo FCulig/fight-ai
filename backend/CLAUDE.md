@@ -20,7 +20,8 @@ backend/
 │   │       ├── fighters.py   # /fighters/ endpoints (CRUD-lite + per-fighter events)
 │   │       └── tracking.py   # /tracking/ endpoints
 │   ├── models/
-│   │   ├── fight.py          # Fight model (state, pid, labeled_at, reported/decoded_frames,
+│   │   ├── fight.py          # Fight model (state, pid, labeled_at, purpose, FIGHT_PURPOSES,
+│   │   │                     #   reported/decoded_frames,
 │   │   │                     #   segmentation_needs_review/_reason,
 │   │   │                     #   red/blue_fighter_id) + FightResponse
 │   │   ├── fight_event.py    # FightEvent — PIPELINE PREDICTIONS ONLY (fighter_id/action/
@@ -58,7 +59,7 @@ backend/
 |--------|------|-------------|
 | GET | `/fights/` | List all fights (`FightResponse[]`) |
 | GET | `/fights/stream` | SSE stream of `{id, state}` on every state change (snapshot on connect, then live via `pg_notify('fight_state', …)`) |
-| POST | `/fights/upload` | Upload a video (`mode=ai\|manual`); creates the fight row (`state='validating'`) and spawns the full-decode validator, which spawns the pipeline itself on success |
+| POST | `/fights/upload` | Upload a video (`purpose=training_data\|reference\|ai_labeled`, required); creates the fight row (`state='validating'`) and spawns the full-decode validator, which spawns the pipeline itself on success. `purpose` also picks the track — only `ai_labeled` runs the full pipeline; the two labelling purposes get `skip_events` |
 | GET | `/fights/{fight_id}/rounds/` | Rounds for a fight (`RoundResponse[]`) — AI segmentation output |
 | GET | `/fights/{fight_id}/frames/` | Fighter bounding boxes + keypoints per frame (`FighterFrameResponse[]`) |
 | GET | `/fights/{fight_id}/events/` | Pipeline-predicted events scoped to a fight (`FightEventResponse[]`); optional `fighter_id` / `action` / `success` query filters — read-only, never written by the frontend |
@@ -86,12 +87,14 @@ backend/
 ## Models / Schemas
 
 ### `FightResponse`
-`id`, `video_path`, `fps` (int), `width`, `height`, `created_at`, `state`, `labeled_at` (nullable), `reported_frames`/`decoded_frames` (nullable — full-decode validation result, populated when `state=invalid`), `segmentation_needs_review`/`segmentation_review_reason` (whether the AI round list was corroborated by the scoreboard — written by the pipeline via `ai/database.py`'s `set_segmentation_review`, never by labelling; drives the Annotate page warning banner), `red_fighter_id`/`blue_fighter_id` (nullable), `red_fighter_name`/`blue_fighter_name` (nullable, joined in).
+`id`, `video_path`, `fps` (int), `width`, `height`, `created_at`, `state`, `labeled_at` (nullable), `purpose`, `reported_frames`/`decoded_frames` (nullable — full-decode validation result, populated when `state=invalid`), `segmentation_needs_review`/`segmentation_review_reason` (whether the AI round list was corroborated by the scoreboard — written by the pipeline via `ai/database.py`'s `set_segmentation_review`, never by labelling; drives the Annotate page warning banner), `red_fighter_id`/`blue_fighter_id` (nullable), `red_fighter_name`/`blue_fighter_name` (nullable, joined in).
 
 `fps` lets the frontend map video time → frame number.
 `width` / `height` are the video's native resolution; the overlay uses them to scale bbox coords.
 `state` is one of `validating|invalid|queued|detecting|tracking|pose|corners|scoreboard|segmenting|analyzing|completed|failed|labeling_in_progress|labeling_complete` — see `frontend/src/types/Fight.ts` for the full state machine and helper predicates (`isFightViewable`, `isLabelingReady`, `isInvalid`).
 `labeled_at` is the durable "ground truth finalised" marker — distinct from `state`, which resets when a labelled fight is re-run through the AI pipeline to become an evaluation fixture.
+`purpose` is what the video is *for*: `training_data` (labels feed model training), `reference` (held out of training; scored against to measure pipeline accuracy) or `ai_labeled` (produced by the full AI pipeline). Vocabulary lives in `FIGHT_PURPOSES` (`models/fight.py`), validated in the upload handler — the same module-constant pattern as `SPAN_KINDS`, not a PG enum.
+**`purpose` is written once by `POST /fights/upload` and never again.** Nothing in `ai/` reads or writes it, and `run_pipeline`'s `ON CONFLICT (video_path) DO UPDATE` must never add it to its `SET` list — a `reference` fight would otherwise lose its identity the first time it is re-run to produce predictions to score against. Same durability rule as `labeled_at`. There is no API or UI to change it after upload; a mistake needs a manual `UPDATE`.
 
 ### `FighterResponse` / `FighterCreate`
 `FighterResponse`: `id`, `first_name`, `last_name`, `nickname` (nullable), `created_at`.

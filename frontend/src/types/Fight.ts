@@ -7,6 +7,7 @@ export interface Fight {
   created_at: string;
   state: string;
   labeled_at: string | null;
+  purpose: string;
   reported_frames: number | null;
   decoded_frames: number | null;
   segmentation_needs_review: boolean;
@@ -16,6 +17,37 @@ export interface Fight {
   red_fighter_name: string | null;
   blue_fighter_name: string | null;
 }
+
+/**
+ * What the video is for. Set once at upload from the Upload dialog and never
+ * written again — the AI pipeline does not touch it, so a `reference` fight
+ * keeps its identity when it is re-run to produce predictions to score against.
+ */
+export type FightPurpose = 'training_data' | 'reference' | 'ai_labeled';
+
+export const PURPOSE_LABELS: Record<FightPurpose, string> = {
+  training_data: 'Training data',
+  reference: 'Reference',
+  ai_labeled: 'AI labeled',
+};
+
+/**
+ * Deliberately avoids #ff4d4d/#3aa0ff (corner colours — a badge in either would
+ * read as "red corner"), #ef4444 (error) and #f59e0b (the rounds-unverified
+ * warning). Violet is new to the palette. Colour is a redundant channel here
+ * anyway: every badge carries its text label.
+ */
+export const PURPOSE_COLORS: Record<FightPurpose, string> = {
+  training_data: '#a3c900', // --green-500
+  reference: '#a78bfa', // violet — no existing semantic
+  ai_labeled: '#00daf3', // --cyan-400, the AI accent
+};
+
+export const PURPOSE_ICONS: Record<FightPurpose, string> = {
+  training_data: 'model_training',
+  reference: 'verified',
+  ai_labeled: 'auto_awesome',
+};
 
 export const STATE_PROGRESS: Record<string, number> = {
   validating: 0,

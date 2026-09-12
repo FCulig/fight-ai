@@ -78,12 +78,26 @@ exactly what the model most needs.
 **Do not mutate `fighter_frames`.** Those rows are pipeline *output*. Correcting
 them in place destroys the evidence of how often corner assignment was wrong,
 which [Stage 1](03-stage1-artifacts.md) needs to measure. Predictions stay
-immutable, corrections are stored as labels, and the flip is applied at export
-time when joining labels to keypoints. A metric falls out for free: **fraction
-of labelled frames covered by a `corner_swap` span = the pipeline's
+immutable and corrections are stored as labels. A metric falls out for free:
+**fraction of labelled frames covered by a `corner_swap` span = the pipeline's
 corner-assignment error rate** — a *lower bound* on it, strictly, since it
 counts only the swaps a human caught. [0g](02d-label-quality.md#0g) measures
 that recall and replaces the bound with a real figure.
+
+⚠️ **`corner` is a track slot, not a person — do not apply the flip to the
+training join.** The labeller selects a corner by clicking the *box* on the
+overlay, not the fighter named at upload: mid-swap they pick the red rectangle
+that is currently around Roy and log "red punched". So `label_events.corner`
+and `fighter_frames.corner` are the same pointer, and the Stage 2 join
+`label_events(F, corner)` → `fighter_frames(F, corner)` → keypoints already
+lands on the skeleton that threw the punch, with nothing applied. Flipping at
+export would attach the label to the *other* fighter — the corruption
+[0a](02a-upload-tracks.md#0a) set out to prevent, caused by the mitigation.
+
+A `corner_swap` span is therefore the **slot → person map**. Apply it only
+where a person is required (per-fighter statistics, `fight_events.fighter_id`),
+and at read time. Mutating `fighter_frames.corner` at finish-labeling would
+desync it from `label_events.corner` and break the join that works today.
 
 ### How span annotation works
 
@@ -153,8 +167,10 @@ Ten properties most likely to be got wrong, so test each explicitly:
   refuses a fight with an unannotated stretch inside a round.
 - Deleting a label through the undo path removes a `label_events` row and
   **cannot** reach `fight_events` ([0c(5)](02b-label-schema.md#0c-5)).
-- A `corner_swap` span flips red/blue in the exported training tensor while
-  leaving the underlying `fighter_frames` rows untouched.
+- A `corner_swap` span leaves the exported training tensor *and* the underlying
+  `fighter_frames` rows untouched — label and keypoints are joined through the
+  same track slot, so the tensor is already correct. The span only remaps
+  slot → person, for per-fighter reporting.
 - Only frames inside `round` spans reach the training set — intros, walkouts and
   between-round rest are absent from both the positive and negative samples.
 - `Shift`+`1` records `jab` / `body` and plain `1` records `jab` / `head`, on a

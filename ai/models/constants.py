@@ -298,6 +298,33 @@ BOX_SMOOTHING_POLYORDER   = 2
 # below TRACK_MAX_MISSING_SECS so a gap the tracker itself only coasted through
 # is never turned into fabricated observations here.
 BOX_GAP_FILL_MAX_SECS     = 0.3
+# Outward pad applied around the wrist and ankle joints when the smoothed box is
+# floored against its own skeleton (box_smoothing step 4). The pose model marks
+# the wrist bone, not the front of the glove: a 16oz glove is roughly a fifth of
+# a torso length across, so a hull drawn through the wrists still cuts the hand
+# off mid-punch — which is the frame the box most needs to be right on. Expressed
+# as a fraction of fighter scale so it tracks the camera's zoom, like every other
+# geometric constant here.
+BOX_EXTREMITY_PAD_RATIO   = 0.20
+# Sanity gate on that same skeleton floor: the longer side of the keypoint hull,
+# as a multiple of fighter scale, beyond which the skeleton is treated as a pose
+# failure rather than a body and no floor is applied. A standing body is ~3.3
+# fighter scales tall; measured p90 across fights 52 and 54 is 3.26 and p99 is
+# 5.67, with a tail running to 51 where the pose model scatters joints across
+# the frame. 6.0 admits every real posture including a fully extended flying
+# knee and rejects ~0.9% of hulls.
+BOX_HULL_MAX_SCALE_RATIO  = 6.0
+# Drift check (box_smoothing step 4): how far the skeleton's torso centre may sit
+# OUTSIDE its own filtered box, as a fraction of that box's diagonal, before the
+# filtered box is discarded for that frame and the observed box used instead.
+# Nothing smooths the keypoints, so every pixel the filter moves a box is a pixel
+# between a box and a skeleton that arrived paired from one pose detection. On
+# the stored rows of fights 52 and 54 the drift population runs median 0.15 box
+# diagonals, p90 0.65, max 3.65. 0.05 sits below the body of that distribution
+# (it catches ~78% and ~75% of it) while ignoring the marginal cases where the
+# torso centre is a few pixels past the edge of a box that is otherwise correct —
+# those cost real smoothing to fix and mislabel nothing.
+BOX_SKELETON_DRIFT_RATIO  = 0.05
 
 # --- Glove-tape corner assignment ---
 # Both were absolute pixels — a camera zoomed further from the cage shrinks a

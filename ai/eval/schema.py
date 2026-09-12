@@ -151,10 +151,21 @@ class FightLabels:
     states: list[StateSpan] = field(default_factory=list)
     strikes: list[Strike] = field(default_factory=list)
     # Labeller-marked "red/blue are flipped here" stretches (see 0a/0d in the
-    # plan) — corner_assignment's known failure mode. Applied at export time
-    # when joining labels to fighter_frames.keypoints for training (Stage 2);
-    # fighter_frames itself is never mutated, so this is the only record of
-    # the correction.
+    # plan) — corner_assignment's known failure mode.
+    #
+    # **Do NOT apply these to a label->keypoint join.** `corner` is a track-slot
+    # pointer, not a person: the labeller selects a corner by clicking the *box*
+    # the overlay draws, so inside a swap span `label_events.corner` and
+    # `fighter_frames.corner` are consistently "wrong" about the name and
+    # correct about the human. The Stage 2 join label_events(F, corner) ->
+    # fighter_frames(F, corner) -> keypoints therefore already lands on the
+    # skeleton that threw the strike, with nothing applied; flipping here would
+    # attach the label to the *other* fighter.
+    #
+    # These spans are (a) the slot->person map — apply only where a person is
+    # required, e.g. per-fighter stats and fight_events.fighter_id — and (b) the
+    # ground truth for tracker identity swaps (see corner_swap_check).
+    # fighter_frames is never mutated either way.
     corner_swaps: list[Span] = field(default_factory=list)
     # Landed takedowns only (`takedown_landed` in the palette) — `fighter` is
     # unambiguous (the one who landed it). `takedown_attempt`/`_defended` are

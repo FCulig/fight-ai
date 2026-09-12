@@ -214,7 +214,7 @@ against the injected window. Two numbers, both needed:
 | Metric | Why it matters |
 |---|---|
 | **detection rate** | whether the mitigation works at all |
-| **boundary error** (frames, per edge) | the flip is applied at export — a span 30 frames short leaves 30 frames of corrupted training data |
+| **boundary error** (frames, per edge) | affects per-fighter *attribution* only. The training join goes through the track slot ([0d](02c-labelling-ui.md#0d)), so a span 30 frames short does **not** corrupt the tensor — this edge is far more forgiving than it looks, and detection rate is the number that matters |
 
 ⚠️ **This qualifies a claim in [0d](02c-labelling-ui.md#0d).** "Fraction of
 labelled frames covered by a `corner_swap` span = the pipeline's

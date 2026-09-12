@@ -18,9 +18,10 @@ frontend/src/
 │   ├── LabelSpan.ts       # { id, fight_id, kind: 'round'|'corner_swap'|'excluded',
 │   │                      #   start_frame, end_frame (null = still open), value }
 │   ├── Fight.ts           # { id, video_path, fps, width, height, created_at, state,
-│   │                      #   labeled_at, reported_frames, decoded_frames,
+│   │                      #   labeled_at, purpose, reported_frames, decoded_frames,
 │   │                      #   segmentation_needs_review/_reason, red/blue_fighter_id }
-│   │                      #   + STATE_LABELS/STATE_PROGRESS/TERMINAL_STATES maps and
+│   │                      #   + STATE_LABELS/STATE_PROGRESS/TERMINAL_STATES maps,
+│   │                      #   FightPurpose + PURPOSE_LABELS/_COLORS/_ICONS, and
 │   │                      #   isFightViewable/isLabelingReady/isInvalid/needsRoundReview
 │   │                      #   predicates
 │   ├── FighterFrame.ts   # { fight_id, frame, corner, x1, y1, x2, y2, confidence }
@@ -51,6 +52,8 @@ frontend/src/
 │   ├── EventItem.tsx       # individual event row
 │   ├── Header.tsx          # top nav
 │   ├── CornerSelect.tsx    # fighter search/create combobox, used by the upload dialog
+│   ├── FightPurposeBadge.tsx # training_data/reference/ai_labeled chip — fight list
+│   │                       #   subtitle + Player and Annotate headers
 │   ├── ConfirmDialog.tsx   # reusable confirm modal (title/message/danger/busy/error);
 │   │                       #   backs fight deletion from both Player and FightList
 │   ├── annotate/           # Annotate page sub-components — see "Labelling (Annotate page)" below
@@ -146,6 +149,28 @@ On each `currentFrame` change:
 - Populated from `useFights`, filtered to `isFightViewable(state)` (`completed` or `labeling_complete`)
 - Defaults to the most recently processed fight (last element of the list)
 - Changing selection re-fetches events, frames, and rounds for the new fight
+
+## Fight purpose
+
+`Fight.purpose` says what a video is *for*: `training_data` (labels feed model training),
+`reference` (held out of training; scored against to measure pipeline accuracy) or
+`ai_labeled` (produced by the full AI pipeline). It is chosen in `UploadDialog` and set
+once server-side at upload — nothing can change it afterwards, so a `reference` fight
+keeps its identity when it is re-run through the pipeline to produce predictions to
+score against.
+
+`UploadDialog` derives it from the two `ModeCard`s: **AI annotation** forces
+`ai_labeled` (not user-selectable), **Self-annotate** reveals a radio row —
+native `<input type="radio" name="fight-purpose">`, the only radio group in the app —
+with **no default selected**, and the submit button stays disabled until one is picked.
+That gate is deliberate: training and evaluation sets must stay disjoint, so the split
+should never be decided by inattention. `uploadFight()` sends `purpose` as the sole
+track selector; the old `mode: 'ai' | 'manual'` form field is gone, since `purpose`
+already implies it.
+
+`FightPurposeBadge` renders the chip. Its colours (`PURPOSE_COLORS` in `Fight.ts`)
+deliberately avoid the corner colours `#ff4d4d`/`#3aa0ff` — a badge in either would read
+as "red corner" — plus `#ef4444` (error) and `#f59e0b` (the rounds-unverified warning).
 
 ## Deleting a fight
 `DELETE /fights/{id}` is irreversible — it kills any running pipeline, unlinks the video file, and

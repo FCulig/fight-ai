@@ -10,6 +10,17 @@ corner". Corner assignment is a known weak point, and folding it into the
 detection score would hide detection progress behind attribution noise.
 Use ``strict_fighter=True`` to require the corner to match.
 
+**Corner read-back is not corner correctness.** ``fighter_accuracy`` compares
+the labeller's corner against the pipeline's — but the labeller *picks* a corner
+by clicking the box the overlay draws from ``fighter_frames.corner``, i.e. the
+pipeline's own assignment. A tracker identity swap is therefore copied into the
+label and cancels out here: the number reads near-100% however badly
+``assign_corners`` swaps, and measures only whether the human read the box
+correctly. It is circular in the same way seeded ``round`` spans are. The
+non-circular measurement of corner correctness is the labeller's ``corner_swap``
+spans (see ``corner_swap_check``); never quote this figure as an attribution
+accuracy. The field keeps its name so existing baseline JSON stays comparable.
+
 **Only scored frames count.** Both ground-truth and predicted events outside a
 labelled round, or inside an ``excluded`` span (replay, walkout, camera cut),
 are dropped before matching rather than counted as false positives — the
@@ -375,10 +386,13 @@ def format_report(r: Report, show_examples: int = 8) -> str:
             f"(systematic lag)   jitter {s.offset_jitter:.1f}f (spread)")
 
     add("\nCLASSIFICATION   (matched strikes only)")
-    add(f"  fighter attribution {_pct(s.fighter_accuracy)}  ({s.fighter_total} matches)")
+    add(f"  corner read-back    {_pct(s.fighter_accuracy)}  ({s.fighter_total} matches)")
     add(f"  strike family       {_pct(s.family_accuracy)}  ({s.family_total} specific)")
     add(f"  target zone         {_pct(s.target_accuracy)}  ({s.target_total} specific)")
     add(f"  landed vs missed    {_pct(s.landed_accuracy)}  ({s.landed_total} confirmable)")
+    add("  NB read-back is not attribution accuracy: the labeller reads the corner")
+    add("     off the pipeline's own overlay, so a swap is copied into the label and")
+    add("     cancels out. Measure corner correctness with corner_swap spans.")
     if s.nonspecific_matches:
         add(f"  {s.nonspecific_matches} matches were grappling predictions "
             f"(no family/target claim — excluded above)")

@@ -56,6 +56,7 @@ def create_fight(
     fps: int,
     width: int,
     height: int,
+    purpose: str,
     red_fighter_id: int | None = None,
     blue_fighter_id: int | None = None,
     state: str = "validating",
@@ -69,6 +70,7 @@ def create_fight(
             red_fighter_id=red_fighter_id,
             blue_fighter_id=blue_fighter_id,
             state=state,
+            purpose=purpose,
         )
         session.add(fight)
         session.flush()

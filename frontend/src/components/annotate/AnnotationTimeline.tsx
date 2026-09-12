@@ -340,7 +340,7 @@ export default function AnnotationTimeline({
         </TrackHead>
       </div>
 
-      <div ref={scrollRef} className="tl-scroll" style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', position: 'relative' }}>
+      <div ref={scrollRef} className="tl-scroll" style={{ flex: 1, minWidth: 0, overflowX: 'auto', overflowY: 'hidden', position: 'relative' }}>
         <div style={{ position: 'relative', width: W, height: totalH, minWidth: '100%' }}>
           <div style={{ position: 'absolute', top: TL.ruler, left: 0, width: '100%', height: TL.round, background: 'rgba(255,255,255,0.018)' }} />
           <div style={{ position: 'absolute', top: lanesTop + TL.lane, left: 0, width: '100%', height: TL.lane, background: 'rgba(255,255,255,0.022)' }} />

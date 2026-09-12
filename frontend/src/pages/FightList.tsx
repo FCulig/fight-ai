@@ -7,6 +7,7 @@ import { deleteFight } from '../services/api';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 import type { Fight } from '../types/Fight';
+import FightPurposeBadge from '../components/FightPurposeBadge';
 import { STATE_PROGRESS, STATE_LABELS, TERMINAL_STATES, isFightViewable, isLabelingReady, isInvalid, needsRoundReview } from '../types/Fight';
 
 function invalidReason(fight: Fight): string {
@@ -189,9 +190,19 @@ export default function FightList() {
                 </p>
                 {ready ? (
                   <>
-                    <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
-                      {labelingReady ? 'Ready to label · ' : ''}{fight.fps} fps · {fight.width}×{fight.height}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                      <FightPurposeBadge purpose={fight.purpose} size="sm" />
+                      <p style={{
+                        margin: 0,
+                        fontSize: 12,
+                        color: 'rgba(255,255,255,0.35)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {labelingReady ? 'Ready to label · ' : ''}{fight.fps} fps · {fight.width}×{fight.height}
+                      </p>
+                    </div>
                     {needsRoundReview(fight) && (
                       <p style={{
                         margin: '4px 0 0',
@@ -209,14 +220,22 @@ export default function FightList() {
                     )}
                   </>
                 ) : invalid ? (
-                  <p style={{ margin: 0, fontSize: 12, color: '#ef4444', lineHeight: 1.5 }}>
-                    {invalidReason(fight)}
-                  </p>
+                  <>
+                    <div style={{ marginBottom: 4 }}>
+                      <FightPurposeBadge purpose={fight.purpose} size="sm" />
+                    </div>
+                    <p style={{ margin: 0, fontSize: 12, color: '#ef4444', lineHeight: 1.5 }}>
+                      {invalidReason(fight)}
+                    </p>
+                  </>
                 ) : (
                   <div>
-                    <p style={{ margin: '0 0 5px', fontSize: 12, color: failed ? '#ef4444' : 'rgba(255,255,255,0.5)' }}>
-                      {stateLabel}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, margin: '0 0 5px' }}>
+                      <FightPurposeBadge purpose={fight.purpose} size="sm" />
+                      <p style={{ margin: 0, fontSize: 12, color: failed ? '#ef4444' : 'rgba(255,255,255,0.5)' }}>
+                        {stateLabel}
+                      </p>
+                    </div>
                     {!failed && (
                       <div style={{
                         height: 4,

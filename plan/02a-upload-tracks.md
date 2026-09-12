@@ -19,10 +19,16 @@ pid ownership transfer, delete mid-VALIDATING).
 <a id="0a"></a>
 ### 0a. Two upload tracks
 
-`mode: 'manual' | 'ai'` is already wired from `UploadDialog.tsx` through
-`uploadFight()` to `POST /fights/upload` ([fights.py:105](../backend/app/api/routes/fights.py)),
-where it selects `run_pipeline_async(skip_events=...)`. Each track already has its
-own states. Two things are still missing: the two validation states ([0b](#0b)), and a
+`purpose: 'training_data' | 'reference' | 'ai_labeled'` is wired from
+`UploadDialog.tsx` through `uploadFight()` to `POST /fights/upload`
+([fights.py:105](../backend/app/api/routes/fights.py)), where it selects
+`run_pipeline_async(skip_events=...)` — only `ai_labeled` runs the full pipeline.
+It replaced the original write-only `mode: 'manual' | 'ai'` field: unlike `mode`, it
+is **persisted on the fight row** (`fights.purpose`), so the disjoint-sets rule below
+is finally expressible in the schema rather than living only in the operator's head.
+Like `labeled_at`, it is written once at upload and never by the pipeline, so a
+`reference` fight survives being re-run as an evaluation fixture. Each track already
+has its own states. Two things are still missing: the two validation states ([0b](#0b)), and a
 **durable marker for "this fight has ground truth"** — see below.
 
 **AI track** — existing `FightProcessingState`, plus the two new ones:
@@ -95,14 +101,21 @@ no state machine; `pipeline.py` selects it at
 ⚠️ **Corner assignment is the risk to design around.** The human declares
 "red = Batur" at upload, but `assign_corners()` decides which *pixels* are red in
 each frame — and that is one of the unreliable components. If it swaps corners
-mid-clinch, the skeleton persisted as red is actually the other fighter while the
-human's label says "red threw a hook": **silent training-data corruption caused
-by the exact bug being fixed.** Mitigation: the labelling UI draws the
-corner-coloured overlay, so a swap is visible and the labeller marks that stretch
-with a `corner_swap` span ([0d](02c-labelling-ui.md#0d) — *not* `excluded`, which
-would discard the clinch frames the model most needs). Labelling then doubles as
-corner-assignment QA, and the swap spans are themselves a signal for
-[Stage 1](03-stage1-artifacts.md). **This mitigation is an untested assumption
+mid-clinch, the skeleton persisted as red is actually the other fighter. Were the
+labeller to log strikes against the fighter *named* red at upload, label and
+skeleton would disagree: **silent training-data corruption caused by the exact
+bug being fixed.**
+
+**Averted by the labelling convention, not by the span.** The labeller picks the
+corner by clicking the overlay *box*, so label and keypoints are joined through
+the same track slot and stay consistent straight through a swap
+([0d](02c-labelling-ui.md#0d)). The corruption above never arises — and applying
+the swap to that join would *create* it. What the labeller still owes is the
+span itself: the UI draws the corner-coloured overlay, so a swap is visible and
+the labeller marks that stretch with a `corner_swap` span (*not* `excluded`,
+which would discard the clinch frames the model most needs). Labelling doubles
+as corner-assignment QA, and the swap spans are the ground-truth signal for
+[Stage 1](03-stage1-artifacts.md). **Their recall is an untested assumption
 about human attention — [0g](02d-label-quality.md#0g) measures it before it is
 relied on at volume.**
 

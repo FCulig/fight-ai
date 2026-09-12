@@ -16,6 +16,7 @@ import LiveFeed from '../components/player/LiveFeed';
 import FightStatistics from '../components/player/FightStatistics';
 import Momentum from '../components/player/Momentum';
 import MatchupCard from '../components/player/MatchupCard';
+import FightPurposeBadge from '../components/FightPurposeBadge';
 
 export default function Player() {
   const { id } = useParams<{ id: string }>();
@@ -205,6 +206,7 @@ export default function Player() {
             {fightName}
           </span>
         )}
+        {selectedFight && <FightPurposeBadge purpose={selectedFight.purpose} />}
         {selectedFight && (
           <button
             onClick={() => { setDeleteError(null); setConfirmDelete(true); }}

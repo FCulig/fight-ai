@@ -1,19 +1,38 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Fighter } from '../types/Fighter';
-import type { Fight } from '../types/Fight';
+import type { Fight, FightPurpose } from '../types/Fight';
+import { PURPOSE_LABELS } from '../types/Fight';
 import { uploadFight } from '../services/api';
 import CornerSelect from './CornerSelect';
 import ModeCard from './ModeCard';
 
+/**
+ * The two purposes a self-annotated video can have. They must stay disjoint —
+ * a fight that trains the model can't also be the yardstick it's measured by.
+ */
+const PURPOSE_CHOICES: { value: 'training_data' | 'reference'; desc: string }[] = [
+  {
+    value: 'training_data',
+    desc: 'Labels feed model training. Never scored against the pipeline.',
+  },
+  {
+    value: 'reference',
+    desc: 'Held out of training. Used to measure pipeline accuracy.',
+  },
+];
+
 interface UploadDialogProps {
   open: boolean;
   onClose: () => void;
-  onSuccess: (fight: Fight, mode: 'ai' | 'manual') => void;
+  onSuccess: (fight: Fight, purpose: FightPurpose) => void;
 }
 
 export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogProps) {
   const [mode, setMode] = useState<'manual' | 'ai'>('ai');
+  // Deliberately starts null: the training/eval split must never be decided
+  // by inattention, so Upload stays disabled until one is picked.
+  const [manualPurpose, setManualPurpose] = useState<'training_data' | 'reference' | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [drag, setDrag] = useState(false);
   const [redF, setRedF] = useState<Fighter | null>(null);
@@ -25,6 +44,7 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
   useEffect(() => {
     if (open) {
       setMode('ai');
+      setManualPurpose(null);
       setFile(null);
       setDrag(false);
       setRedF(null);
@@ -48,15 +68,16 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
   };
 
   const sizeMB = file ? (file.size / 1048576).toFixed(1) + ' MB' : '';
-  const ready = !!file && !!redF && !!blueF;
+  const purpose: FightPurpose | null = mode === 'ai' ? 'ai_labeled' : manualPurpose;
+  const ready = !!file && !!redF && !!blueF && !!purpose;
 
   const handleSubmit = async () => {
     if (!ready || uploading) return;
     setUploading(true);
     setError(null);
     try {
-      const fight = await uploadFight(file, redF.id, blueF.id, mode);
-      onSuccess(fight, mode);
+      const fight = await uploadFight(file, redF.id, blueF.id, purpose);
+      onSuccess(fight, purpose);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
       setUploading(false);
@@ -69,9 +90,11 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
       ? 'Add a video to continue'
       : !redF || !blueF
         ? 'Assign both corner fighters'
-        : mode === 'manual'
-          ? 'Fighters will be detected, then it\'s ready for you to label'
-          : 'AI will process after upload';
+        : mode === 'manual' && !manualPurpose
+          ? 'Choose what this footage is for'
+          : mode === 'manual'
+            ? 'Fighters will be detected, then it\'s ready for you to label'
+            : 'AI will process after upload';
 
   return createPortal(
     <div
@@ -213,6 +236,52 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
             />
           </div>
         </div>
+
+        {/* Purpose — manual track only. AI uploads are always 'ai_labeled'. */}
+        {mode === 'manual' && (
+          <div style={{ padding: '20px 26px 0' }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.28)', marginBottom: 12 }}>
+              What is this footage for?
+            </div>
+            <div style={{ display: 'grid', gap: 9 }}>
+              {PURPOSE_CHOICES.map(choice => {
+                const active = manualPurpose === choice.value;
+                return (
+                  <label
+                    key={choice.value}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 11,
+                      padding: '11px 13px', borderRadius: 11,
+                      cursor: uploading ? 'default' : 'pointer',
+                      background: active ? 'rgba(0,218,243,0.06)' : 'rgba(0,0,0,0.30)',
+                      border: `1px solid ${active ? 'rgba(0,218,243,0.35)' : 'rgba(255,255,255,0.07)'}`,
+                      transition: 'border-color .14s, background .14s',
+                      opacity: uploading ? 0.5 : 1,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="fight-purpose"
+                      value={choice.value}
+                      checked={active}
+                      disabled={uploading}
+                      onChange={() => setManualPurpose(choice.value)}
+                      style={{ accentColor: 'var(--accent)', width: 15, height: 15, marginTop: 1, flexShrink: 0, cursor: 'inherit' }}
+                    />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: active ? '#f1f5f9' : '#cbd5e1' }}>
+                        {PURPOSE_LABELS[choice.value]}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginTop: 3, lineHeight: 1.45 }}>
+                        {choice.desc}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div style={{

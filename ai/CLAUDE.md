@@ -318,13 +318,17 @@ label_events   (id, fight_id → fights, frame, corner nullable, action nullable
                 target nullable, success nullable, description, labeler nullable, created_at)
                -- HAND LABELS ONLY, written by the Annotate frontend (backend
                --   label_event_service.py / routes). `corner` matches
-               --   fighter_frames.corner (0=red, 1=blue). Never touched by the
+               --   fighter_frames.corner (0=red, 1=blue) — both are track-slot
+               --   pointers, not people: the labeller clicks the overlay box, so
+               --   a swap is copied into the label and the two stay consistent.
+               --   Never touched by the
                --   pipeline — this is what makes re-running the AI pipeline over a
                --   labelled fight safe.
 label_spans    (id, fight_id → fights, kind, start_frame, end_frame nullable, value nullable, created_at)
                -- kind: 'round' (human-confirmed round bounds, seeded from the
-               --   `rounds` table) | 'corner_swap' (labeller-marked red/blue flip,
-               --   applied at export time, fighter_frames itself untouched) |
+               --   `rounds` table) | 'corner_swap' (labeller-marked red/blue flip;
+               --   a slot->person map, NOT applied to the label->keypoint join —
+               --   fighter_frames untouched, see plan/02c "Corner override") |
                --   'excluded' (replay/camera-cut span, value=reason).
                --   end_frame NULL means a start/end toggle is still open.
 ```

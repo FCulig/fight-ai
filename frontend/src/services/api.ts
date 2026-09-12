@@ -1,5 +1,5 @@
 import type { Event } from '../types/Event';
-import type { Fight } from '../types/Fight';
+import type { Fight, FightPurpose } from '../types/Fight';
 import type { Fighter } from '../types/Fighter';
 import type { FighterFrame } from '../types/FighterFrame';
 import type { LabelEvent } from '../types/LabelEvent';
@@ -69,15 +69,17 @@ export const createFighter = async (data: {
 
 export const uploadFight = async (
   file: File,
-  redFighterId?: number,
-  blueFighterId?: number,
-  mode: 'ai' | 'manual' = 'ai',
+  redFighterId: number | undefined,
+  blueFighterId: number | undefined,
+  purpose: FightPurpose,
 ): Promise<Fight> => {
   const form = new FormData();
   form.append('file', file);
   if (redFighterId != null) form.append('red_fighter_id', String(redFighterId));
   if (blueFighterId != null) form.append('blue_fighter_id', String(blueFighterId));
-  form.append('mode', mode);
+  // `purpose` also picks the pipeline track server-side: only 'ai_labeled'
+  // runs strike detection and the state machine.
+  form.append('purpose', purpose);
   const response = await fetch('/fights/upload', { method: 'POST', body: form });
   if (!response.ok) {
     const body = await response.json().catch(() => null);

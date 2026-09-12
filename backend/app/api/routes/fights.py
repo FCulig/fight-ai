@@ -8,7 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
-from app.models.fight import FightResponse
+from app.models.fight import FIGHT_PURPOSES, FightResponse
 from app.models.fighter_frame import FighterFrameResponse
 from app.models.fight_event import FightEventResponse
 from app.models.label_event import LabelEventCreate, LabelEventResponse
@@ -106,10 +106,13 @@ async def upload_fight(
     file: UploadFile = File(...),
     red_fighter_id: Optional[int] = Form(None),
     blue_fighter_id: Optional[int] = Form(None),
-    mode: str = Form("ai"),
+    purpose: str = Form(...),
 ):
-    if mode not in ("ai", "manual"):
-        raise HTTPException(status_code=400, detail="mode must be 'ai' or 'manual'")
+    if purpose not in FIGHT_PURPOSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"purpose must be one of {', '.join(FIGHT_PURPOSES)}",
+        )
 
     ext = Path(file.filename or "").suffix.lower()
     if ext not in _ALLOWED_EXTENSIONS:
@@ -168,6 +171,7 @@ async def upload_fight(
             height=height,
             red_fighter_id=red_fighter_id,
             blue_fighter_id=blue_fighter_id,
+            purpose=purpose,
         )
     except Exception as e:
         dest.unlink(missing_ok=True)
@@ -175,7 +179,11 @@ async def upload_fight(
             raise HTTPException(status_code=409, detail="A fight with this video already exists")
         raise
 
-    pid = run_validation_async(relative_path, fight.id, skip_events=(mode == "manual"))
+    # Only the AI track runs strike detection and the state machine; both
+    # labelling purposes get the reduced pipeline that stops at keypoints.
+    pid = run_validation_async(
+        relative_path, fight.id, skip_events=(purpose != "ai_labeled")
+    )
     fight_service.set_fight_pid(fight.id, pid)
 
     return fight
