@@ -1,16 +1,15 @@
 import AccGauge from './AccGauge';
 import MiniStat from './MiniStat';
 import SegBar from './SegBar';
-import { fighters, ctrlFmt } from '../../mocks/fightMock';
-import type { FighterStats } from '../../mocks/fightMock';
+import { ctrlFmt } from '../../mocks/fightMock';
+import type { FighterProfile, FighterStats } from '../../mocks/fightMock';
 
 interface FighterColumnProps {
-  corner: 'red' | 'blue';
+  f: FighterProfile;
   s: FighterStats;
 }
 
-export default function FighterColumn({ corner, s }: FighterColumnProps) {
-  const f = fighters[corner];
+export default function FighterColumn({ f, s }: FighterColumnProps) {
   return (
     <div className="glass" style={{ padding: '22px 24px', borderTop: `2px solid ${f.color}`, boxShadow: `0 -1px 24px -10px ${f.color}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>

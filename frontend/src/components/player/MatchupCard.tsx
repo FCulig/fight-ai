@@ -1,19 +1,23 @@
 import { useWindowWidth } from '../../hooks/useWindowWidth';
-import { fighters } from '../../mocks/fightMock';
+import type { FighterProfile } from '../../mocks/fightMock';
 import { EdgeRow } from './EdgeMeter';
 import type { EdgeTape } from './EdgeMeter';
 import FormList from './RecentForm';
 
-const EDGE_TAPE: EdgeTape[] = [
-  { label: 'Height', r: fighters.red.height, b: fighters.blue.height },
-  { label: 'Reach',  r: fighters.red.reach,  b: fighters.blue.reach  },
-  { label: 'Age',    r: fighters.red.age,    b: fighters.blue.age,    lowerWins: true },
-];
+interface MatchupCardProps {
+  fighters: { red: FighterProfile; blue: FighterProfile };
+}
 
-export default function MatchupCard() {
+export default function MatchupCard({ fighters }: MatchupCardProps) {
   const width = useWindowWidth();
   const narrow = width < 1100;
   const r = fighters.red, b = fighters.blue;
+
+  const EDGE_TAPE: EdgeTape[] = [
+    { label: 'Height', r: r.height, b: b.height },
+    { label: 'Reach',  r: r.reach,  b: b.reach  },
+    { label: 'Age',    r: r.age,    b: b.age,    lowerWins: true },
+  ];
 
   return (
     <div className="glass" style={{ marginTop: 16, padding: '22px 24px' }}>

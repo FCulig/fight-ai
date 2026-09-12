@@ -35,11 +35,16 @@ interface FighterProfile {
 
 ## 2. Per-Round Aggregated Stats Per Fighter
 
-**Hardcoded in:** `src/mocks/fightMock.ts` → `stats` (`'fight' | 1 | 2` scopes)
+**Status:** Resolved client-side — `deriveStatsForRange()` in `src/utils/liveStats.ts` parses
+`events` (frame-filtered to the whole fight, a round's `[start_frame, end_frame]`, or
+`[0, currentFrame]` for "Live") and is consumed by `FightStatistics.tsx` for all three
+`ScopeToggle` modes. No backend aggregation needed for this to work; an endpoint would
+only be a performance optimization for very long event lists.
 
 **Consumed by:** `FightStatistics.tsx` → `FighterColumn.tsx`
 
-**Missing from API:** The backend stores raw events but does not aggregate per-round stats. Needed per fighter per scope:
+**Original gap (kept for reference):** The backend stores raw events but does not aggregate
+per-round stats. Shape needed per fighter per scope:
 
 ```ts
 interface FighterStats {
@@ -89,11 +94,16 @@ interface EnrichedEvent {
 
 ## 4. Pace Timeline
 
-**Hardcoded in:** `src/mocks/fightMock.ts` → `pace` (23 pre-computed buckets)
+**Status:** Resolved client-side — `derivePaceBuckets()` in `src/utils/liveStats.ts` buckets
+landed significant strikes from `events` into `bucketSeconds`-wide windows per fighter.
+`Momentum.tsx` calls it with the real `events`/`fps` instead of a hardcoded array. No backend
+aggregation needed for this to work; an endpoint would only be a performance optimization for
+very long fights.
 
 **Consumed by:** `Momentum.tsx` → `PaceChart.tsx`
 
-**Missing from API:** No time-series aggregation exists. Needed:
+**Original gap (kept for reference):** No time-series aggregation exists in the backend. Shape
+that an endpoint could return instead:
 
 ```ts
 interface PaceTimeline {

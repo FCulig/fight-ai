@@ -3,32 +3,35 @@ import { useWindowWidth } from '../../hooks/useWindowWidth';
 import ScopeToggle from './ScopeToggle';
 import type { Scope } from './ScopeToggle';
 import FighterColumn from './FighterColumn';
-import { stats } from '../../mocks/fightMock';
-import type { ScopeStats } from '../../mocks/fightMock';
+import type { FighterProfile, ScopeStats } from '../../mocks/fightMock';
 import type { Event } from '../../types/Event';
 import type { Round } from '../../types/Round';
-import { deriveLiveStats } from '../../utils/liveStats';
+import { deriveStatsForRange } from '../../utils/liveStats';
 
 interface Props {
   currentFrame: number;
   events: Event[];
   fps: number;
   rounds: Round[];
+  fighters: { red: FighterProfile; blue: FighterProfile };
 }
 
-export default function FightStatistics({ currentFrame, events, fps, rounds }: Props) {
+export default function FightStatistics({ currentFrame, events, fps, rounds, fighters }: Props) {
   const [scope, setScope] = useState<Scope>('fight');
   const width = useWindowWidth();
   const cols = width < 1100 ? '1fr' : '1fr 1fr';
 
   let st: ScopeStats;
   if (scope === 'live') {
-    st = deriveLiveStats(events, currentFrame, fps);
+    st = deriveStatsForRange(events, 0, currentFrame, fps);
   } else if (scope === 'fight') {
-    st = stats['fight'];
+    st = deriveStatsForRange(events, 0, Infinity, fps);
   } else {
-    // round number — fall back to fight-wide if this round isn't in the mock
-    st = (stats as Record<string | number, ScopeStats>)[scope] ?? stats['fight'];
+    // round number — scope to that round's frame range, fall back to fight-wide if unknown
+    const round = rounds.find(r => r.round_number === scope);
+    st = round
+      ? deriveStatsForRange(events, round.start_frame, round.end_frame, fps)
+      : deriveStatsForRange(events, 0, Infinity, fps);
   }
 
   return (
@@ -44,8 +47,8 @@ export default function FightStatistics({ currentFrame, events, fps, rounds }: P
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 16, marginTop: 16 }}>
-        <FighterColumn corner="red" s={st.red} />
-        <FighterColumn corner="blue" s={st.blue} />
+        <FighterColumn f={fighters.red} s={st.red} />
+        <FighterColumn f={fighters.blue} s={st.blue} />
       </div>
     </>
   );

@@ -1,15 +1,22 @@
 import PaceChart from './PaceChart';
-import { fighters, pace, DURATION, R1_END } from '../../mocks/fightMock';
+import { DURATION, R1_END } from '../../mocks/fightMock';
+import type { FighterProfile } from '../../mocks/fightMock';
+import type { Event } from '../../types/Event';
+import { derivePaceBuckets } from '../../utils/liveStats';
 
 interface MomentumProps {
   time: number;
   duration: number;
   r1EndSeconds: number;
+  events: Event[];
+  fps: number;
+  fighters: { red: FighterProfile; blue: FighterProfile };
 }
 
-export default function Momentum({ time, duration, r1EndSeconds }: MomentumProps) {
+export default function Momentum({ time, duration, r1EndSeconds, events, fps, fighters }: MomentumProps) {
   const d = duration > 0 ? duration : DURATION;
   const r1 = r1EndSeconds > 0 ? r1EndSeconds : R1_END;
+  const pace = derivePaceBuckets(events, fps, d);
   return (
     <div className="glass" style={{ marginTop: 16, padding: '22px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>

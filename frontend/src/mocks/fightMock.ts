@@ -86,27 +86,19 @@ export const fighters: { red: FighterProfile; blue: FighterProfile } = {
   },
 };
 
-export const stats: Record<'fight' | 1 | 2, ScopeStats> = {
-  fight: {
-    red:  { sig: [84, 171], total: [96, 189], head: 52, body: 21, leg: 11, distance: 61, clinch: 14, ground: 9,  td: [2, 5], ctrl: 102, kd: 0, sub: 1, acc: 49 },
-    blue: { sig: [71, 142], total: [81, 158], head: 40, body: 19, leg: 12, distance: 48, clinch: 13, ground: 10, td: [3, 6], ctrl: 158, kd: 1, sub: 1, acc: 50 },
-  },
-  1: {
-    red:  { sig: [41, 82], total: [47, 90], head: 25, body: 10, leg: 6, distance: 30, clinch: 7, ground: 4, td: [1, 2], ctrl: 48, kd: 0, sub: 0, acc: 50 },
-    blue: { sig: [38, 70], total: [44, 79], head: 22, body: 9,  leg: 7, distance: 24, clinch: 8, ground: 6, td: [2, 3], ctrl: 96, kd: 1, sub: 1, acc: 54 },
-  },
-  2: {
-    red:  { sig: [43, 89], total: [49, 99], head: 27, body: 11, leg: 5, distance: 31, clinch: 7, ground: 5, td: [1, 3], ctrl: 54, kd: 0, sub: 1, acc: 48 },
-    blue: { sig: [33, 72], total: [37, 79], head: 18, body: 10, leg: 5, distance: 24, clinch: 5, ground: 4, td: [1, 3], ctrl: 62, kd: 0, sub: 0, acc: 46 },
-  },
-};
-
-// Sig strikes landed per 30s bucket (23 buckets for ~677s fight)
-export const pace = {
-  red:  [2, 3, 1, 4, 2, 3, 1, 2, 3, 2, 4, 1, 0, 3, 2, 1, 3, 2, 3, 4, 2, 1, 2],
-  blue: [1, 2, 3, 2, 3, 1, 3, 2, 1, 3, 2, 1, 0, 2, 3, 2, 1, 3, 2, 1, 2, 3, 1],
-};
-
-export const paceBucket = 30;
 export const DURATION = 677;
 export const R1_END = 313;
+
+// Overlays a real fighter name (from Fight.red_fighter_name / blue_fighter_name,
+// "First Last") onto a mock profile, splitting it the same way the mock data is
+// shaped: surname as the big display `name`, given name(s) as `first`. Falls back
+// to the mock profile untouched when the fight has no linked fighter yet.
+// Everything else on FighterProfile (nickname, record, reach, height, age,
+// country, form) has no backend source — see TODO_BACKEND_DATA.md #1.
+export function withRealName(profile: FighterProfile, fullName: string | null | undefined): FighterProfile {
+  if (!fullName?.trim()) return profile;
+  const parts = fullName.trim().split(/\s+/);
+  const last = parts[parts.length - 1];
+  const first = parts.slice(0, -1).join(' ') || last;
+  return { ...profile, name: last.toUpperCase(), first };
+}

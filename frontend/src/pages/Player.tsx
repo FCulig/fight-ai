@@ -17,6 +17,7 @@ import FightStatistics from '../components/player/FightStatistics';
 import Momentum from '../components/player/Momentum';
 import MatchupCard from '../components/player/MatchupCard';
 import FightPurposeBadge from '../components/FightPurposeBadge';
+import { fighters as mockFighters, withRealName } from '../mocks/fightMock';
 
 export default function Player() {
   const { id } = useParams<{ id: string }>();
@@ -138,6 +139,11 @@ export default function Player() {
   // Round 1 end in seconds for pace chart playhead
   const r1Round = rounds.find(r => r.round_number === 1);
   const r1EndSeconds = r1Round ? r1Round.end_frame / fps : 0;
+
+  const displayFighters = {
+    red: withRealName(mockFighters.red, selectedFight?.red_fighter_name),
+    blue: withRealName(mockFighters.blue, selectedFight?.blue_fighter_name),
+  };
 
   if (isProcessing) {
     return (
@@ -349,14 +355,15 @@ export default function Player() {
           events={events}
           fps={fps}
           rounds={rounds}
+          fighters={displayFighters}
         />
       )}
 
       {/* MOMENTUM */}
-      <Momentum time={currentTime} duration={duration} r1EndSeconds={r1EndSeconds} />
+      <Momentum time={currentTime} duration={duration} r1EndSeconds={r1EndSeconds} events={events} fps={fps} fighters={displayFighters} />
 
       {/* MATCHUP */}
-      <MatchupCard />
+      <MatchupCard fighters={displayFighters} />
     </div>
   );
 }

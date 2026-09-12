@@ -10,6 +10,18 @@ export function deriveLiveStats(
   currentFrame: number,
   fps: number,
 ): { red: FighterStats; blue: FighterStats } {
+  return deriveStatsForRange(events, 0, currentFrame, fps);
+}
+
+// Aggregates events with startFrame <= e.frame <= endFrame. Used for "Whole Fight"
+// (0..Infinity), a single round (round.start_frame..round.end_frame), and "Live"
+// (0..currentFrame, via deriveLiveStats above).
+export function deriveStatsForRange(
+  events: Event[],
+  startFrame: number,
+  endFrame: number,
+  fps: number,
+): { red: FighterStats; blue: FighterStats } {
   const red = emptyStats();
   const blue = emptyStats();
 
@@ -18,7 +30,7 @@ export function deriveLiveStats(
   let groundStart: number | null = null;
   let groundInitiator: 'red' | 'blue' | null = null;
 
-  const filtered = events.filter(e => e.frame <= currentFrame);
+  const filtered = events.filter(e => e.frame >= startFrame && e.frame <= endFrame);
 
   for (const e of filtered) {
     const desc = e.description;
@@ -97,9 +109,12 @@ export function deriveLiveStats(
     }
   }
 
-  // If still in GROUND state at currentFrame, credit elapsed ctrl up to now
+  // If still in GROUND state at endFrame, credit elapsed ctrl up to there.
+  // endFrame may be Infinity (whole-fight scope) — cap at the last real event
+  // frame so an unclosed ground state doesn't produce infinite control time.
   if (groundStart !== null && groundInitiator !== null) {
-    const seconds = (currentFrame - groundStart) / fps;
+    const cap = Number.isFinite(endFrame) ? endFrame : filtered[filtered.length - 1]?.frame ?? groundStart;
+    const seconds = (cap - groundStart) / fps;
     if (groundInitiator === 'red') red.ctrl += seconds;
     else blue.ctrl += seconds;
   }
@@ -111,6 +126,41 @@ export function deriveLiveStats(
   // ctrl: round to nearest second
   red.ctrl  = Math.round(red.ctrl);
   blue.ctrl = Math.round(blue.ctrl);
+
+  return { red, blue };
+}
+
+const STRIKE_RE = /^(fighter_red|fighter_blue) threw a (\S+?)(?:\s+\((landed|missed|unconfirmed)\))?$/i;
+
+// Buckets significant strikes landed per fighter into bucketSeconds-wide windows,
+// for the MOMENTUM pace chart. durationSeconds sizes the bucket array even past
+// the last event (e.g. while the fight is still being reviewed).
+export function derivePaceBuckets(
+  events: Event[],
+  fps: number,
+  durationSeconds: number,
+  bucketSeconds = 30,
+): { red: number[]; blue: number[] } {
+  const lastEventSeconds = events.reduce((max, e) => Math.max(max, e.frame / fps), 0);
+  const totalSeconds = Math.max(durationSeconds, lastEventSeconds);
+  const bucketCount = Math.max(2, Math.ceil(totalSeconds / bucketSeconds));
+
+  const red = new Array<number>(bucketCount).fill(0);
+  const blue = new Array<number>(bucketCount).fill(0);
+
+  for (const e of events) {
+    const m = e.description.match(STRIKE_RE);
+    if (!m) continue;
+
+    const strikeType = m[2].toLowerCase();
+    const outcome = m[3]?.toLowerCase() ?? null;
+    const landed = outcome === 'landed' || strikeType.startsWith('clinch_') || strikeType.startsWith('ground_');
+    if (!landed) continue;
+
+    const bucket = Math.min(bucketCount - 1, Math.floor(e.frame / fps / bucketSeconds));
+    const arr = m[1].toLowerCase() === 'fighter_red' ? red : blue;
+    arr[bucket] += 1;
+  }
 
   return { red, blue };
 }
