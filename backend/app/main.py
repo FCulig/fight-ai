@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from app.api.routes.tracking import router as tracking_router
 from app.api.routes.fights import router as fights_router
 from app.api.routes.fighters import router as fighters_router
+from app.api.routes.eval_runs import router as eval_runs_router
 from app.services import fight_service
 from app.services.pipeline_runner import is_pipeline_process_alive
 from app.utils import fight_state_listener
@@ -36,3 +37,4 @@ app = FastAPI(title="Fight AI", lifespan=lifespan)
 app.include_router(tracking_router, prefix="/tracking")
 app.include_router(fights_router, prefix="/fights")
 app.include_router(fighters_router, prefix="/fighters")
+app.include_router(eval_runs_router, prefix="/eval-runs")

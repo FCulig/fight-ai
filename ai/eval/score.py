@@ -134,7 +134,11 @@ class StateScore:
 
 @dataclass
 class RoundScore:
-    matched: list[tuple[int, float, float, float]] = field(default_factory=list)
+    # (round_num, iou, start_offset_secs, end_offset_secs, seeded). `seeded`
+    # is True when the label round is unverified (still byte-identical to
+    # what it was auto-seeded from — see schema.Round.seeded) — rendering the
+    # IoU for one of these is circular, see format_report below.
+    matched: list[tuple[int, float, float, float, bool]] = field(default_factory=list)
     gt_count: int = 0
     pred_count: int = 0
 
@@ -232,9 +236,10 @@ def score_strikes(
         g, p = gt[i], pred[j]
         out.matched_offsets.append(p.frame - g.frame)
 
-        out.fighter_total += 1
-        if g.fighter == p.fighter:
-            out.fighter_correct += 1
+        if p.fighter != "unknown":  # corners unassigned at upload — nothing to read back
+            out.fighter_total += 1
+            if g.fighter == p.fighter:
+                out.fighter_correct += 1
 
         if not p.is_specific:
             # Grappling prediction — carries no family/target claim to grade.
@@ -334,6 +339,7 @@ def score_rounds(labels: FightLabels, preds: Predictions) -> RoundScore:
                 best_iou,
                 (best.start - g.start) / labels.fps,
                 (best.end - g.end) / labels.fps,
+                g.seeded,
             ))
 
     return out
@@ -425,8 +431,13 @@ def format_report(r: Report, show_examples: int = 8) -> str:
     rd = r.rounds
     verdict = "OK" if rd.count_correct else "WRONG"
     add(f"\nROUNDS   truth {rd.gt_count}   predicted {rd.pred_count}   count {verdict}")
-    for num, iou, dstart, dend in rd.matched:
-        add(f"  round {num}: IoU {iou:5.1%}   start {dstart:+6.2f}s   end {dend:+6.2f}s")
+    for num, iou, dstart, dend, seeded in rd.matched:
+        iou_col = "Seeded — not verified" if seeded else f"IoU {iou:5.1%}"
+        add(f"  round {num}: {iou_col}   start {dstart:+6.2f}s   end {dend:+6.2f}s")
+    if any(seeded for *_, seeded in rd.matched):
+        add("  NOTE: a seeded-unverified round is still byte-identical to the pipeline's")
+        add("        own segmentation — scoring its IoU would be circular. Confirm it by")
+        add("        hand in Annotate before trusting a number for it.")
     if not rd.count_correct:
         add("  NOTE: mean IoU stays high when one round is split into several — "
             "the count is what catches that.")

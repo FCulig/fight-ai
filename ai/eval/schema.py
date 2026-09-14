@@ -126,6 +126,15 @@ class Span:
 @dataclass
 class Round(Span):
     round: int = 1
+    # True when this round's bounds are byte-identical to what
+    # _ensure_round_events_seeded (backend/app/services/event_service.py)
+    # auto-seeded from the `rounds` table and a labeller never touched them —
+    # only set by labels_db.build_labels(_by_fight_id)(), which can compare
+    # against the AI segmentation; always False for a file loaded via
+    # FightLabels.load(). Scoring round IoU against a seeded-unverified round
+    # is circular (see memory "fight-ai-eval-labels-are-circular") — score.py
+    # reports "Seeded — not verified" instead of an IoU for these.
+    seeded: bool = False
 
 
 @dataclass

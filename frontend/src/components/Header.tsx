@@ -6,6 +6,7 @@ import UploadDialog from './UploadDialog';
 const NAV_LINKS = [
   { label: 'Analysis', to: '/' },
   { label: 'Library', to: '/library' },
+  { label: 'Accuracy', to: '/accuracy' },
 ];
 
 export default function Header() {

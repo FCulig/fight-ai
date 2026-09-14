@@ -9,6 +9,7 @@ Run from the ai/ directory:
     python -m eval.cli export  fight_videos/BATURvsSTAMATOVIC.mp4
     python -m eval.cli sanity  fight_videos/BATURvsSTAMATOVIC.mp4
     python -m eval.cli score   fight_videos/BATURvsSTAMATOVIC.mp4
+    python -m eval.cli score-pair --labels-fight-id 46 --predictions-fight-id 62 --write-db
     python -m eval.cli summary
 """
 
@@ -157,6 +158,50 @@ def _cmd_score(args) -> int:
         from .report_io import save_report
         path = save_report(report, args.json)
         print(f"\n  wrote {path}")
+
+    return 0
+
+
+def _cmd_score_pair(args) -> int:
+    """Score one fight's pipeline predictions against a *different* fight's
+    hand labels — the real accuracy workflow (backend/CLAUDE.md): the labelled
+    fixture (`purpose='reference'`) is never re-run, so the pipeline version
+    under test is a separate re-upload of the same source video
+    (`purpose='ai_labeled'`), a different fight_id. Plain `score` can't do this
+    — it resolves both labels and predictions from the same `video` argument."""
+    from .labels_db import NotLabeled, build_labels_by_fight_id
+    from .predictions import load_predictions_by_fight_id
+    from .sanity import check, format_sanity
+    from .score import format_report, score
+
+    try:
+        labels = build_labels_by_fight_id(args.labels_fight_id)
+    except NotLabeled as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    preds = load_predictions_by_fight_id(args.predictions_fight_id)
+    tolerance_secs = _resolve_tolerance(args.tolerance_override)
+
+    report = score(labels, preds,
+                   tolerance_secs=tolerance_secs,
+                   strict_fighter=args.strict_fighter)
+    print(format_report(report, show_examples=args.examples))
+    _print_agreement_ceiling(labels.video, report.strikes.tolerance_frames)
+
+    if not args.no_sanity:
+        print(format_sanity(check(preds)))
+
+    if args.json:
+        from .report_io import save_report
+        path = save_report(report, args.json)
+        print(f"\n  wrote {path}")
+
+    if args.write_db:
+        from .report_io import save_eval_run_db
+        run_id = save_eval_run_db(
+            report, args.labels_fight_id, args.predictions_fight_id, tolerance_secs,
+        )
+        print(f"\n  wrote eval_runs row id={run_id}")
 
     return 0
 
@@ -334,6 +379,31 @@ def build_parser() -> argparse.ArgumentParser:
                     help="write the report as JSON to PATH, alongside git_sha "
                          "and constants_sha256")
     sc.set_defaults(func=_cmd_score)
+
+    scp = sub.add_parser("score-pair", help="score one fight's predictions against a "
+                                              "DIFFERENT fight's hand labels — the real "
+                                              "cross-version workflow, see backend/CLAUDE.md "
+                                              "'Pipeline accuracy is validated by...'")
+    scp.add_argument("--labels-fight-id", type=int, required=True, metavar="ID",
+                     help="fight id holding the hand labels (purpose=reference, labeled_at set)")
+    scp.add_argument("--predictions-fight-id", type=int, required=True, metavar="ID",
+                     help="fight id holding the pipeline predictions to score "
+                          "(purpose=ai_labeled — a re-upload of the same source video)")
+    scp.add_argument("--tolerance-override", type=float, default=None,
+                     metavar="SECS", help="see `score --tolerance-override`")
+    scp.add_argument("--strict-fighter", action="store_true",
+                     help="require the corner to match for a strike to count as a TP")
+    scp.add_argument("--examples", type=int, default=8, metavar="N",
+                     help="how many example FN/FP to list (default: 8)")
+    scp.add_argument("--no-sanity", action="store_true",
+                     help="skip the artifact checks appended to the report")
+    scp.add_argument("--json", metavar="PATH",
+                     help="write the report as JSON to PATH, alongside git_sha "
+                          "and constants_sha256")
+    scp.add_argument("--write-db", action="store_true",
+                     help="persist the report to the backend's eval_runs table "
+                          "(needs DATABASE_URL — same connection ai/database.py uses)")
+    scp.set_defaults(func=_cmd_score_pair)
 
     agr = sub.add_parser("agreement", help="double-labelling agreement ceiling "
                                              "between two label passes")

@@ -5,6 +5,7 @@ import FightList from './pages/FightList';
 import Player from './pages/Player';
 import Library from './pages/Library';
 import Annotate from './pages/Annotate';
+import PipelineAccuracy from './pages/PipelineAccuracy';
 
 export default function App() {
   return (
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="/fights/:id" element={<Player />} />
           <Route path="/fights/:id/annotate" element={<Annotate />} />
           <Route path="/library" element={<Library />} />
+          <Route path="/accuracy" element={<PipelineAccuracy />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

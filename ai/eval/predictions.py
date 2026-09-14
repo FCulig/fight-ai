@@ -29,7 +29,8 @@ _STATE_RE = re.compile(r"FightState\.(\w+)")
 
 @dataclass
 class PredictedStrike(Strike):
-    """A strike read from fight_events, carrying the raw pipeline action string."""
+    """A strike read from fight_events, carrying the raw pipeline action string.
+    `fighter` is "unknown" when the fight had no corners assigned at upload."""
     action: str = ""
 
 
@@ -108,59 +109,102 @@ def load_predictions(video: str) -> Predictions:
     db = SessionLocal()
     try:
         fight_id, video_path, fps, _ = lookup_fight(db, video)
-
-        preds = Predictions(fight_id=fight_id, video=video_path, fps=fps)
-
-        for r in db.execute(
-            text("SELECT round_number, start_frame, end_frame FROM rounds "
-                 "WHERE fight_id = :fid ORDER BY round_number"),
-            {"fid": fight_id},
-        ):
-            preds.rounds.append(
-                Round(start=r.start_frame, end=r.end_frame, round=r.round_number)
-            )
-
-        rows = db.execute(
-            text("SELECT frame, description, action, success, state FROM fight_events "
-                 "WHERE fight_id = :fid AND source = 'prediction' ORDER BY frame, id"),
-            {"fid": fight_id},
-        ).all()
-
-        for row in rows:
-            desc = row.description or ""
-
-            m = _STRIKE_RE.match(desc)
-            if m:
-                corner = "red" if m.group(1) == "fighter_red" else "blue"
-                action = row.action or m.group(2)
-                family, target = PIPELINE_ACTION_MAP.get(action, ("punch", "unknown"))
-                preds.strikes.append(PredictedStrike(
-                    frame=row.frame,
-                    fighter=corner,
-                    family=family,
-                    target=target,
-                    landed=row.success,
-                    action=action,
-                ))
-                continue
-
-            if row.state:
-                preds.state_changes.append(StateChange(frame=row.frame, state=row.state))
-                continue
-
-            # Fallback for rows written before the structured `state` column
-            # existed.
-            m = _STATE_RE.search(desc)
-            if m:
-                preds.state_changes.append(StateChange(frame=row.frame, state=m.group(1)))
-
-        # frame_count: the highest frame the pipeline wrote a fighter box for.
-        fc = db.execute(
-            text("SELECT MAX(frame) AS mx FROM fighter_frames WHERE fight_id = :fid"),
-            {"fid": fight_id},
-        ).scalar()
-        preds.frame_count = int(fc or 0)
-
-        return preds
+        return _load_predictions(db, fight_id, video_path, fps)
     finally:
         db.close()
+
+
+def load_predictions_by_fight_id(fight_id: int) -> Predictions:
+    """Same as `load_predictions`, but resolves by fight id directly — see
+    `build_labels_by_fight_id` in labels_db.py for why: the fight whose
+    predictions are being scored and the fight whose labels they're scored
+    against don't share a `video_path`."""
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text("SELECT video_path, fps FROM fights WHERE id = :fid"),
+            {"fid": fight_id},
+        ).first()
+        if row is None:
+            raise LookupError(f"No fights row with id={fight_id}")
+        return _load_predictions(db, fight_id, row.video_path, int(row.fps))
+    finally:
+        db.close()
+
+
+def _load_predictions(db, fight_id: int, video_path: str, fps: int) -> Predictions:
+    preds = Predictions(fight_id=fight_id, video=video_path, fps=fps)
+
+    for r in db.execute(
+        text("SELECT round_number, start_frame, end_frame FROM rounds "
+             "WHERE fight_id = :fid ORDER BY round_number"),
+        {"fid": fight_id},
+    ):
+        preds.rounds.append(
+            Round(start=r.start_frame, end=r.end_frame, round=r.round_number)
+        )
+
+    # Current-code rows store `description = NULL` (only fight_end keeps one),
+    # so the attacker's corner can only be recovered from `fighter_id`, which
+    # process_fight resolved from this same fights row's red/blue_fighter_id.
+    corners = db.execute(
+        text("SELECT red_fighter_id, blue_fighter_id FROM fights WHERE id = :fid"),
+        {"fid": fight_id},
+    ).first()
+    corner_by_fighter_id = {
+        fighter_id: corner
+        for fighter_id, corner in ((corners.red_fighter_id, "red"),
+                                   (corners.blue_fighter_id, "blue"))
+        if fighter_id is not None
+    }
+
+    rows = db.execute(
+        text("SELECT frame, description, action, fighter_id, success, state FROM fight_events "
+             "WHERE fight_id = :fid AND source = 'prediction' ORDER BY frame, id"),
+        {"fid": fight_id},
+    ).all()
+
+    for row in rows:
+        desc = row.description or ""
+
+        m = _STRIKE_RE.match(desc)
+        if m or row.action in PIPELINE_ACTION_MAP:
+            if m:
+                # Legacy row: the corner the pipeline wrote at the time, immune
+                # to a later manual edit of the fights row's corner mapping.
+                corner = "red" if m.group(1) == "fighter_red" else "blue"
+            else:
+                # NULL fighter_id means corners were unassigned at upload. The
+                # strike still counts for detection, which ignores the corner
+                # (see score.py) — dropping it would hide a real FP/TP.
+                corner = corner_by_fighter_id.get(row.fighter_id, "unknown")
+            action = row.action or m.group(2)
+            family, target = PIPELINE_ACTION_MAP.get(action, ("punch", "unknown"))
+            preds.strikes.append(PredictedStrike(
+                frame=row.frame,
+                fighter=corner,
+                family=family,
+                target=target,
+                landed=row.success,
+                action=action,
+            ))
+            continue
+
+        if row.state:
+            preds.state_changes.append(StateChange(frame=row.frame, state=row.state))
+            continue
+
+        # Fallback for rows written before the structured `state` column
+        # existed.
+        m = _STATE_RE.search(desc)
+        if m:
+            preds.state_changes.append(StateChange(frame=row.frame, state=m.group(1)))
+
+    # frame_count: the highest frame the pipeline wrote a fighter box for.
+    fc = db.execute(
+        text("SELECT MAX(frame) AS mx FROM fighter_frames WHERE fight_id = :fid"),
+        {"fid": fight_id},
+    ).scalar()
+    preds.frame_count = int(fc or 0)
+
+    return preds

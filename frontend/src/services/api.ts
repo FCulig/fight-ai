@@ -1,4 +1,5 @@
 import type { Event, EventKind, EventSource } from '../types/Event';
+import type { EvalRunResponse, EvalRunSummary, FixtureSummary } from '../types/EvalRun';
 import type { Fight, FightPurpose } from '../types/Fight';
 import type { Fighter } from '../types/Fighter';
 import type { FighterFrame } from '../types/FighterFrame';
@@ -147,4 +148,48 @@ export const finishLabeling = async (fightId: number): Promise<Fight> => {
 export const deleteFight = async (fightId: number): Promise<void> => {
   const response = await fetch(`/fights/${fightId}`, { method: 'DELETE' });
   if (!response.ok) throw new Error(`Failed to delete fight: ${response.statusText}`);
+};
+
+export const fetchFixtures = async (): Promise<FixtureSummary[]> => {
+  const response = await fetch('/eval-runs/fixtures');
+  if (!response.ok) throw new Error(`Failed to fetch fixtures: ${response.statusText}`);
+  return response.json();
+};
+
+export const fetchEvalRuns = async (
+  referenceFightId: number,
+  scoredFightId?: number,
+): Promise<EvalRunSummary[]> => {
+  const query = new URLSearchParams({ reference_fight_id: String(referenceFightId) });
+  if (scoredFightId != null) query.append('scored_fight_id', String(scoredFightId));
+  const response = await fetch(`/eval-runs/?${query.toString()}`);
+  if (!response.ok) throw new Error(`Failed to fetch eval runs: ${response.statusText}`);
+  return response.json();
+};
+
+export const fetchEvalRun = async (runId: number): Promise<EvalRunResponse> => {
+  const response = await fetch(`/eval-runs/${runId}`);
+  if (!response.ok) throw new Error(`Failed to fetch eval run: ${response.statusText}`);
+  return response.json();
+};
+
+export const createEvalRun = async (
+  referenceFightId: number,
+  scoredFightId: number,
+  toleranceSecs?: number,
+): Promise<EvalRunResponse> => {
+  const response = await fetch('/eval-runs/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      reference_fight_id: referenceFightId,
+      scored_fight_id: scoredFightId,
+      tolerance_secs: toleranceSecs ?? null,
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail ?? `Failed to run scoring: ${response.statusText}`);
+  }
+  return response.json();
 };

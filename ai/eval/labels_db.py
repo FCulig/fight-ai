@@ -70,98 +70,139 @@ def build_labels(video: str) -> FightLabels:
     db = SessionLocal()
     try:
         fight_id, video_path, fps, _ = lookup_fight(db, video)
-
-        row = db.execute(
-            text("SELECT labeled_at FROM fights WHERE id = :fid"), {"fid": fight_id}
-        ).first()
-        if row is None or row.labeled_at is None:
-            raise NotLabeled(
-                f"{video_path} has no labeled_at yet — finish labeling in the "
-                f"UI first (POST /fights/{fight_id}/finish-labeling)"
-            )
-
-        labels = FightLabels(video=video_path, fps=fps, labeled_at=str(row.labeled_at))
-
-        # The highest frame the pipeline wrote a fighter box for — manual-track
-        # fights still write fighter_frames (plan 0a), so this is available
-        # even though strike detection was skipped.
-        fc = db.execute(
-            text("SELECT MAX(frame) AS mx FROM fighter_frames WHERE fight_id = :fid"),
-            {"fid": fight_id},
-        ).scalar()
-        labels.frame_count = int(fc or 0)
-
-        for r in db.execute(
-            text("SELECT frame AS start_frame, end_frame, value FROM fight_events "
-                 "WHERE fight_id = :fid AND source = 'label' AND kind = 'round' "
-                 "ORDER BY frame"),
-            {"fid": fight_id},
-        ):
-            if r.end_frame is None:
-                continue  # never happens for round spans (seeded fully-formed), guard anyway
-            labels.rounds.append(Round(
-                start=r.start_frame, end=r.end_frame,
-                round=int(r.value) if r.value else 1,
-            ))
-
-        for e in db.execute(
-            text("SELECT frame AS start_frame, end_frame, value FROM fight_events "
-                 "WHERE fight_id = :fid AND source = 'label' AND kind = 'excluded' "
-                 "ORDER BY frame"),
-            {"fid": fight_id},
-        ):
-            if e.end_frame is None:
-                continue  # left open by mistake — export skips it rather than guessing an end
-            labels.excluded.append(Excluded(start=e.start_frame, end=e.end_frame, reason=e.value or ""))
-
-        for c in db.execute(
-            text("SELECT frame AS start_frame, end_frame FROM fight_events "
-                 "WHERE fight_id = :fid AND source = 'label' AND kind = 'corner_swap' "
-                 "ORDER BY frame"),
-            {"fid": fight_id},
-        ):
-            if c.end_frame is None:
-                continue
-            labels.corner_swaps.append(Span(start=c.start_frame, end=c.end_frame))
-
-        events = db.execute(
-            text("SELECT frame, corner, action, target, success FROM fight_events "
-                 "WHERE fight_id = :fid AND source = 'label' AND kind = 'point' "
-                 "ORDER BY frame, id"),
-            {"fid": fight_id},
-        ).all()
-
-        # State marks are change points, not spans: each runs to the next, and
-        # the last runs to the end of its round (plan 0c-4 point 4).
-        state_marks = [e for e in events if e.action in STATE_ACTION_MAP]
-        for i, e in enumerate(state_marks):
-            if i + 1 < len(state_marks):
-                end = state_marks[i + 1].frame - 1
-            else:
-                r = next((r for r in labels.rounds if r.contains(e.frame)), None)
-                end = r.end if r else labels.frame_count
-            labels.states.append(StateSpan(start=e.frame, end=end, state=STATE_ACTION_MAP[e.action]))
-
-        for e in events:
-            if e.action == "takedown_landed":
-                labels.takedowns.append(Takedown(
-                    frame=e.frame,
-                    fighter="red" if e.corner == 0 else "blue",
-                ))
-                continue
-
-            family = LABEL_FAMILY_MAP.get(e.action)
-            if family is None:
-                continue  # state/takedown_attempt/_defended/knockdown/fight_end — not part of the schema yet
-            labels.strikes.append(Strike(
-                frame=e.frame,
-                fighter="red" if e.corner == 0 else "blue",
-                family=family,
-                target=e.target or "unknown",
-                landed=e.success,
-            ))
-
-        labels.validate()
-        return labels
+        return _build_labels(db, fight_id, video_path, fps)
     finally:
         db.close()
+
+
+def build_labels_by_fight_id(fight_id: int) -> FightLabels:
+    """Same as `build_labels`, but resolves by fight id directly instead of a
+    video path/stem — the two fights the real workflow needs to score against
+    each other (a `purpose='reference'` upload and a later `purpose=
+    'ai_labeled'` re-upload of the same source video) don't share a
+    `video_path`, so `lookup_fight`'s stem match can't join them. See
+    `score-pair` in cli.py, the entry point that actually needs this."""
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text("SELECT video_path, fps FROM fights WHERE id = :fid"),
+            {"fid": fight_id},
+        ).first()
+        if row is None:
+            raise LookupError(f"No fights row with id={fight_id}")
+        return _build_labels(db, fight_id, row.video_path, int(row.fps))
+    finally:
+        db.close()
+
+
+def _build_labels(db, fight_id: int, video_path: str, fps: int) -> FightLabels:
+    row = db.execute(
+        text("SELECT labeled_at FROM fights WHERE id = :fid"), {"fid": fight_id}
+    ).first()
+    if row is None or row.labeled_at is None:
+        raise NotLabeled(
+            f"{video_path} has no labeled_at yet — finish labeling in the "
+            f"UI first (POST /fights/{fight_id}/finish-labeling)"
+        )
+
+    labels = FightLabels(video=video_path, fps=fps, labeled_at=str(row.labeled_at))
+
+    # The highest frame the pipeline wrote a fighter box for — manual-track
+    # fights still write fighter_frames (plan 0a), so this is available
+    # even though strike detection was skipped.
+    fc = db.execute(
+        text("SELECT MAX(frame) AS mx FROM fighter_frames WHERE fight_id = :fid"),
+        {"fid": fight_id},
+    ).scalar()
+    labels.frame_count = int(fc or 0)
+
+    # Only signal available for round-circularity detection: a label round
+    # whose bounds are still byte-identical to the AI `rounds` row it was
+    # seeded from (event_service._ensure_round_events_seeded) has never been
+    # touched by a labeller. False-negative on a labeller who reviewed and
+    # left it unchanged — accepted, since it errs toward more "unverified"
+    # rounds, never fewer. See Round.seeded's docstring.
+    ai_rounds = {
+        row.round_number: (row.start_frame, row.end_frame)
+        for row in db.execute(
+            text("SELECT round_number, start_frame, end_frame FROM rounds "
+                 "WHERE fight_id = :fid"),
+            {"fid": fight_id},
+        )
+    }
+
+    for r in db.execute(
+        text("SELECT frame AS start_frame, end_frame, value FROM fight_events "
+             "WHERE fight_id = :fid AND source = 'label' AND kind = 'round' "
+             "ORDER BY frame"),
+        {"fid": fight_id},
+    ):
+        if r.end_frame is None:
+            continue  # never happens for round spans (seeded fully-formed), guard anyway
+        round_num = int(r.value) if r.value else 1
+        ai_bounds = ai_rounds.get(round_num)
+        seeded = ai_bounds is not None and (r.start_frame, r.end_frame) == ai_bounds
+        labels.rounds.append(Round(
+            start=r.start_frame, end=r.end_frame,
+            round=round_num, seeded=seeded,
+        ))
+
+    for e in db.execute(
+        text("SELECT frame AS start_frame, end_frame, value FROM fight_events "
+             "WHERE fight_id = :fid AND source = 'label' AND kind = 'excluded' "
+             "ORDER BY frame"),
+        {"fid": fight_id},
+    ):
+        if e.end_frame is None:
+            continue  # left open by mistake — export skips it rather than guessing an end
+        labels.excluded.append(Excluded(start=e.start_frame, end=e.end_frame, reason=e.value or ""))
+
+    for c in db.execute(
+        text("SELECT frame AS start_frame, end_frame FROM fight_events "
+             "WHERE fight_id = :fid AND source = 'label' AND kind = 'corner_swap' "
+             "ORDER BY frame"),
+        {"fid": fight_id},
+    ):
+        if c.end_frame is None:
+            continue
+        labels.corner_swaps.append(Span(start=c.start_frame, end=c.end_frame))
+
+    events = db.execute(
+        text("SELECT frame, corner, action, target, success FROM fight_events "
+             "WHERE fight_id = :fid AND source = 'label' AND kind = 'point' "
+             "ORDER BY frame, id"),
+        {"fid": fight_id},
+    ).all()
+
+    # State marks are change points, not spans: each runs to the next, and
+    # the last runs to the end of its round (plan 0c-4 point 4).
+    state_marks = [e for e in events if e.action in STATE_ACTION_MAP]
+    for i, e in enumerate(state_marks):
+        if i + 1 < len(state_marks):
+            end = state_marks[i + 1].frame - 1
+        else:
+            r = next((r for r in labels.rounds if r.contains(e.frame)), None)
+            end = r.end if r else labels.frame_count
+        labels.states.append(StateSpan(start=e.frame, end=end, state=STATE_ACTION_MAP[e.action]))
+
+    for e in events:
+        if e.action == "takedown_landed":
+            labels.takedowns.append(Takedown(
+                frame=e.frame,
+                fighter="red" if e.corner == 0 else "blue",
+            ))
+            continue
+
+        family = LABEL_FAMILY_MAP.get(e.action)
+        if family is None:
+            continue  # state/takedown_attempt/_defended/knockdown/fight_end — not part of the schema yet
+        labels.strikes.append(Strike(
+            frame=e.frame,
+            fighter="red" if e.corner == 0 else "blue",
+            family=family,
+            target=e.target or "unknown",
+            landed=e.success,
+        ))
+
+    labels.validate()
+    return labels

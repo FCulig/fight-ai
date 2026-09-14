@@ -30,6 +30,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import text
+
 from .sanity import SanityReport
 from .score import Report
 
@@ -116,3 +118,56 @@ def load_report_json(path: str | Path) -> dict:
     raw["report"]["state"]["confusion"] = _confusion_from_json(
         raw["report"]["state"]["confusion"])
     return raw
+
+
+# ---------------------------------------------------------------------------
+# score, persisted to the backend DB (eval_runs table) instead of/alongside a
+# JSON file — see `score-pair` in cli.py, the entry point this backs, and
+# db/alembic/versions/b4ea83f7c87b_create_eval_runs_table.py for the schema.
+# ---------------------------------------------------------------------------
+
+def save_eval_run_db(
+    report: Report,
+    reference_fight_id: int,
+    scored_fight_id: int,
+    tolerance_secs: float,
+    triggered_by: str | None = None,
+) -> int:
+    """Persist a score() report as one `eval_runs` row. Same `report` JSON
+    shape as `save_report()` writes to disk (same `_confusion_to_json`
+    transform), so a DB row and a checked-in baselines/*.json file are
+    shape-identical. Returns the new row's id."""
+    from database import SessionLocal  # ai/database.py — the pipeline's only DB writer
+
+    d = asdict(report)
+    d["strikes"]["family_confusion"] = _confusion_to_json(report.strikes.family_confusion)
+    d["state"]["confusion"] = _confusion_to_json(report.state.confusion)
+
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text(
+                "INSERT INTO eval_runs "
+                "(reference_fight_id, scored_fight_id, git_sha, constants_sha256, "
+                " tolerance_secs, tolerance_frames, scored_minutes, report, triggered_by) "
+                "VALUES (:ref, :scored, :sha, :consts, :tol_s, :tol_f, :mins, "
+                "        CAST(:report AS JSONB), :trig) "
+                "RETURNING id"
+            ),
+            {
+                "ref": reference_fight_id,
+                "scored": scored_fight_id,
+                "sha": _git_sha(),
+                "consts": _constants_sha256(),
+                "tol_s": tolerance_secs,
+                "tol_f": report.strikes.tolerance_frames,
+                "mins": report.scored_minutes,
+                "report": json.dumps(d),
+                "trig": triggered_by,
+            },
+        )
+        new_id = int(row.scalar())
+        db.commit()
+        return new_id
+    finally:
+        db.close()

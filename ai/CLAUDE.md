@@ -359,9 +359,13 @@ CLINCH/GROUND on a state-change row, else NULL) — and `description`, which
 `_insert_event()` **always passes as `None`** from every call site in this
 module: the pipeline can never emit `fight_end` (the one action still
 requiring a description), so nothing it writes needs one. `eval/predictions.py`
-reads `action`/`success`/`state` directly and no longer has any real
-description to fall back to (the historical regex fallback there is now dead
-weight against current-code rows). The frontend reconstructs the display text
+reads `action`/`success`/`state` directly and takes a strike's corner from
+`fighter_id` against the fights row's `red_fighter_id`/`blue_fighter_id`
+(`"unknown"` when corners were unassigned); its description regex only still
+matters for legacy rows. Until that corner lookup existed it recognised strikes
+by the regex alone, so every current-code fight scored 0 predicted strikes —
+treat any `eval_runs` row with `tp + fp = 0` from before 2026-09-14 as that bug.
+The frontend reconstructs the display text
 on demand from these same columns (plus the `rounds` table, for round
 markers) — see `frontend/src/utils/describeEvent.ts` and
 `backend/CLAUDE.md`'s "Description is reconstructed, not stored".
