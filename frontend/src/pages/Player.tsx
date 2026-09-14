@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEvents } from '../hooks/useEvents';
 import { useFights } from '../hooks/useFights';
@@ -40,7 +40,24 @@ export default function Player() {
 
   const { fights } = useFights();
   const selectedFight = fights.find(f => f.id === fightId) ?? null;
-  const { events, loading: eventsLoading } = useEvents(fightId);
+  // A fight is never re-run through the pipeline, so exactly one source ever
+  // has real content: 'ai_labeled' fights get predictions, everything else
+  // (training_data/reference) only ever gets hand labels — the pipeline's
+  // reduced track for those never runs strike/state detection.
+  const eventSource = selectedFight?.purpose === 'ai_labeled' ? 'prediction' : 'label';
+  const { events: fetchedEvents, loading: eventsLoading } = useEvents(fightId, { source: eventSource });
+  // Both sources only ever produce kind='point' rows for what LiveFeed/stats
+  // need — filter defensively anyway rather than assume that never changes.
+  const events = fetchedEvents.filter(e => e.kind === 'point');
+
+  // corner_swap spans always come from Annotate (source='label'), regardless
+  // of which source the point-event feed above is using — a display-only
+  // correction for FighterOverlay, see its own docs.
+  const { events: swapEvents } = useEvents(fightId, { source: 'label', kind: 'corner_swap' });
+  const cornerSwapSpans = useMemo(
+    () => swapEvents.map(e => ({ frame: e.frame, end_frame: e.end_frame })),
+    [swapEvents],
+  );
   const { frameMap } = useFighterFrames(fightId);
   const { rounds } = useRounds(fightId);
   const width = useWindowWidth();
@@ -279,6 +296,7 @@ export default function Player() {
                 fightHeight={selectedFight.height}
                 showBoxes={showBoxes}
                 showSkeletons={showSkeletons}
+                cornerSwapSpans={cornerSwapSpans}
               />
             )}
             {/* Round chip */}
@@ -332,6 +350,11 @@ export default function Player() {
               currentFrame={currentFrame}
               fps={fps}
               onSeek={handleSeek}
+              redName={displayFighters.red.name}
+              blueName={displayFighters.blue.name}
+              redFighterId={selectedFight?.red_fighter_id}
+              rounds={rounds}
+              cornerSwapSpans={cornerSwapSpans}
             />
           </div>
         ) : (
@@ -342,6 +365,11 @@ export default function Player() {
                 currentFrame={currentFrame}
                 fps={fps}
                 onSeek={handleSeek}
+                redName={displayFighters.red.name}
+                blueName={displayFighters.blue.name}
+                redFighterId={selectedFight?.red_fighter_id}
+                rounds={rounds}
+                cornerSwapSpans={cornerSwapSpans}
               />
             </div>
           </div>
@@ -356,11 +384,20 @@ export default function Player() {
           fps={fps}
           rounds={rounds}
           fighters={displayFighters}
+          redFighterId={selectedFight?.red_fighter_id}
         />
       )}
 
       {/* MOMENTUM */}
-      <Momentum time={currentTime} duration={duration} r1EndSeconds={r1EndSeconds} events={events} fps={fps} fighters={displayFighters} />
+      <Momentum
+        time={currentTime}
+        duration={duration}
+        r1EndSeconds={r1EndSeconds}
+        events={events}
+        fps={fps}
+        fighters={displayFighters}
+        redFighterId={selectedFight?.red_fighter_id}
+      />
 
       {/* MATCHUP */}
       <MatchupCard fighters={displayFighters} />

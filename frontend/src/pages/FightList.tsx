@@ -41,7 +41,7 @@ export default function FightList() {
   }, [uploadedAt, refetch]);
 
   const hasInProgress = fights.some(f => !TERMINAL_STATES.has(f.state));
-  useFightStream(fights, setFights, hasInProgress);
+  useFightStream(setFights, hasInProgress);
 
   const handleDelete = async () => {
     if (!pendingDelete) return;

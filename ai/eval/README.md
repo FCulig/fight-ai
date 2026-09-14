@@ -24,7 +24,7 @@ cd ai
 python -m eval.cli video fight_videos/BATURvsSTAMATOVIC.mp4
 
 # 1. Once the fight is fully labelled and "Finish Labeling" was clicked,
-#    build eval/labels/<video>.json from label_events/label_spans in Postgres
+#    build eval/labels/<video>.json from fight_events rows (source='label') in Postgres
 python -m eval.cli export fight_videos/BATURvsSTAMATOVIC.mp4
 
 # 2. Check pipeline output for impossible artifacts — needs no labels

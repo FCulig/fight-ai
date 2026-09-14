@@ -34,18 +34,29 @@ _FRAME_BATCH_SIZE = 1_000
 def _insert_event(
     db,
     frame: int,
-    description: str,
+    description: Optional[str],
     fight_id: int,
     action: Optional[str] = None,
     fighter_id: Optional[int] = None,
     success: Optional[bool] = None,
     state: Optional[str] = None,
 ) -> None:
+    """`description` is always None from every call site in this module.
+
+    The pipeline can never emit `fight_end` (manual-labelling only), and it's
+    the only action the `ck_fight_events_point_has_description` CHECK still
+    requires a description for — every prediction is fully reconstructable
+    client-side from `action`/`fighter_id`/`success`/`state` plus the `rounds`
+    table (for round markers), so nothing here needs the frozen text. The
+    parameter stays (rather than being dropped) so a future call site that
+    genuinely can't be reconstructed still has somewhere to put one.
+    """
     db.execute(
         text(
             "INSERT INTO fight_events "
-            "(frame, description, fight_id, action, fighter_id, success, state) "
-            "VALUES (:frame, :description, :fight_id, :action, :fighter_id, :success, :state)"
+            "(frame, description, fight_id, action, fighter_id, success, state, source, kind) "
+            "VALUES (:frame, :description, :fight_id, :action, :fighter_id, :success, :state, "
+            "'prediction', 'point')"
         ),
         {
             "frame": frame,
@@ -175,15 +186,16 @@ def write_frames_and_rounds(
 
     Writes fighter_frames (boxes + keypoints) and rounds only — skips the
     strike/fight-state detection state machine entirely, since the user tags
-    those by hand on the Annotate screen instead. Still writes "Round N
-    started/ended" fight_events from the real segmentation boundaries, since
-    round detection isn't part of what's being manually replaced.
+    those by hand on the Annotate screen instead. Still writes round_start/
+    round_end fight_events from the real segmentation boundaries (description
+    NULL — the round number is reconstructed client-side from `rounds`),
+    since round detection isn't part of what's being manually replaced.
 
     Same idempotent delete-then-insert-then-commit shape as process_fight().
     """
     db = SessionLocal()
     try:
-        db.execute(text("DELETE FROM fight_events   WHERE fight_id = :fid"), {"fid": fight_id})
+        db.execute(text("DELETE FROM fight_events   WHERE fight_id = :fid AND source = 'prediction'"), {"fid": fight_id})
         db.execute(text("DELETE FROM fighter_frames WHERE fight_id = :fid"), {"fid": fight_id})
         db.execute(text("DELETE FROM rounds         WHERE fight_id = :fid"), {"fid": fight_id})
 
@@ -208,12 +220,12 @@ def write_frames_and_rounds(
 
             if frame_number in round_starts:
                 description = f"Round {round_starts[frame_number]} started"
-                _insert_event(db, frame_number, description, fight_id, action="round_start")
+                _insert_event(db, frame_number, None, fight_id, action="round_start")
                 print(description + f" at frame {frame_number}")
 
             if frame_number in round_ends:
                 description = f"Round {round_ends[frame_number]} ended"
-                _insert_event(db, frame_number, description, fight_id, action="round_end")
+                _insert_event(db, frame_number, None, fight_id, action="round_end")
                 print(description + f" at frame {frame_number}")
 
             for d in frame["detections"]:
@@ -300,7 +312,7 @@ def process_fight(
         # ------------------------------------------------------------------
         # Delete existing rows for this fight (idempotent re-processing)
         # ------------------------------------------------------------------
-        db.execute(text("DELETE FROM fight_events  WHERE fight_id = :fid"), {"fid": fight_id})
+        db.execute(text("DELETE FROM fight_events  WHERE fight_id = :fid AND source = 'prediction'"), {"fid": fight_id})
         db.execute(text("DELETE FROM fighter_frames WHERE fight_id = :fid"), {"fid": fight_id})
         db.execute(text("DELETE FROM rounds         WHERE fight_id = :fid"), {"fid": fight_id})
 
@@ -405,12 +417,12 @@ def process_fight(
 
             if frame_number in round_starts:
                 description = f"Round {round_starts[frame_number]} started"
-                _insert_event(db, frame_number, description, fight_id, action="round_start")
+                _insert_event(db, frame_number, None, fight_id, action="round_start")
                 print(description + f" at frame {frame_number}")
 
             if frame_number in round_ends:
                 description = f"Round {round_ends[frame_number]} ended"
-                _insert_event(db, frame_number, description, fight_id, action="round_end")
+                _insert_event(db, frame_number, None, fight_id, action="round_end")
                 print(description + f" at frame {frame_number}")
 
             # Collect fighter bboxes (+ keypoints) for fighter_frames table
@@ -526,7 +538,7 @@ def process_fight(
                     head_speed = (head_disp / recoil_lookahead_frames) * fps
                     landed = head_speed >= (RECOIL_VELOCITY_RATIO * ps["def_scale"])
                     desc = ps["description"] + (" (landed)" if landed else " (missed)")
-                    _insert_event(db, ps["contact_frame"], desc, fight_id,
+                    _insert_event(db, ps["contact_frame"], None, fight_id,
                                   action=ps["action"], fighter_id=ps["fighter_id"],
                                   success=bool(landed))
                     print(desc + f" at frame {ps['contact_frame']}")
@@ -549,7 +561,7 @@ def process_fight(
                         if is_grappling:
                             # Clinch/ground strikes emitted immediately — no recoil,
                             # so landed/missed is unknown (success=None).
-                            _insert_event(db, frame_number, description, fight_id,
+                            _insert_event(db, frame_number, None, fight_id,
                                           action=strike["type"], fighter_id=attacker_id)
                             print(description + f" at frame {frame_number}")
                         else:
@@ -608,7 +620,7 @@ def process_fight(
                     description += f", clinch initiated by {initiator}"
                     action = "clinch_initiated"
 
-                _insert_event(db, frame_number, description, fight_id,
+                _insert_event(db, frame_number, None, fight_id,
                               action=action, fighter_id=_fighter_id_for(initiator),
                               state=current_fight_state.name)
                 print(description + f" at frame {frame_number}")
@@ -621,8 +633,11 @@ def process_fight(
         # Flush any strikes still pending at end of video — emit without recoil confirmation.
         for ps in pending_strikes:
             desc = ps["description"] + " (unconfirmed)"
-            # Recoil never confirmed — success unknown (None).
-            _insert_event(db, ps["contact_frame"], desc, fight_id,
+            # Recoil never confirmed — success unknown (None). Client-side
+            # reconstruction reads this as "(unconfirmed)" precisely because
+            # it's an open-range action (not clinch_*/ground_*) with
+            # success=None — see describeEvent's PIPELINE_ACTION_TEXT.
+            _insert_event(db, ps["contact_frame"], None, fight_id,
                           action=ps["action"], fighter_id=ps["fighter_id"])
             print(desc + f" at frame {ps['contact_frame']}")
 

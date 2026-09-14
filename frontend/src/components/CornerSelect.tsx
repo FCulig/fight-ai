@@ -31,7 +31,7 @@ export default function CornerSelect({ corner, dotColor, value, exclude, onChang
   const [loadingFighters, setLoadingFighters] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     if (!open) return;

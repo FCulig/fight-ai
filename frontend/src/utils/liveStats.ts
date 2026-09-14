@@ -5,12 +5,52 @@ function emptyStats(): FighterStats {
   return { sig: [0, 0], total: [0, 0], head: 0, body: 0, leg: 0, distance: 0, clinch: 0, ground: 0, td: [0, 0], ctrl: 0, kd: 0, sub: 0, acc: 0 };
 }
 
-export function deriveLiveStats(
-  events: Event[],
-  currentFrame: number,
-  fps: number,
-): { red: FighterStats; blue: FighterStats } {
-  return deriveStatsForRange(events, 0, currentFrame, fps);
+// Resolves which corner an event belongs to, for EITHER source: predictions
+// carry a resolved `fighter_id` (compared against fights.red_fighter_id),
+// labels carry a raw `corner` track-slot (0=red/1=blue) directly.
+function attributedCorner(e: Event, redFighterId: number | null | undefined): 'red' | 'blue' | null {
+  if (e.source === 'prediction') {
+    if (e.fighter_id == null) return null;
+    return e.fighter_id === redFighterId ? 'red' : 'blue';
+  }
+  if (e.corner === 0) return 'red';
+  if (e.corner === 1) return 'blue';
+  return null;
+}
+
+// Target region: label rows already carry an explicit `target` (head/body/
+// leg) — see taxonomy.ts's logTool(), which populates it even for kicks'
+// fixedTarget. Predictions never populate `target`, so it's derived from the
+// action string (`{type}_head`/`{type}_body`, or the kick's own name).
+function targetFor(e: Event): 'head' | 'body' | 'leg' | null {
+  if (e.target === 'head' || e.target === 'body' || e.target === 'leg') return e.target;
+  const a = e.action;
+  if (!a) return null;
+  if (a.endsWith('_head') || a === 'head_kick') return 'head';
+  if (a.endsWith('_body') || a === 'middle_kick') return 'body';
+  if (a === 'low_kick') return 'leg';
+  return null;
+}
+
+const CLINCH_ACTIONS = new Set(['clinch_punch', 'clinch_knee']);
+const GROUND_ACTIONS = new Set(['ground_punch', 'ground_knee']);
+
+// Landed-vs-missed is only ever recorded on prediction rows (`success`);
+// labels defer that judgment entirely (taxonomy.ts: "MVP target is count
+// strikes thrown"), so every logged label strike counts as landed here —
+// consistent with what the label palette actually tracks.
+function isLanded(e: Event): boolean {
+  if (e.source === 'label') return true;
+  if (CLINCH_ACTIONS.has(e.action ?? '') || GROUND_ACTIONS.has(e.action ?? '')) return true;
+  return e.success === true;
+}
+
+function isStrikeAction(action: string | null): boolean {
+  if (!action) return false;
+  if (action.startsWith('round_') || action.startsWith('state_')) return false;
+  if (action === 'takedown_initiated' || action === 'clinch_initiated') return false;
+  if (action.startsWith('takedown_') || action === 'submission_attempt' || action === 'fight_end') return false;
+  return true; // jab/cross/hook/uppercut(_head|_body)?, kicks, clinch_*/ground_*, elbow, knockdown
 }
 
 // Aggregates events with startFrame <= e.frame <= endFrame. Used for "Whole Fight"
@@ -21,92 +61,78 @@ export function deriveStatsForRange(
   startFrame: number,
   endFrame: number,
   fps: number,
+  redFighterId?: number | null,
 ): { red: FighterStats; blue: FighterStats } {
   const red = emptyStats();
   const blue = emptyStats();
 
   // Track GROUND state intervals to compute control time per fighter.
   // initiator = the fighter who took down the opponent (they control).
+  // Prediction-only: `state`/`takedown_initiated`/`clinch_initiated` have no
+  // label-side equivalent correlating a state span back to its initiator.
   let groundStart: number | null = null;
   let groundInitiator: 'red' | 'blue' | null = null;
 
   const filtered = events.filter(e => e.frame >= startFrame && e.frame <= endFrame);
 
   for (const e of filtered) {
-    const desc = e.description;
+    if (e.action === 'round_start' || e.action === 'round_end') continue;
 
-    // ── Round boundaries: skip ──────────────────────────────────────
-    if (/^Round \d+ (started|ended)$/i.test(desc)) continue;
-
-    // ── Fight state changes ─────────────────────────────────────────
-    if (/^Fight state changed to/i.test(desc)) {
-      const isGround = /FightState\.GROUND/i.test(desc);
-
+    if (e.source === 'prediction' && e.state) {
+      const isGround = e.state === 'GROUND';
       if (isGround && groundStart === null) {
         groundStart = e.frame;
-        const m = desc.match(/takedown initiated by (fighter_red|fighter_blue)/i);
-        groundInitiator = m ? (m[1].toLowerCase().includes('red') ? 'red' : 'blue') : null;
+        groundInitiator = attributedCorner(e, redFighterId);
       } else if (!isGround && groundStart !== null) {
-        // State leaving GROUND — credit ctrl time to the initiator
         const seconds = (e.frame - groundStart) / fps;
         if (groundInitiator === 'red') red.ctrl += seconds;
         else if (groundInitiator === 'blue') blue.ctrl += seconds;
         groundStart = null;
         groundInitiator = null;
-
-        // Takedown credit: already counted when we detected the takedown event below
       }
-
-      // Count takedown attempts/landed from state transition descriptions
-      const tdM = desc.match(/takedown initiated by (fighter_red|fighter_blue)/i);
-      if (tdM) {
-        const initiator = tdM[1].toLowerCase().includes('red') ? red : blue;
-        initiator.td[0] += 1; // landed (state changed = takedown succeeded)
-        initiator.td[1] += 1; // attempted
+      if (e.action === 'takedown_initiated') {
+        const corner = attributedCorner(e, redFighterId);
+        const initiator = corner === 'red' ? red : corner === 'blue' ? blue : null;
+        if (initiator) {
+          initiator.td[0] += 1;
+          initiator.td[1] += 1;
+        }
       }
       continue;
     }
 
-    // ── Strike events ───────────────────────────────────────────────
-    // Pattern: "fighter_red threw a jab_head (landed)"
-    //          "fighter_blue threw a clinch_punch"
-    const strikeM = desc.match(/^(fighter_red|fighter_blue) threw a (\S+?)(?:\s+\((landed|missed|unconfirmed)\))?$/i);
-    if (!strikeM) continue;
+    if (!isStrikeAction(e.action)) continue;
+    const corner = attributedCorner(e, redFighterId);
+    if (!corner) continue;
+    const st = corner === 'red' ? red : blue;
+    const action = e.action as string;
 
-    const isRed = strikeM[1].toLowerCase() === 'fighter_red';
-    const st = isRed ? red : blue;
-    const strikeType = strikeM[2].toLowerCase(); // e.g. "jab_head", "clinch_punch", "low_kick"
-    const outcome = strikeM[3]?.toLowerCase() ?? null; // "landed" | "missed" | "unconfirmed" | null (clinch/ground)
+    const isClinch = CLINCH_ACTIONS.has(action);
+    const isGroundStrike = GROUND_ACTIONS.has(action);
+    const isOpenRange = !isClinch && !isGroundStrike;
+    const landed = isLanded(e);
 
-    // Open-range strikes have an outcome suffix; clinch/ground strikes don't
-    const isOpenRange = outcome !== null;
-    const isClinch = strikeType.startsWith('clinch_');
-    const isGround = strikeType.startsWith('ground_');
-
-    // Attempted = every throw
     st.sig[1] += 1;
     st.total[1] += 1;
 
-    // Landed = open-range explicit landed, or clinch/ground (always counted as landed)
-    const landed = outcome === 'landed' || isClinch || isGround;
     if (landed) {
       st.sig[0] += 1;
       st.total[0] += 1;
-    }
 
-    // Position breakdown (only for landed)
-    if (landed) {
       if (isClinch) st.clinch += 1;
-      else if (isGround) st.ground += 1;
+      else if (isGroundStrike) st.ground += 1;
       else st.distance += 1;
+
+      if (isOpenRange) {
+        const target = targetFor(e);
+        if (target === 'head') st.head += 1;
+        else if (target === 'body') st.body += 1;
+        else if (target === 'leg') st.leg += 1;
+      }
     }
 
-    // Target breakdown (only for landed open-range strikes)
-    if (landed && isOpenRange) {
-      if (strikeType.endsWith('_head') || strikeType === 'head_kick') st.head += 1;
-      else if (strikeType.endsWith('_body') || strikeType === 'middle_kick') st.body += 1;
-      else if (strikeType === 'low_kick') st.leg += 1;
-    }
+    if (action === 'knockdown') st.kd += 1;
+    if (action === 'submission_attempt') st.sub += 1;
   }
 
   // If still in GROUND state at endFrame, credit elapsed ctrl up to there.
@@ -130,7 +156,14 @@ export function deriveStatsForRange(
   return { red, blue };
 }
 
-const STRIKE_RE = /^(fighter_red|fighter_blue) threw a (\S+?)(?:\s+\((landed|missed|unconfirmed)\))?$/i;
+export function deriveLiveStats(
+  events: Event[],
+  currentFrame: number,
+  fps: number,
+  redFighterId?: number | null,
+): { red: FighterStats; blue: FighterStats } {
+  return deriveStatsForRange(events, 0, currentFrame, fps, redFighterId);
+}
 
 // Buckets significant strikes landed per fighter into bucketSeconds-wide windows,
 // for the MOMENTUM pace chart. durationSeconds sizes the bucket array even past
@@ -139,6 +172,7 @@ export function derivePaceBuckets(
   events: Event[],
   fps: number,
   durationSeconds: number,
+  redFighterId?: number | null,
   bucketSeconds = 30,
 ): { red: number[]; blue: number[] } {
   const lastEventSeconds = events.reduce((max, e) => Math.max(max, e.frame / fps), 0);
@@ -149,17 +183,12 @@ export function derivePaceBuckets(
   const blue = new Array<number>(bucketCount).fill(0);
 
   for (const e of events) {
-    const m = e.description.match(STRIKE_RE);
-    if (!m) continue;
-
-    const strikeType = m[2].toLowerCase();
-    const outcome = m[3]?.toLowerCase() ?? null;
-    const landed = outcome === 'landed' || strikeType.startsWith('clinch_') || strikeType.startsWith('ground_');
-    if (!landed) continue;
+    if (!isStrikeAction(e.action) || !isLanded(e)) continue;
+    const corner = attributedCorner(e, redFighterId);
+    if (!corner) continue;
 
     const bucket = Math.min(bucketCount - 1, Math.floor(e.frame / fps / bucketSeconds));
-    const arr = m[1].toLowerCase() === 'fighter_red' ? red : blue;
-    arr[bucket] += 1;
+    (corner === 'red' ? red : blue)[bucket] += 1;
   }
 
   return { red, blue };

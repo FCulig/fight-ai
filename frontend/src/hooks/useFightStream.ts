@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import type { Fight } from '../types/Fight';
 
 export function useFightStream(
-  fights: Fight[],
   setFights: React.Dispatch<React.SetStateAction<Fight[]>>,
   enabled: boolean,
 ) {

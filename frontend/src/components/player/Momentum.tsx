@@ -11,12 +11,13 @@ interface MomentumProps {
   events: Event[];
   fps: number;
   fighters: { red: FighterProfile; blue: FighterProfile };
+  redFighterId?: number | null;
 }
 
-export default function Momentum({ time, duration, r1EndSeconds, events, fps, fighters }: MomentumProps) {
+export default function Momentum({ time, duration, r1EndSeconds, events, fps, fighters, redFighterId }: MomentumProps) {
   const d = duration > 0 ? duration : DURATION;
   const r1 = r1EndSeconds > 0 ? r1EndSeconds : R1_END;
-  const pace = derivePaceBuckets(events, fps, d);
+  const pace = derivePaceBuckets(events, fps, d, redFighterId);
   return (
     <div className="glass" style={{ marginTop: 16, padding: '22px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>

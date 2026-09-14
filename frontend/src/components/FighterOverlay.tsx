@@ -1,5 +1,6 @@
 import { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import type { FighterFrame } from '../types/FighterFrame';
+import { isFrameSwapped, type CornerSwapSpan } from '../utils/cornerSwap';
 
 // COCO-17 skeleton edges — matches pose_verification.py
 const SKELETON_EDGES: [number, number][] = [
@@ -33,6 +34,14 @@ interface FighterOverlayProps {
   showSkeletons: boolean;
   /** Corner (0 = red, 1 = blue) of the fighter the user has selected. No box is drawn until this is set. */
   highlightCorner?: 0 | 1 | null;
+  /**
+   * Hand-labelled stretches where the tracker's red/blue assignment is known
+   * to be flipped (`fighter_frames.corner` is deliberately left uncorrected —
+   * see label-events-corner-is-box-not-person). When the current frame falls
+   * inside one of these, box/skeleton colour is flipped for **display only**;
+   * nothing about the underlying data changes.
+   */
+  cornerSwapSpans?: CornerSwapSpan[];
 }
 
 export interface FighterOverlayHandle {
@@ -40,7 +49,7 @@ export interface FighterOverlayHandle {
 }
 
 const FighterOverlay = forwardRef<FighterOverlayHandle, FighterOverlayProps>(
-  ({ frameMap, fightWidth, fightHeight, showBoxes, showSkeletons, highlightCorner = null }, ref) => {
+  ({ frameMap, fightWidth, fightHeight, showBoxes, showSkeletons, highlightCorner = null, cornerSwapSpans = [] }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const frameMapRef = useRef(frameMap);
     const fightWidthRef = useRef(fightWidth);
@@ -48,6 +57,7 @@ const FighterOverlay = forwardRef<FighterOverlayHandle, FighterOverlayProps>(
     const showBoxesRef = useRef(showBoxes);
     const showSkeletonsRef = useRef(showSkeletons);
     const highlightCornerRef = useRef(highlightCorner);
+    const cornerSwapSpansRef = useRef(cornerSwapSpans);
     const lastFrameRef = useRef(1);
 
     useEffect(() => { frameMapRef.current = frameMap; }, [frameMap]);
@@ -55,6 +65,7 @@ const FighterOverlay = forwardRef<FighterOverlayHandle, FighterOverlayProps>(
     useEffect(() => { fightHeightRef.current = fightHeight; }, [fightHeight]);
     useEffect(() => { showBoxesRef.current = showBoxes; }, [showBoxes]);
     useEffect(() => { showSkeletonsRef.current = showSkeletons; }, [showSkeletons]);
+    useEffect(() => { cornerSwapSpansRef.current = cornerSwapSpans; }, [cornerSwapSpans]);
 
     const render = () => {
       const canvas = canvasRef.current;
@@ -72,15 +83,22 @@ const FighterOverlay = forwardRef<FighterOverlayHandle, FighterOverlayProps>(
       const drawBoxes = showBoxesRef.current;
       if (!drawBoxes && !drawSkeletons) return;
 
-      const detections = frameMapRef.current.get(lastFrameRef.current);
+      const frame = lastFrameRef.current;
+      const detections = frameMapRef.current.get(frame);
       if (!detections) return;
 
       const scaleX = canvas.width / fightWidthRef.current;
       const scaleY = canvas.height / fightHeightRef.current;
       const highlight = highlightCornerRef.current;
+      // Display-only correction: a confirmed corner_swap span means the
+      // tracker's red/blue assignment is known-flipped here. fighter_frames.corner
+      // itself is never touched (see the prop docs above) — only which
+      // colour we draw it as.
+      const swapped = isFrameSwapped(frame, cornerSwapSpansRef.current);
 
       for (const d of detections) {
-        const color = d.corner === 0 ? COLOR_RED : COLOR_BLUE;
+        const displayCorner = swapped ? 1 - d.corner : d.corner;
+        const color = displayCorner === 0 ? COLOR_RED : COLOR_BLUE;
         const isSelected = highlight !== null && highlight === d.corner;
 
         // The box stays hidden until this fighter's corner is selected. Static styling

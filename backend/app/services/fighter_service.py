@@ -55,6 +55,11 @@ def get_events_by_fighter(
 
     ``action`` matches as a prefix (e.g. ``jab`` matches ``jab_head`` and
     ``jab_body``); ``success`` filters landed (True) / missed (False) strikes.
+
+    No explicit ``source='prediction'`` filter needed here: ``fighter_id`` is
+    CHECK-constrained (``ck_fight_events_fighter_id_is_prediction_only``) to
+    only ever be set on prediction rows, so filtering by it already excludes
+    every hand-labelled row.
     """
     def _query(session):
         q = session.query(FightEvent).filter(FightEvent.fighter_id == fighter_id)

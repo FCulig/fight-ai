@@ -1,19 +1,19 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useFights } from '../hooks/useFights';
-import { useLabelEvents } from '../hooks/useLabelEvents';
-import { useLabelSpans } from '../hooks/useLabelSpans';
+import { useEvents } from '../hooks/useEvents';
 import { useFighterFrames } from '../hooks/useFighterFrames';
 import { useRounds } from '../hooks/useRounds';
 import { useWindowWidth } from '../hooks/useWindowWidth';
 import {
-  createLabelEvent, deleteLabelEvent, finishLabeling, deleteFight,
-  createLabelSpan, updateLabelSpan, deleteLabelSpan,
-  type CreateLabelEventPayload,
+  createEvent, updateEvent, deleteEvent, finishLabeling, deleteFight,
+  type CreateEventPayload,
 } from '../services/api';
-import type { LabelEvent } from '../types/LabelEvent';
-import type { SpanKind } from '../types/LabelSpan';
+import type { SpanKind } from '../components/annotate/taxonomy';
 import { isFightViewable, isLabelingReady, needsRoundReview, STATE_LABELS } from '../types/Fight';
+import type { Event } from '../types/Event';
+import { describeEvent } from '../utils/describeEvent';
+import { isFrameSwapped } from '../utils/cornerSwap';
 import ConfirmDialog from '../components/ConfirmDialog';
 import VideoControls from '../components/VideoControls';
 import FrameInfo from '../components/FrameInfo';
@@ -44,8 +44,9 @@ export default function Annotate() {
 
   const { fights } = useFights();
   const selectedFight = fights.find(f => f.id === fightId) ?? null;
-  const { events: fetchedEvents, loading: eventsLoading } = useLabelEvents(fightId);
-  const { spans, setSpans } = useLabelSpans(fightId);
+  const { events: allEvents, setEvents: setAllEvents } = useEvents(fightId, { source: 'label' });
+  const events = useMemo(() => allEvents.filter(e => e.kind === 'point'), [allEvents]);
+  const spans = useMemo(() => allEvents.filter(e => e.kind !== 'point'), [allEvents]);
   const { frameMap } = useFighterFrames(fightId);
   const { rounds } = useRounds(fightId);
   const width = useWindowWidth();
@@ -53,13 +54,6 @@ export default function Annotate() {
 
   const fps = selectedFight?.fps ?? 30;
   fpsRef.current = fps;
-
-  // Local mutable copy for optimistic add/remove — useLabelEvents itself exposes no setter.
-  const [events, setEvents] = useState<LabelEvent[]>([]);
-  useEffect(() => {
-    if (!eventsLoading) setEvents(fetchedEvents);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventsLoading, fightId]);
 
   const ready = selectedFight !== null && isLabelingReady(selectedFight.state);
 
@@ -128,6 +122,19 @@ export default function Annotate() {
   const redName = selectedFight?.red_fighter_name ?? 'Red corner';
   const blueName = selectedFight?.blue_fighter_name ?? 'Blue corner';
 
+  // Reconstructs each point event's display text on the fly (description is
+  // only ever stored for fight_end) — including the swap-corrected fighter
+  // name for any event whose own frame falls inside a corner_swap span, so
+  // reviewing the timeline reflects a swap the moment it's marked, even for
+  // strikes logged before the span existed.
+  const cornerSwapSpans = useMemo(
+    () => spans.filter(s => s.kind === 'corner_swap').map(s => ({ frame: s.frame, end_frame: s.end_frame })),
+    [spans],
+  );
+  const describe = (e: Event) => describeEvent(e, {
+    redName, blueName, swapped: isFrameSwapped(e.frame, cornerSwapSpans),
+  });
+
   // ---- annotation logging state ----
   const [selected, setSelected] = useState<Corner | null>(null);
   const [toast, setToast] = useState<{ text: string; color: string; icon: string } | null>(null);
@@ -172,12 +179,12 @@ export default function Annotate() {
     flashTimer.current = setTimeout(() => setFlashId(null), 700);
   };
 
-  const addEvent = async (payload: CreateLabelEventPayload) => {
+  const addEvent = async (payload: CreateEventPayload) => {
     if (!fightId) return null;
     setSavingCount(c => c + 1);
     try {
-      const created = await createLabelEvent(fightId, payload);
-      setEvents(prev => [...prev, created]);
+      const created = await createEvent(fightId, { kind: 'point', ...payload });
+      setAllEvents(prev => [...prev, created]);
       sessionIdsRef.current.push(created.id);
       flash(created.id);
       return created;
@@ -193,8 +200,8 @@ export default function Annotate() {
     if (!fightId) return;
     setSavingCount(c => c + 1);
     try {
-      await deleteLabelEvent(fightId, eventId);
-      setEvents(prev => prev.filter(e => e.id !== eventId));
+      await deleteEvent(fightId, eventId);
+      setAllEvents(prev => prev.filter(e => e.id !== eventId));
       sessionIdsRef.current = sessionIdsRef.current.filter(x => x !== eventId);
       if (selectedEventIdRef.current === eventId) setSelectedEventId(null);
     } catch {
@@ -210,16 +217,29 @@ export default function Annotate() {
   const openSpanRef = useRef<Partial<Record<SpanKind, number>>>({});
   const SPAN_LABEL: Record<SpanKind, string> = { round: 'Round', corner_swap: 'Corner swap', excluded: 'Excluded' };
 
+  // openSpanRef only lives in memory — leaving Annotate and coming back (or a
+  // reload) resets it to {} even though an unclosed span from the previous
+  // session is still sitting in the loaded data with end_frame=null. Reseed
+  // it once that data arrives, or the next O/P press opens a second span
+  // instead of closing the first.
+  useEffect(() => {
+    for (const kind of ['corner_swap', 'excluded'] as const) {
+      if (openSpanRef.current[kind] != null) continue;
+      const open = spans.find(s => s.kind === kind && s.end_frame == null);
+      if (open) openSpanRef.current[kind] = open.id;
+    }
+  }, [spans]);
+
   const toggleSpan = async (kind: SpanKind) => {
     if (!fightId) return;
     const openId = openSpanRef.current[kind];
     const frame = frameRef.current;
     if (openId != null) {
       try {
-        const start = spans.find(s => s.id === openId)?.start_frame ?? frame;
-        const patch = frame < start ? { start_frame: frame, end_frame: start } : { end_frame: frame };
-        const updated = await updateLabelSpan(fightId, openId, patch);
-        setSpans(prev => prev.map(s => (s.id === openId ? updated : s)));
+        const start = spans.find(s => s.id === openId)?.frame ?? frame;
+        const patch = frame < start ? { frame, end_frame: start } : { end_frame: frame };
+        const updated = await updateEvent(fightId, openId, patch);
+        setAllEvents(prev => prev.map(s => (s.id === openId ? updated : s)));
         showToast(`${SPAN_LABEL[kind]} span closed`, 'var(--slate-400)', 'flag');
       } catch {
         showToast('Failed to close span', 'var(--f-red)', 'error');
@@ -229,10 +249,10 @@ export default function Annotate() {
       return;
     }
     try {
-      const created = await createLabelSpan(fightId, {
-        kind, start_frame: frame, value: kind === 'excluded' ? 'replay' : null,
+      const created = await createEvent(fightId, {
+        kind, frame, value: kind === 'excluded' ? 'replay' : null,
       });
-      setSpans(prev => [...prev, created]);
+      setAllEvents(prev => [...prev, created]);
       openSpanRef.current[kind] = created.id;
       showToast(`${SPAN_LABEL[kind]} span opened`, 'var(--slate-400)', 'flag');
     } catch {
@@ -240,11 +260,11 @@ export default function Annotate() {
     }
   };
 
-  const updateSpan = async (spanId: number, patch: { start_frame?: number; end_frame?: number }) => {
+  const updateSpan = async (spanId: number, patch: { frame?: number; end_frame?: number }) => {
     if (!fightId) return;
     try {
-      const updated = await updateLabelSpan(fightId, spanId, patch);
-      setSpans(prev => prev.map(s => (s.id === spanId ? updated : s)));
+      const updated = await updateEvent(fightId, spanId, patch);
+      setAllEvents(prev => prev.map(s => (s.id === spanId ? updated : s)));
     } catch {
       showToast('Failed to update span', 'var(--f-red)', 'error');
     }
@@ -253,8 +273,8 @@ export default function Annotate() {
   const removeSpan = async (spanId: number) => {
     if (!fightId) return;
     try {
-      await deleteLabelSpan(fightId, spanId);
-      setSpans(prev => prev.filter(s => s.id !== spanId));
+      await deleteEvent(fightId, spanId);
+      setAllEvents(prev => prev.filter(s => s.id !== spanId));
       for (const [kind, id] of Object.entries(openSpanRef.current)) {
         if (id === spanId) delete openSpanRef.current[kind as SpanKind];
       }
@@ -284,12 +304,16 @@ export default function Annotate() {
     const cornerIdx = item.needsFighter ? (corner === 'red' ? 0 : 1) : null;
     const fighterName = item.needsFighter ? (corner === 'red' ? redName : blueName) : '';
     const target = item.hasTarget ? (shiftKey ? 'body' : 'head') : item.fixedTarget ?? null;
+    // `description` is only kept as a local for the toast text below — it's
+    // no longer sent to the backend. Every action here except fight_end is
+    // fully reconstructable from action/target/corner (see describeEvent.ts),
+    // so storing a frozen copy would only go stale the next time a
+    // corner_swap span is added or edited.
     const description = item.text(fighterName, target ?? undefined);
     const color = colorForAction(item.action);
     const icon = iconForAction(item.action);
     addEvent({
       frame: frameRef.current,
-      description,
       corner: cornerIdx,
       action: item.action,
       target,
@@ -327,16 +351,16 @@ export default function Annotate() {
       // not a silent adjustment (TODO.md #4).
       if (!fightId) return;
       const containingRound = spans.find(
-        s => s.kind === 'round' && s.start_frame <= endFrame &&
+        s => s.kind === 'round' && s.frame <= endFrame &&
              (s.end_frame == null || endFrame <= s.end_frame),
       );
       if (containingRound?.end_frame != null && containingRound.end_frame > endFrame) {
-        createLabelSpan(fightId, {
+        createEvent(fightId, {
           kind: 'excluded',
-          start_frame: endFrame + 1,
+          frame: endFrame + 1,
           end_frame: containingRound.end_frame,
           value: 'post fight_end',
-        }).then(span => setSpans(prev => [...prev, span]));
+        }).then(span => setAllEvents(prev => [...prev, span]));
       }
     });
     setEndOpen(false);
@@ -636,6 +660,7 @@ export default function Annotate() {
         onSelectEvent={setSelectedEventId}
         redName={redName}
         blueName={blueName}
+        describe={describe}
       />
 
       {endOpen && (

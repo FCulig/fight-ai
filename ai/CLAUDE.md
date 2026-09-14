@@ -67,7 +67,7 @@ ai/
 ├── eval/                     # Evaluation harness — see eval/README.md
 │   ├── schema.py             # Ground-truth label format (also the training set
 │   │                         #   format for the planned skeleton action model)
-│   ├── labels_db.py          # Builds FightLabels from label_events/label_spans (Postgres)
+│   ├── labels_db.py          # Builds FightLabels from fight_events rows with source='label' (Postgres)
 │   ├── corner_swap_check.py  # Inject/measure corner-swap labelling recall (plan 0g)
 │   ├── corner_accuracy.py    # Label-free: does stored `corner` match the kit colour?
 │   │                         #   The only check that catches a red/blue inversion —
@@ -113,12 +113,13 @@ ai/
   Segmentation (`MIN_FIGHT_END_GAP_SECS` … `ROUND_DISENGAGED_RATIO`) and
   scoreboard overlay (`SCOREBOARD_*`) constants are out of scope. Scoreboard OCR
   has no `score` section at all. Segmentation does have one (ROUNDS), but its
-  ground truth is currently untrustworthy: `label_spans` of kind `round` are
-  **seeded from the pipeline's own `rounds` output** the first time the Annotate
-  page opens a fight (`backend/app/services/label_span_service.py`), so unless a
-  human has actually moved those boundaries, round IoU reads ~1.000 against the
-  prediction itself and a genuine improvement scores as a regression. Check that
-  the span differs from the `rounds` row before believing a round-IoU number.
+  ground truth is currently untrustworthy: `fight_events` rows of kind `round`
+  (source='label') are **seeded from the pipeline's own `rounds` output** the
+  first time the Annotate page opens a fight (`backend/app/services/event_service.py`),
+  so unless a human has actually moved those boundaries, round IoU reads ~1.000
+  against the prediction itself and a genuine improvement scores as a
+  regression. Check that the span differs from the `rounds` row before
+  believing a round-IoU number.
 - **Measure those against the subsystem instead.** A scoreboard OCR change is
   validated by timer coverage plus a label-free consistency check: the clock is
   linear, so `k = frame/fps + seconds_remaining` is constant within a round and
@@ -259,8 +260,13 @@ shows up in `python -m eval.cli sanity <video>` rather than in the annotation UI
 `process_fight(pose_data: dict, fight_id: int, fps: int, rounds: list)` writes all
 fight data in **one DB transaction**:
 
-1. `DELETE FROM fight_events / fighter_frames / rounds WHERE fight_id = :id` — makes
-   re-running idempotent (no duplicate rows on retry or single-file re-run).
+1. `DELETE FROM fight_events WHERE fight_id = :id AND source = 'prediction'` (plus
+   unscoped deletes on `fighter_frames`/`rounds`) — makes re-running idempotent
+   (no duplicate rows on retry or single-file re-run) without ever touching a
+   hand-labelled `fight_events` row (`source = 'label'`), even though both now
+   live in the same table. In practice a fight is never re-run once it exists
+   (see "DB Schema" below), so this scoping is defensive insurance rather than
+   a live concern — but it's what makes the merge safe if that ever changes.
 2. Bulk-insert `rounds` into the `rounds` table.
 3. Per-frame loop: collect bbox detections for `class_id` 0/1 into a batch list;
    flush every 1 000 rows via `db.flush()` (not `db.commit()`) to release memory
@@ -297,9 +303,7 @@ fights         (id, video_path UNIQUE, fps, width, height, created_at,
                --   scoreboard|segmenting|analyzing|completed|failed|
                --   labeling_in_progress|labeling_complete
                -- labeled_at: durable "this fight has finalised ground truth" marker,
-               --   set once by finish_labeling and never touched by the pipeline —
-               --   state alone is NOT that marker, since re-running a labelled fight
-               --   through the AI pipeline (to score it) resets state but not this.
+               --   set once by finish_labeling and never touched by the pipeline.
                -- reported_frames/decoded_frames: full-decode validation result,
                --   shown in the UI when state=invalid
                -- segmentation_needs_review/_reason: segmentation's own verdict on
@@ -310,37 +314,57 @@ rounds         (id, fight_id → fights, round_number, start_frame, end_frame)
                UNIQUE (fight_id, round_number)
 fighter_frames (id, fight_id → fights, frame, corner, x1, y1, x2, y2, confidence, keypoints)
                -- `corner` is the appearance corner index (0=red, 1=blue), formerly `fighter_id`
-fight_events   (id, fight_id → fights, frame, description,
-                fighter_id → fighters nullable, action nullable, success nullable, state nullable)
-               -- PIPELINE PREDICTIONS ONLY. process_fight() DELETEs and rewrites this
-               --   table on every run — never write hand labels here.
-label_events   (id, fight_id → fights, frame, corner nullable, action nullable,
-                target nullable, success nullable, description, labeler nullable, created_at)
-               -- HAND LABELS ONLY, written by the Annotate frontend (backend
-               --   label_event_service.py / routes). `corner` matches
-               --   fighter_frames.corner (0=red, 1=blue) — both are track-slot
-               --   pointers, not people: the labeller clicks the overlay box, so
-               --   a swap is copied into the label and the two stay consistent.
-               --   Never touched by the
-               --   pipeline — this is what makes re-running the AI pipeline over a
-               --   labelled fight safe.
-label_spans    (id, fight_id → fights, kind, start_frame, end_frame nullable, value nullable, created_at)
-               -- kind: 'round' (human-confirmed round bounds, seeded from the
-               --   `rounds` table) | 'corner_swap' (labeller-marked red/blue flip;
-               --   a slot->person map, NOT applied to the label->keypoint join —
-               --   fighter_frames untouched, see plan/02c "Corner override") |
-               --   'excluded' (replay/camera-cut span, value=reason).
-               --   end_frame NULL means a start/end toggle is still open.
+fight_events   (id, fight_id → fights, source, kind, frame, end_frame nullable,
+                description nullable, fighter_id → fighters nullable, corner nullable,
+                action nullable, target nullable, success nullable, state nullable,
+                value nullable, labeler nullable, created_at)
+               -- ONE table for both pipeline predictions and hand labels — told
+               --   apart by two columns, not by which table a row is in:
+               -- source: 'prediction' (written only by process_fight()/
+               --   write_frames_and_rounds(), raw SQL, always 'prediction'+'point')
+               --   | 'label' (written only by the Annotate frontend via
+               --   backend event_service.py / routes, always source='label').
+               --   process_fight()'s DELETE-and-rewrite is scoped
+               --   `WHERE fight_id = :id AND source = 'prediction'`, so it can
+               --   never destroy a hand-labelled row even though they share a
+               --   table. Two CHECK constraints back this up structurally:
+               --   `corner` only allowed when source='label', `fighter_id`
+               --   only allowed when source='prediction'.
+               -- kind: 'point' (a strike/state-change/round-boundary event at
+               --   one `frame`; description required only for action=
+               --   'fight_end', NULL otherwise — see below) | 'round' (human-
+               --   confirmed round bounds — for source='label', seeded from
+               --   the `rounds` table; `write_frames_and_rounds()` also writes
+               --   real segmentation-derived round_start/round_end as
+               --   source='prediction' kind='point' rows — a `training_data`/
+               --   `reference` fight is NOT uniformly source='label') |
+               --   'corner_swap' (labeller-marked red/blue flip; a slot->person
+               --   map, NOT applied to the label->keypoint join — fighter_frames
+               --   untouched, see plan/02c "Corner override") | 'excluded'
+               --   (replay/camera-cut span, value=reason). end_frame NULL on a
+               --   range kind means a start/end toggle is still open; always
+               --   NULL on kind='point'.
+               -- `corner` matches fighter_frames.corner (0=red, 1=blue) — both
+               --   are track-slot pointers, not people: the labeller clicks the
+               --   overlay box, so a swap is copied into the label and the two
+               --   stay consistent. `fighter_id` is the opposite: a resolved
+               --   identity (FK), only ever written by the pipeline.
 ```
 
-`fight_events` carries both the free-form `description` (NOT NULL) and structured
-columns for querying: `fighter_id` (FK to `fighters`, resolved from the fight's
-corner assignment), `action` (strike type / `round_start` / `clinch_initiated` …),
-`success` (True=landed, False=missed, NULL=unknown — grappling/unconfirmed/non-strike),
-`state` (STRIKING/CLINCH/GROUND on a state-change row, else NULL — the structured
-counterpart of the free-text "Fight state changed to FightState.X" description;
-`eval/predictions.py` reads this column directly and only falls back to a regex over
-`description` for rows written before it existed).
+`fight_events` carries structured columns for querying — `fighter_id` (FK to
+`fighters`, resolved from the fight's corner assignment — prediction-only),
+`action` (strike type / `round_start` / `clinch_initiated` …), `success` (True=landed,
+False=missed, NULL=unknown — grappling/unconfirmed/non-strike), `state` (STRIKING/
+CLINCH/GROUND on a state-change row, else NULL) — and `description`, which
+`_insert_event()` **always passes as `None`** from every call site in this
+module: the pipeline can never emit `fight_end` (the one action still
+requiring a description), so nothing it writes needs one. `eval/predictions.py`
+reads `action`/`success`/`state` directly and no longer has any real
+description to fall back to (the historical regex fallback there is now dead
+weight against current-code rows). The frontend reconstructs the display text
+on demand from these same columns (plus the `rounds` table, for round
+markers) — see `frontend/src/utils/describeEvent.ts` and
+`backend/CLAUDE.md`'s "Description is reconstructed, not stored".
 The red→`red_fighter_id` / blue→`blue_fighter_id` mapping is read from the `fights`
 row and threaded into `process_fight`; when corners are unassigned, `fighter_id` is NULL.
 
@@ -351,8 +375,8 @@ ix_rounds_fight_id              ON rounds (fight_id)
 ix_fight_events_fight_id        ON fight_events (fight_id)
 ix_fight_events_fighter_id      ON fight_events (fighter_id)
 ix_fight_events_fighter_action  ON fight_events (fighter_id, action)
-ix_label_events_fight_id        ON label_events (fight_id)
-ix_label_spans_fight_id         ON label_spans (fight_id)
+ix_fight_events_fight_source    ON fight_events (fight_id, source)
+ix_fight_events_fight_kind      ON fight_events (fight_id, kind)
 ```
 
 ## Key Conventions
@@ -431,23 +455,24 @@ Final open-range punch event type: `{punch_type}_{target}` e.g. `jab_head`, `cro
 - `get_head_radius` uses the ear-to-ear span × `HEAD_RADIUS_EAR_FACTOR` when both ears are confident, else `HEAD_RADIUS_SCALE_RATIO × scale`, clamped to `[HEAD_RADIUS_MIN_RATIO, HEAD_RADIUS_MAX_RATIO] × scale`.
 - Kicks still use the original head/middle/low priority ladder, but benefit from the improved confidence-gated head centre.
 
-**Landed vs. attempted (`RECOIL_LOOKAHEAD_SECS`, `RECOIL_VELOCITY_RATIO`):** for each candidate open-range strike, `process_fight` defers the event write into a `pending_strikes` queue. After `RECOIL_LOOKAHEAD_SECS` (converted to frames via fps) it checks whether the defender's head moved at > `RECOIL_VELOCITY_RATIO × defender_scale / sec` — a proxy for head recoil on impact. The final event description is suffixed with `(landed)`, `(missed)`, or `(unconfirmed)` for strikes at the very end of the video.
+**Landed vs. attempted (`RECOIL_LOOKAHEAD_SECS`, `RECOIL_VELOCITY_RATIO`):** for each candidate open-range strike, `process_fight` defers the event write into a `pending_strikes` queue. After `RECOIL_LOOKAHEAD_SECS` (converted to frames via fps) it checks whether the defender's head moved at > `RECOIL_VELOCITY_RATIO × defender_scale / sec` — a proxy for head recoil on impact. The result is written to the `success` column (`True`=landed, `False`=missed, `None`=unconfirmed for strikes at the very end of the video) — no longer suffixed onto a stored description; the frontend derives the "(landed)"/"(missed)"/"(unconfirmed)" text from `success` directly (`describeEvent.ts`).
 
 **`process_fight` signature:** `process_fight(pose_data, fight_id, fps, rounds=None, excluded_ranges=None, red_fighter_id=None, blue_fighter_id=None)` — `fps` is required, sourced from the `fights` row and passed by `pipeline.py`. Strike/state detection is gated to frames inside `rounds` and outside every `excluded_ranges` span (mid-round replays — see above); `fighter_frames` are still written for the whole video regardless.
 
-**Event vocabulary in `fight_events.description`:**
+**Event vocabulary (structured columns — `description` is always NULL for these; the table below is what the frontend reconstructs, not what's stored):**
 
-| Type | Example description |
-|------|---------------------|
-| Open-range punch | `fighter_red threw a jab_head (landed)` |
-| Open-range kick  | `fighter_blue threw a middle_kick (missed)` |
-| Clinch punch     | `fighter_red threw a clinch_punch` |
-| Clinch knee      | `fighter_blue threw a clinch_knee` |
-| Ground punch     | `fighter_red threw a ground_punch` |
-| Ground knee      | `fighter_blue threw a ground_knee` |
-| Fight state (clinch) | `Fight state changed to FightState.CLINCH, clinch initiated by fighter_red` |
-| Fight state (ground) | `Fight state changed to FightState.GROUND, takedown initiated by fighter_red` |
-| Round boundary   | `Round 1 started` / `Round 1 ended` |
+| Type | `action` | `fighter_id` | `success` | `state` |
+|------|----------|--------------|-----------|---------|
+| Open-range punch | `jab_head` / `cross_body` / `hook_head` / `uppercut_body` … | attacker | True/False/None | — |
+| Open-range kick  | `head_kick` / `middle_kick` / `low_kick` | attacker | True/False/None | — |
+| Clinch punch     | `clinch_punch` | attacker | None | — |
+| Clinch knee      | `clinch_knee` | attacker | None | — |
+| Ground punch     | `ground_punch` | attacker | None | — |
+| Ground knee      | `ground_knee` | attacker | None | — |
+| Fight state (clinch) | `clinch_initiated` (or NULL if no initiator determined) | initiator (nullable) | — | `CLINCH` |
+| Fight state (ground) | `takedown_initiated` (or NULL) | initiator (nullable) | — | `GROUND` |
+| Fight state (other)  | NULL | NULL | — | `STRIKING`/… |
+| Round boundary   | `round_start` / `round_end` | — | — | — |
 
 Each row also writes the structured columns: `action` holds the strike `type`
 (`jab_head`, `middle_kick`, `clinch_punch`, …) or an event code (`round_start`,

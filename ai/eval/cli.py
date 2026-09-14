@@ -1,8 +1,8 @@
 """Evaluation harness entry point.
 
-Ground truth is labelled in the frontend (Annotate page → label_events /
-label_spans in Postgres), not with a standalone tool. `export` is what turns
-that into the on-disk ground truth this harness scores against.
+Ground truth is labelled in the frontend (Annotate page → fight_events rows
+with source='label' in Postgres), not with a standalone tool. `export` is
+what turns that into the on-disk ground truth this harness scores against.
 
 Run from the ai/ directory:
 
@@ -284,8 +284,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=True)
 
-    exp = sub.add_parser("export", help="build ground truth from label_events/"
-                                          "label_spans and write eval/labels/*.json")
+    exp = sub.add_parser("export", help="build ground truth from fight_events "
+                                          "(source='label') and write eval/labels/*.json")
     exp.add_argument("video")
     exp.add_argument("--as", dest="as_pass", metavar="NAME", default=None,
                      help="write as a second labelled pass — "

@@ -1,16 +1,17 @@
 import { useRef, useEffect } from 'react';
-import type { LabelEvent } from '../../types/LabelEvent';
+import type { Event } from '../../types/Event';
 import { colorForAction, iconForAction, formatFrameClock } from './taxonomy';
 
 interface AnnotationListProps {
-  shown: LabelEvent[];
+  shown: Event[];
   fps: number;
   onSeek: (frame: number) => void;
   onDelete: (id: number) => void;
   flashId: number | null;
+  describe: (e: Event) => string;
 }
 
-export default function AnnotationList({ shown, fps, onSeek, onDelete, flashId }: AnnotationListProps) {
+export default function AnnotationList({ shown, fps, onSeek, onDelete, flashId, describe }: AnnotationListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -52,7 +53,7 @@ export default function AnnotationList({ shown, fps, onSeek, onDelete, flashId }
             </span>
             <span style={{ minWidth: 0, flex: 1 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.25 }}>{e.description}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.25 }}>{describe(e)}</span>
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-disabled)' }}>
                 <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', fontWeight: 700 }}>{formatFrameClock(e.frame, fps)}</span>

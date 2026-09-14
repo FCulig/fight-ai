@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import type { LabelEvent } from '../../types/LabelEvent';
-import type { LabelSpan } from '../../types/LabelSpan';
+import type { Event } from '../../types/Event';
 import type { Round } from '../../types/Round';
 import { FILTERS, categoryForAction, matchFilter } from './taxonomy';
 import AnnotationTimeline from './AnnotationTimeline';
@@ -30,8 +29,8 @@ function ViewBtn({ active, onClick, icon, label }: ViewBtnProps) {
 }
 
 interface AnnotationPanelProps {
-  events: LabelEvent[];
-  spans: LabelSpan[];
+  events: Event[];
+  spans: Event[];
   rounds: Round[];
   duration: number;
   fps: number;
@@ -39,18 +38,19 @@ interface AnnotationPanelProps {
   onSeek: (frame: number) => void;
   onSetPlaying: (playing: boolean) => void;
   onDelete: (id: number) => void;
-  onUpdateSpan: (id: number, patch: { start_frame?: number; end_frame?: number }) => void;
+  onUpdateSpan: (id: number, patch: { frame?: number; end_frame?: number }) => void;
   onDeleteSpan: (id: number) => void;
   flashId: number | null;
   selectedEventId: number | null;
   onSelectEvent: (id: number | null) => void;
   redName: string;
   blueName: string;
+  describe: (e: Event) => string;
 }
 
 export default function AnnotationPanel({
   events, spans, rounds, duration, fps, currentFrame, onSeek, onSetPlaying, onDelete, onUpdateSpan, onDeleteSpan,
-  flashId, selectedEventId, onSelectEvent, redName, blueName,
+  flashId, selectedEventId, onSelectEvent, redName, blueName, describe,
 }: AnnotationPanelProps) {
   const [view, setView] = useState<'timeline' | 'list'>(() => (localStorage.getItem('annot-view') as 'timeline' | 'list') || 'timeline');
   const [filter, setFilter] = useState('all');
@@ -96,9 +96,10 @@ export default function AnnotationPanel({
           filter={filter}
           redName={redName}
           blueName={blueName}
+          describe={describe}
         />
       ) : (
-        <AnnotationList shown={shown} fps={fps} onSeek={onSeek} onDelete={onDelete} flashId={flashId} />
+        <AnnotationList shown={shown} fps={fps} onSeek={onSeek} onDelete={onDelete} flashId={flashId} describe={describe} />
       )}
     </div>
   );

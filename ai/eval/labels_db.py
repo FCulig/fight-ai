@@ -1,5 +1,5 @@
-"""Build a FightLabels object from the DB-backed label_events/label_spans
-tables the Annotate UI writes, instead of a hand-edited JSON file.
+"""Build a FightLabels object from the DB-backed fight_events rows (source=
+'label') the Annotate UI writes, instead of a hand-edited JSON file.
 
 `python -m eval.cli export <video>` is the entry point that writes the result
 to eval/labels/*.json for git — see cli.py. Refuses any fight with
@@ -17,9 +17,9 @@ from .predictions import lookup_fight
 from .schema import Excluded, FightLabels, Round, Span, StateSpan, Strike, Takedown
 
 # Palette action -> strike family. `target` is read straight off
-# label_events.target (already head/body/leg at label time via the Shift
-# modifier or the kick's fixed target — see taxonomy.ts) rather than derived
-# here; NULL maps to "unknown" per plan 0c(3).
+# fight_events.target (source='label'; already head/body/leg at label time
+# via the Shift modifier or the kick's fixed target — see taxonomy.ts) rather
+# than derived here; NULL maps to "unknown" per plan 0c(3).
 #
 # jab/cross are lead/rear-relative (boxing terms), matching the pipeline's own
 # classify_punch_type() — so this works correctly for southpaws without any
@@ -92,8 +92,9 @@ def build_labels(video: str) -> FightLabels:
         labels.frame_count = int(fc or 0)
 
         for r in db.execute(
-            text("SELECT start_frame, end_frame, value FROM label_spans "
-                 "WHERE fight_id = :fid AND kind = 'round' ORDER BY start_frame"),
+            text("SELECT frame AS start_frame, end_frame, value FROM fight_events "
+                 "WHERE fight_id = :fid AND source = 'label' AND kind = 'round' "
+                 "ORDER BY frame"),
             {"fid": fight_id},
         ):
             if r.end_frame is None:
@@ -104,8 +105,9 @@ def build_labels(video: str) -> FightLabels:
             ))
 
         for e in db.execute(
-            text("SELECT start_frame, end_frame, value FROM label_spans "
-                 "WHERE fight_id = :fid AND kind = 'excluded' ORDER BY start_frame"),
+            text("SELECT frame AS start_frame, end_frame, value FROM fight_events "
+                 "WHERE fight_id = :fid AND source = 'label' AND kind = 'excluded' "
+                 "ORDER BY frame"),
             {"fid": fight_id},
         ):
             if e.end_frame is None:
@@ -113,8 +115,9 @@ def build_labels(video: str) -> FightLabels:
             labels.excluded.append(Excluded(start=e.start_frame, end=e.end_frame, reason=e.value or ""))
 
         for c in db.execute(
-            text("SELECT start_frame, end_frame FROM label_spans "
-                 "WHERE fight_id = :fid AND kind = 'corner_swap' ORDER BY start_frame"),
+            text("SELECT frame AS start_frame, end_frame FROM fight_events "
+                 "WHERE fight_id = :fid AND source = 'label' AND kind = 'corner_swap' "
+                 "ORDER BY frame"),
             {"fid": fight_id},
         ):
             if c.end_frame is None:
@@ -122,8 +125,9 @@ def build_labels(video: str) -> FightLabels:
             labels.corner_swaps.append(Span(start=c.start_frame, end=c.end_frame))
 
         events = db.execute(
-            text("SELECT frame, corner, action, target, success FROM label_events "
-                 "WHERE fight_id = :fid ORDER BY frame, id"),
+            text("SELECT frame, corner, action, target, success FROM fight_events "
+                 "WHERE fight_id = :fid AND source = 'label' AND kind = 'point' "
+                 "ORDER BY frame, id"),
             {"fid": fight_id},
         ).all()
 

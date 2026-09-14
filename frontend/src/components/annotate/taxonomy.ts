@@ -6,9 +6,13 @@
  * Only "fight end" stays manual since no stage detects a fight's conclusion.
  */
 
+import type { EventCat } from '../../utils/eventTaxonomy';
+export type { EventCat };
+
 export type Corner = 'red' | 'blue';
-export type EventCat = 'strike' | 'grapple' | 'state' | 'round' | 'event';
 export type Target = 'head' | 'body' | 'leg';
+// The three range-shaped (kind != 'point') Event rows Annotate edits.
+export type SpanKind = 'round' | 'corner_swap' | 'excluded';
 
 export interface ToolItem {
   key: string;
@@ -119,35 +123,20 @@ export function successForAction(action: string): boolean | null {
   return SUCCESS_TRUE_ACTIONS.has(action) ? true : null;
 }
 
-export function categoryForAction(action: string | null): EventCat {
-  if (!action) return 'state';
-  if (action === 'fight_end' || action === 'submission_attempt') return 'event';
-  if (action.startsWith('takedown_')) return 'grapple';
-  if (action.startsWith('state_')) return 'state';
-  if (action.startsWith('round_')) return 'round';
-  return 'strike';
-}
+// categoryForAction/colorForAction/iconForAction moved to
+// utils/eventTaxonomy.ts so LiveFeed (Player) can share them without
+// importing from the annotate/ folder — re-exported here since every
+// existing import in this directory already points at './taxonomy'.
+export { categoryForAction, colorForAction, iconForAction } from '../../utils/eventTaxonomy';
 
-export function colorForAction(action: string | null): string {
-  if (!action) return 'var(--text-muted)';
-  if (action === 'knockdown') return 'var(--f-red)';
-  if (action === 'fight_end' || action === 'submission_attempt') return 'var(--purple-600)';
-  if (action.startsWith('takedown_')) return 'var(--orange-400)';
-  if (action.startsWith('state_')) return 'var(--slate-400)';
-  if (action.startsWith('round_')) return 'var(--green-500)';
-  return 'var(--accent)';
-}
-
-export function iconForAction(action: string | null): string {
-  if (!action) return 'radio_button_checked';
-  if (action === 'knockdown') return 'sports_mma';
-  if (action === 'fight_end') return 'sports_score';
-  if (action === 'submission_attempt') return 'crisis_alert';
-  if (action.startsWith('takedown_')) return 'sports_kabaddi';
-  if (action.startsWith('state_')) return 'change_circle';
-  if (action.startsWith('round_')) return 'timer';
-  return 'bolt';
-}
+// Reverse index: action -> the ToolItem that produced it, so a stored
+// label event (which only carries `action`/`target`, not free text) can
+// have its display description reconstructed on demand — see
+// utils/describeEvent.ts. `fight_end` has no ToolItem (it's built ad hoc in
+// Annotate.tsx's confirmFightEnd) and is the one action that keeps a real
+// stored `description`, so it's never looked up here.
+export const ACTION_TO_TOOL: Record<string, ToolItem> = {};
+TOOL_GROUPS.forEach(g => g.items.forEach(it => { ACTION_TO_TOOL[it.action] = it; }));
 
 export const FILTERS: { key: string; label: string }[] = [
   { key: 'all', label: 'All' },

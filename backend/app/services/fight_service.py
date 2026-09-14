@@ -164,14 +164,14 @@ def fail_stale_pipeline(fight_id: int, expected_pid: int) -> None:
 
 
 class NotFullyAnnotated(Exception):
-    """Raised by finish_labeling when a detected round has no `round`
-    label_span yet — see label_span_service.rounds_fully_annotated."""
+    """Raised by finish_labeling when a detected round has no `round`-kind
+    label event yet — see event_service.rounds_fully_annotated."""
 
 
 def finish_labeling(fight_id: int) -> Fight | None:
     def _query(session):
         import json
-        from app.services.label_span_service import rounds_fully_annotated
+        from app.services.event_service import rounds_fully_annotated
 
         fight = session.query(Fight).filter(Fight.id == fight_id).first()
         if fight is None or fight.state != "labeling_in_progress":

@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import type { LabelEvent } from '../../types/LabelEvent';
-import type { LabelSpan, SpanKind } from '../../types/LabelSpan';
+import type { Event } from '../../types/Event';
 import type { Round } from '../../types/Round';
-import { categoryForAction, colorForAction, iconForAction, matchFilter, formatFrameClock } from './taxonomy';
+import { categoryForAction, colorForAction, iconForAction, matchFilter, formatFrameClock, type SpanKind } from './taxonomy';
 
 const TL = { ruler: 26, round: 30, state: 30, span: 26, lane: 46, head: 132 };
 
@@ -30,18 +29,19 @@ function fmtSec(s: number): string {
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
-function laneFor(e: LabelEvent): 'red' | 'blue' | null {
+function laneFor(e: Event): 'red' | 'blue' | null {
   if (e.corner === 0) return 'red';
   if (e.corner === 1) return 'blue';
   return null;
 }
 
-interface Hover { e: LabelEvent; x: number; color: string }
+interface Hover { e: Event; x: number; color: string; text: string }
 
 interface ClipProps {
-  e: LabelEvent;
+  e: Event;
   x: number;
   color: string;
+  text: string;
   flash: boolean;
   selected: boolean;
   onSeek: (frame: number) => void;
@@ -49,15 +49,15 @@ interface ClipProps {
   onHover: (h: Hover | null) => void;
 }
 
-function Clip({ e, x, color, flash, selected, onSeek, onSelect, onHover }: ClipProps) {
+function Clip({ e, x, color, text, flash, selected, onSeek, onSelect, onHover }: ClipProps) {
   return (
     <button
       className="tl-clip"
       onPointerDown={ev => ev.stopPropagation()}
       onClick={ev => { ev.stopPropagation(); onSeek(e.frame); onSelect(e.id); }}
-      onMouseEnter={ev => onHover({ e, x: (ev.currentTarget as HTMLElement).offsetLeft, color })}
+      onMouseEnter={ev => onHover({ e, x: (ev.currentTarget as HTMLElement).offsetLeft, color, text })}
       onMouseLeave={() => onHover(null)}
-      title={selected ? `${e.description} · Delete to remove` : e.description}
+      title={selected ? `${text} · Delete to remove` : text}
       style={{
         position: 'absolute', left: x - 11, top: (TL.lane - 30) / 2, width: 22, height: 30, borderRadius: 7,
         display: 'grid', placeItems: 'center', cursor: 'pointer', zIndex: flash || selected ? 6 : 4, padding: 0,
@@ -74,15 +74,15 @@ function Clip({ e, x, color, flash, selected, onSeek, onSelect, onHover }: ClipP
 }
 
 interface AnnotationTimelineProps {
-  events: LabelEvent[];
-  spans: LabelSpan[];
+  events: Event[];
+  spans: Event[];
   rounds: Round[];
   duration: number;
   fps: number;
   currentFrame: number;
   onSeek: (frame: number) => void;
   onSetPlaying: (playing: boolean) => void;
-  onUpdateSpan: (id: number, patch: { start_frame?: number; end_frame?: number }) => void;
+  onUpdateSpan: (id: number, patch: { frame?: number; end_frame?: number }) => void;
   onDeleteSpan: (id: number) => void;
   flashId: number | null;
   selectedEventId: number | null;
@@ -90,11 +90,12 @@ interface AnnotationTimelineProps {
   filter: string;
   redName: string;
   blueName: string;
+  describe: (e: Event) => string;
 }
 
 export default function AnnotationTimeline({
   events, spans, rounds, duration, fps, currentFrame, onSeek, onSetPlaying, onUpdateSpan, onDeleteSpan,
-  flashId, selectedEventId, onSelectEvent, filter, redName, blueName,
+  flashId, selectedEventId, onSelectEvent, filter, redName, blueName, describe,
 }: AnnotationTimelineProps) {
   const [zoom, setZoom] = useState(1);
   const [hover, setHover] = useState<Hover | null>(null);
@@ -117,7 +118,7 @@ export default function AnnotationTimeline({
   const dragRef = useRef<{ id: number; edge: 'start' | 'end' } | null>(null);
   const [dragFrame, setDragFrame] = useState<number | null>(null);
 
-  const fil = (e: LabelEvent) => matchFilter(categoryForAction(e.action), filter);
+  const fil = (e: Event) => matchFilter(categoryForAction(e.action), filter);
   const redEv = events.filter(e => laneFor(e) === 'red' && e.action !== 'fight_end' && fil(e));
   const blueEv = events.filter(e => laneFor(e) === 'blue' && e.action !== 'fight_end' && fil(e));
   const roundEv = events.filter(e => categoryForAction(e.action) === 'round' || e.action === 'fight_end');
@@ -154,7 +155,7 @@ export default function AnnotationTimeline({
     .filter(s => s.kind === 'round')
     .map(s => (
       fightEndFrame != null && s.end_frame != null &&
-      s.start_frame <= fightEndFrame && fightEndFrame < s.end_frame
+      s.frame <= fightEndFrame && fightEndFrame < s.end_frame
         ? { ...s, end_frame: fightEndFrame }
         : s
     ));
@@ -201,7 +202,7 @@ export default function AnnotationTimeline({
     const up = () => {
       const d = dragRef.current;
       if (d && dragFrame != null) {
-        onUpdateSpan(d.id, d.edge === 'start' ? { start_frame: dragFrame } : { end_frame: dragFrame });
+        onUpdateSpan(d.id, d.edge === 'start' ? { frame: dragFrame } : { end_frame: dragFrame });
       }
       dragRef.current = null;
       setDragFrame(null);
@@ -240,16 +241,18 @@ export default function AnnotationTimeline({
   // A span block with draggable edges (round/corner_swap) or a plain block
   // with a delete button (corner_swap/excluded). `end_frame == null` means
   // the start/end toggle is still open — draw it running to the playhead.
-  const SpanBlock = ({ s, top, h, deletable }: { s: LabelSpan; top: number; h: number; deletable: boolean }) => {
+  const SpanBlock = ({ s, top, h, deletable }: { s: Event; top: number; h: number; deletable: boolean }) => {
     const dragging = dragRef.current?.id === s.id;
-    const start = dragging && dragRef.current?.edge === 'start' && dragFrame != null ? dragFrame : s.start_frame;
+    const start = dragging && dragRef.current?.edge === 'start' && dragFrame != null ? dragFrame : s.frame;
     const end = dragging && dragRef.current?.edge === 'end' && dragFrame != null
       ? dragFrame
       : s.end_frame ?? currentFrame;
     const open = s.end_frame == null;
     const x0 = xFor(Math.min(start, end));
     const w = Math.max(4, xFor(Math.max(start, end)) - x0);
-    const c = SPAN_COLOR[s.kind];
+    // SpanBlock only ever receives round/corner_swap/excluded rows (see the
+    // `spans` prop, always pre-filtered to kind !== 'point' by the caller).
+    const c = SPAN_COLOR[s.kind as SpanKind];
     return (
       <div
         style={{
@@ -402,15 +405,16 @@ export default function AnnotationTimeline({
             const fe = e.action === 'fight_end';
             const c = colorForAction(e.action);
             const selected = e.id === selectedEventId;
+            const text = describe(e);
             return (
               <button
                 key={'rp' + e.id}
                 className="tl-clip"
                 onPointerDown={ev => ev.stopPropagation()}
                 onClick={ev => { ev.stopPropagation(); onSeek(e.frame); onSelectEvent(e.id); }}
-                onMouseEnter={ev => setHover({ e, x: (ev.currentTarget as HTMLElement).offsetLeft, color: c })}
+                onMouseEnter={ev => setHover({ e, x: (ev.currentTarget as HTMLElement).offsetLeft, color: c, text })}
                 onMouseLeave={() => setHover(null)}
-                title={selected ? `${e.description} · Delete to remove` : e.description}
+                title={selected ? `${text} · Delete to remove` : text}
                 style={{
                   position: 'absolute', top: TL.ruler + 5, left: xFor(e.frame) - 10, width: 20, height: TL.round - 10,
                   borderRadius: 6, zIndex: selected ? 6 : 5, display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0,
@@ -426,12 +430,12 @@ export default function AnnotationTimeline({
 
           {redEv.map(e => (
             <div key={e.id} style={{ position: 'absolute', top: lanesTop, left: 0 }}>
-              <Clip e={e} x={xFor(e.frame)} color={colorForAction(e.action)} flash={e.id === flashId} selected={e.id === selectedEventId} onSeek={onSeek} onSelect={onSelectEvent} onHover={setHover} />
+              <Clip e={e} x={xFor(e.frame)} color={colorForAction(e.action)} text={describe(e)} flash={e.id === flashId} selected={e.id === selectedEventId} onSeek={onSeek} onSelect={onSelectEvent} onHover={setHover} />
             </div>
           ))}
           {blueEv.map(e => (
             <div key={e.id} style={{ position: 'absolute', top: lanesTop + TL.lane, left: 0 }}>
-              <Clip e={e} x={xFor(e.frame)} color={colorForAction(e.action)} flash={e.id === flashId} selected={e.id === selectedEventId} onSeek={onSeek} onSelect={onSelectEvent} onHover={setHover} />
+              <Clip e={e} x={xFor(e.frame)} color={colorForAction(e.action)} text={describe(e)} flash={e.id === flashId} selected={e.id === selectedEventId} onSeek={onSeek} onSelect={onSelectEvent} onHover={setHover} />
             </div>
           ))}
 
@@ -446,7 +450,7 @@ export default function AnnotationTimeline({
           {hover && (
             <div style={{ position: 'absolute', left: Math.max(4, hover.x - 70), top: lanesTop - 4, transform: 'translateY(-100%)', zIndex: 20, width: 200, pointerEvents: 'none' }}>
               <div className="glass" style={{ padding: '9px 11px', borderRadius: 9, borderLeft: `3px solid ${hover.color}` }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>{hover.e.description}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>{hover.text}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4, fontSize: 10.5, color: 'var(--text-muted)' }}>
                   <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{formatFrameClock(hover.e.frame, fps)}</span>
                   <span style={{ marginLeft: 'auto', opacity: 0.7 }}>#{hover.e.frame}</span>

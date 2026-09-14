@@ -14,24 +14,25 @@ interface Props {
   fps: number;
   rounds: Round[];
   fighters: { red: FighterProfile; blue: FighterProfile };
+  redFighterId?: number | null;
 }
 
-export default function FightStatistics({ currentFrame, events, fps, rounds, fighters }: Props) {
+export default function FightStatistics({ currentFrame, events, fps, rounds, fighters, redFighterId }: Props) {
   const [scope, setScope] = useState<Scope>('fight');
   const width = useWindowWidth();
   const cols = width < 1100 ? '1fr' : '1fr 1fr';
 
   let st: ScopeStats;
   if (scope === 'live') {
-    st = deriveStatsForRange(events, 0, currentFrame, fps);
+    st = deriveStatsForRange(events, 0, currentFrame, fps, redFighterId);
   } else if (scope === 'fight') {
-    st = deriveStatsForRange(events, 0, Infinity, fps);
+    st = deriveStatsForRange(events, 0, Infinity, fps, redFighterId);
   } else {
     // round number — scope to that round's frame range, fall back to fight-wide if unknown
     const round = rounds.find(r => r.round_number === scope);
     st = round
-      ? deriveStatsForRange(events, round.start_frame, round.end_frame, fps)
-      : deriveStatsForRange(events, 0, Infinity, fps);
+      ? deriveStatsForRange(events, round.start_frame, round.end_frame, fps, redFighterId)
+      : deriveStatsForRange(events, 0, Infinity, fps, redFighterId);
   }
 
   return (

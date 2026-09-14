@@ -155,12 +155,13 @@ class FightLabels:
     #
     # **Do NOT apply these to a label->keypoint join.** `corner` is a track-slot
     # pointer, not a person: the labeller selects a corner by clicking the *box*
-    # the overlay draws, so inside a swap span `label_events.corner` and
-    # `fighter_frames.corner` are consistently "wrong" about the name and
-    # correct about the human. The Stage 2 join label_events(F, corner) ->
-    # fighter_frames(F, corner) -> keypoints therefore already lands on the
-    # skeleton that threw the strike, with nothing applied; flipping here would
-    # attach the label to the *other* fighter.
+    # the overlay draws, so inside a swap span `fight_events.corner` (source=
+    # 'label') and `fighter_frames.corner` are consistently "wrong" about the
+    # name and correct about the human. The Stage 2 join
+    # fight_events(F, corner) -> fighter_frames(F, corner) -> keypoints
+    # therefore already lands on the skeleton that threw the strike, with
+    # nothing applied; flipping here would attach the label to the *other*
+    # fighter.
     #
     # These spans are (a) the slot->person map — apply only where a person is
     # required, e.g. per-fighter stats and fight_events.fighter_id — and (b) the

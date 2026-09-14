@@ -1,12 +1,19 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { Event } from '../../types/Event';
-import { deriveEventCat, eventColor, eventIcon } from './eventMeta';
+import { categoryForAction, colorForAction, iconForAction } from '../../components/annotate/taxonomy';
+import { describeEvent, type DescribeRound } from '../../utils/describeEvent';
+import { isFrameSwapped, type CornerSwapSpan } from '../../utils/cornerSwap';
 
 interface LiveFeedProps {
   events: Event[];
   currentFrame: number;
   fps: number;
   onSeek: (time: number) => void;
+  redName: string;
+  blueName: string;
+  redFighterId?: number | null;
+  rounds?: DescribeRound[];
+  cornerSwapSpans?: CornerSwapSpan[];
 }
 
 type Filter = 'all' | 'strike' | 'state' | 'grapple';
@@ -32,15 +39,21 @@ function fmtFrame(frame: number, fps: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export default function LiveFeed({ events, currentFrame, fps, onSeek }: LiveFeedProps) {
+export default function LiveFeed({
+  events, currentFrame, fps, onSeek, redName, blueName, redFighterId, rounds, cornerSwapSpans,
+}: LiveFeedProps) {
   const [filter, setFilter] = useState<Filter>('all');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const enriched = useMemo(() => events.map(e => ({
     ...e,
-    cat: deriveEventCat(e.description),
+    cat: categoryForAction(e.action),
     tc: fmtFrame(e.frame, fps),
-  })), [events, fps]);
+    text: describeEvent(e, {
+      redName, blueName, redFighterId, rounds,
+      swapped: isFrameSwapped(e.frame, cornerSwapSpans ?? []),
+    }),
+  })), [events, fps, redName, blueName, redFighterId, rounds, cornerSwapSpans]);
 
   const visible = useMemo(() =>
     enriched.filter(e => e.frame <= currentFrame && matchFilter(e.cat, filter)),
@@ -81,8 +94,8 @@ export default function LiveFeed({ events, currentFrame, fps, onSeek }: LiveFeed
             Waiting for events…
           </div>
         ) : visible.map(e => {
-          const c = eventColor(e.cat);
-          const icon = eventIcon(e.cat);
+          const c = colorForAction(e.action);
+          const icon = iconForAction(e.action);
           return (
             <button
               key={e.id}
@@ -94,7 +107,7 @@ export default function LiveFeed({ events, currentFrame, fps, onSeek }: LiveFeed
               </span>
               <span style={{ minWidth: 0, flex: 1 }}>
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.25, marginBottom: 2 }}>
-                  {e.description}
+                  {e.text}
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-disabled)' }}>
                   <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', fontWeight: 700 }}>{e.tc}</span>

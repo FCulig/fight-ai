@@ -122,7 +122,7 @@ def load_predictions(video: str) -> Predictions:
 
         rows = db.execute(
             text("SELECT frame, description, action, success, state FROM fight_events "
-                 "WHERE fight_id = :fid ORDER BY frame, id"),
+                 "WHERE fight_id = :fid AND source = 'prediction' ORDER BY frame, id"),
             {"fid": fight_id},
         ).all()
 
