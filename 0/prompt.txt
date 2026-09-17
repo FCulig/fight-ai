@@ -1,0 +1,1 @@
+So basically I am doing two detections (one is nano and other is xlarge)? And I am results from nano?
