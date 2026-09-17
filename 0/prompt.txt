@@ -1,0 +1,1 @@
+<bash-input>/design-login</bash-input><bash-stdout>zsh: no such file or directory: /design-login</bash-stdout><bash-stderr></bash-stderr>
