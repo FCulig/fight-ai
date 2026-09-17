@@ -1,0 +1,1 @@
+Check pipeline run bdve4d80j output and verify the tape-patch fix didn't regress corner assignment / crash the pipeline, then report result to user.
