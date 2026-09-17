@@ -1,0 +1,34 @@
+<task-notification>
+<task-id>aba052866986093b2</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/d8f6c318-d85c-4a88-80fa-aa552843c312/tasks/aba052866986093b2.output</output-file>
+<status>completed</status>
+<summary>Agent "Investigate missing fight events for labeled fights" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Root cause
+
+Labeled fights show no events because the pipeline never generates any for them — this is by design, but it now applies to fights the user has already hand-labeled.
+
+**The mechanism** (`backend/app/api/routes/fights.py:182-186`):
+```python
+# Only the AI track runs strike detection and the state machine; both
+# labelling purposes get the reduced pipeline that stops at keypoints.
+pid = run_validation_async(
+    relative_path, fight.id, skip_events=(purpose != "ai_labeled")
+)
+```
+`skip_events` is derived from the fight's `purpose` column (added in commit `fc13725`, migration `db/alembic/versions/e6f7a8b9c0d1_add_purpose_to_fights.py`). Only `purpose == "ai_labeled"` runs the full pipeline (`ai/pipeline.py:462`, `ai/fight_processing/fight_processing.py`) that writes rows into `fight_events`. Fights with `purpose in {"training_data", "reference"}` — i.e. anything uploaded for manual labeling — deliberately stop at keypoints and never populate `fight_events`.
+
+**Why previously-labeled fights are affected too, not just new ones:** the same migration backfilled every existing row:
+```sql
+UPDATE fights SET purpose = 'training_data' WHERE id &lt;&gt; 31
+```
+So all pre-existing fights except id 31 were retroactively stamped `purpose='training_data'`. That backfill itself doesn't delete already-existing `fight_events` rows, but for any of those fights that get reprocessed (or that never had predictions in the first place because they went through the manual-labeling upload path), `purpose != 'ai_labeled'` now means the pipeline will (re)run with `skip_events=True` and produce/keep zero `fight_events` rows.
+
+**Frontend side, confirming what's read:** `Player.tsx` → `useEvents(fightId)` (`frontend/src/hooks/useEvents.ts`) → `fetchFightEvents` → `GET /fights/{id}/events/`, which is explicitly the read-only `fight_events` (pipeline-predictions) table (`backend/app/services/event_service.py` / `backend/app/api/routes/fights.py`). It never reads `label_events`, where `Annotate.tsx` writes the hand-labeled data (`useLabelEvents.ts`). This split is intentional per `backend/CLAUDE.md`'s "Predictions vs. labels — never mix them" section, so it isn't a bug in the read path — it's that `fight_events` is genuinely empty for these fights.
+
+**Net effect:** Any fight whose `purpose` is `training_data` or `reference` (which now includes essentially every previously-existing fight due to the backfill, plus all fights uploaded via the "Self-annotate" manual-labeling mode) has an empty `fight_events` table by design, so the Player page — which only ever displays `fight_events` — correctly shows nothing. The hand labels the user entered do exist, but in `label_events`, which only the Annotate page displays.
+
+This is a product/behavior question, not an obvious bug: is Player.tsx supposed to fall back to displaying `label_events` for `labeling_complete` fights (purpose `training_data`/`reference`), or should `ai_labeled` fights be the only ones ever shown in the Player? No code changes were made per instructions.</result>
+<usage><subagent_tokens>72580</subagent_tokens><tool_uses>10</tool_uses><duration_ms>36934</duration_ms></usage>
+</task-notification>
