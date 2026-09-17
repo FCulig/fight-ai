@@ -1,0 +1,1 @@
+When I select an event on the timeline in manual labeling and press delete, it does not get deleted. I would like that functionality
