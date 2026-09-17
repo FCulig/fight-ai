@@ -1,0 +1,1 @@
+Currently we have corner swap spans in manual labeling. I wonder if they are needed? What would happen if when we finish labeling is pressed in those corner swap periods, fight events table is updated so that fighter and its rectangle is reassigned to those periods?
