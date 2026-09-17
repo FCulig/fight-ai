@@ -1,0 +1,1 @@
+When there is the end of the fight event, rest of the timeline should  adheer to that (round should end and fight state should end on the timeline
