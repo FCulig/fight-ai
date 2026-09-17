@@ -1,0 +1,1 @@
+Maybe we could do without measuring, I already have existing fights where bound boxes are not up to par. So after a fix I can just process a new fight and see how it looks/behaves. What about that?
