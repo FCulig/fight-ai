@@ -1,0 +1,1 @@
+This is accepted, since fight end event is an event in manual labeling. AI pipeline cannot output it. Should we drop description column for all fight events expect fight_end?
