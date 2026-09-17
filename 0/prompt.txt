@@ -1,0 +1,1 @@
+When I play back the fights, no events are streamed to the FE
