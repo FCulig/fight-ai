@@ -1,0 +1,3 @@
+Currently my frontend application is behaving in a way where the landing page is basically a main app itself. I would like to have a restructuring of sorts. In the future I would like to have the current frontend/ application on a following domain www.app.fight.ai while [www.fight.ai](https://www.fight.ai) would be a one page landing page descriping a product. What approach should I use for that?
+
+Also, should that one pager be a separate app? Or folder?
