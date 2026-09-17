@@ -1,0 +1,3 @@
+Now I would like to start with training. But first I was thinking of a feature where I could go through all of the labeled events for training in order to validate them. The basic idea is list of all of the events, and I can play them back 1 to 1 as they would get fed into the model for training. Then if event is okay, I would confirm it, or if it wasn't okay, i would decline it (but not delete it). This would add a new nullable column to the fight_events table. Through this feature we could also control amount of each event type that we send in for training.
+
+What do you think about this approach? Is it worth the time and effort?
