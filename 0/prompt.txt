@@ -1,0 +1,1 @@
+On the fight list, there is rounds unverified label. After fight is finished with maual labeling. There is no need to display that label anymore
