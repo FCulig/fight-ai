@@ -1,0 +1,1 @@
+In theory could I retrain my nano model to be a xl model and also answer questions about which fighter is which?
