@@ -1,0 +1,1 @@
+No need to alter pipeline, let it process fully, I am okay with it. Okay now you can implement smoothing part
