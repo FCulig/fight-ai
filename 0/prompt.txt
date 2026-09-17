@@ -1,0 +1,1 @@
+When I click finish labeling on fight 44, I get error saying fight is currently in labeling in progress. Why is that? I should be able to finish it?
