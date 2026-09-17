@@ -1,0 +1,340 @@
+<task-notification>
+<task-id>a11744dafd9ac4e41</task-id>
+<tool-use-id>toolu_018oTmycXYC5qQ3h9Ro6m6i9</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/d8f6c318-d85c-4a88-80fa-aa552843c312/tasks/a11744dafd9ac4e41.output</output-file>
+<status>completed</status>
+<summary>Agent "Design unified fight_events schema and migration plan" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result># Design: Merge `fight_events` / `label_events` / `label_spans` into one `fight_events` table
+
+## Context established from the codebase
+
+Before the design: the current three-table split was **deliberate and documented**, not incidental. `backend/CLAUDE.md` states it explicitly:
+
+&gt; "This split (rather than a `source` column on one table) exists specifically so a query can't accidentally blend model output into training data by forgetting a filter — see plan `0c(5)`."
+
+This refactor **reintroduces exactly the failure mode that split was built to prevent**, in exchange for the workflow simplification the user has already decided on (no re-runs, ever; dual-upload scoring instead). Every design choice below is aimed at recovering that safety guarantee with a single-table schema instead of two tables — via DB `CHECK` constraints and service-layer guards rather than physical table separation.
+
+Also discovered while tracing the code, worth flagging up front because it's easy to get wrong:
+
+- **`round_start`/`round_end` point markers are always `source='prediction'`, even on a `training_data`/`reference` fight.** `write_frames_and_rounds()` (the reduced "manual-labeling" track) still calls `_insert_event(..., action="round_start")` from real segmentation output — round *detection* isn't part of what's replaced by hand-labelling. So a `training_data` fight's `fight_events` rows are **not** uniformly `source='label'`; they're a small number of pipeline-authored round markers plus (later) hand-authored strikes/state/spans. This is a narrow, intentional exception to "one fight_id = one provenance for point rows," not a violation of it (that decision was about *strike* predictions never coexisting with hand strike labels for the same fight_id, which still holds).
+- Label-event `description` text (`taxonomy.ts`'s `handStrikeText`, e.g. "fighter_1 jabs to the head") and prediction `description` text (`"fighter_red threw a jab_head (landed)"`) already use different wording. `ai/eval/predictions.py`'s regex fallbacks (`_STRIKE_RE`, `_STATE_RE`) and `frontend/src/utils/liveStats.ts`'s regex only happen not to match label text today by luck of wording, not by design — this must not be relied on going forward (see Risks).
+
+---
+
+## 1. Final unified `fight_events` schema
+
+```
+fight_events
+├── id             INTEGER      PK
+├── fight_id       INTEGER      NOT NULL  FK -&gt; fights(id) ON DELETE CASCADE
+├── source         VARCHAR(20)  NOT NULL  -- 'prediction' | 'label' — WHO wrote the row
+├── kind           VARCHAR(20)  NOT NULL  -- 'point' | 'round' | 'corner_swap' | 'excluded' — WHAT SHAPE the row is
+├── frame          INTEGER      NOT NULL  -- point: the frame. range: the start frame.
+├── end_frame      INTEGER      NULL      -- NULL for kind='point' (always). For range kinds: NULL = an open start/end toggle not yet closed, matching today's label_spans semantics exactly.
+├── description    TEXT         NULL      -- NOT NULL still required for kind='point' (enforced by CHECK); NULL for range kinds (they never had free text — label_spans had none either)
+├── fighter_id     INTEGER      NULL      FK -&gt; fighters(id) ON DELETE SET NULL   -- PREDICTION-ONLY resolved identity
+├── corner         INTEGER      NULL      -- LABEL-ONLY track-slot (0=red,1=blue) — a box index, not a person; see label-events-corner-is-box-not-person
+├── action         VARCHAR(50)  NULL      -- strike type / round_start / round_end / state_* / takedown_* / clinch_initiated ... (shared vocabulary column, both sources use it, taxonomies differ — pre-existing, out of scope to unify)
+├── target         VARCHAR(10)  NULL      -- head/body/leg — currently label-only (predictions encode target inside `action`, e.g. jab_head); column is source-agnostic, just unused by predictions today
+├── success        BOOLEAN      NULL      -- True=landed, False=missed, NULL=unknown/n-a — identical semantics on both sides already, trivial merge
+├── state          VARCHAR(20)  NULL      -- STRIKING/CLINCH/GROUND on a prediction state-change row — unchanged, prediction-only in practice (label-side state marks keep using action=state_* per STATE_ACTION_MAP, not this column — no behavior change)
+├── value          VARCHAR(200) NULL      -- round number / exclusion reason — range-kind-only (formerly label_spans.value)
+├── labeler        VARCHAR(100) NULL      -- attribution — label-only, unused by predictions
+└── created_at     TIMESTAMP    NOT NULL DEFAULT now()   -- new for prediction rows (didn't exist before); pre-existing for label rows
+```
+
+### Key decisions, with justification
+
+**`frame` is NOT renamed to `start_frame`.** Adding nullable `end_frame` is sufficient to signal "this is a range" (`end_frame` set or NULL-but-kind≠point) without a mechanical rename that would touch every raw-SQL `INSERT`/`SELECT` in `ai/fight_processing/fight_processing.py` and `ai/eval/predictions.py`, plus `Event.frame` across the whole frontend (`Event.ts`, `LiveFeed.tsx`, `liveStats.ts`, `Player.tsx`'s `e.frame &lt;= currentFrame` filter). The rename buys clarity only; `frame` as "the row's start" is already how `label_spans` conceptually worked (`start_frame`) — that's a one-word doc comment, not a schema requirement. Pick the low-blast-radius option.
+
+**Two discriminator columns, not one.** `source` (`prediction`|`label`) is the safety-critical column: it is what makes the pipeline's DELETE-then-rewrite un-able to ever touch a hand-authored row, so it must never be conflatable with anything else and must never carry a default once backfilled. `kind` is the row-shape column, and it's a **natural extension of the existing `label_spans.kind` enum** — just add `'point'` as its fourth value. This reuses a vocabulary and a mental model the codebase already has (`SPAN_KINDS` in `label_span.py`) instead of inventing a new combined enum; a combined `source×kind` enum (e.g. `prediction_point`, `label_point`, `label_round`, ...) would work but adds nothing over two orthogonal columns while making every filter a string-prefix match instead of a plain `WHERE` clause.
+
+**`description` becomes nullable**, with a `CHECK` preserving today's actual guarantee: every *point* row (prediction or label) still requires a description; only range rows (round/corner_swap/excluded — which never had a description in `label_spans`) are allowed to have `description IS NULL`. No synthesized description string — the codebase already treats `description` regex-parsing as the thing to move away from (see the `state` column's own migration rationale), so manufacturing new free text for spans would add another fragile parsing surface for zero benefit; clients render spans directly from `kind`/`value`/`frame`/`end_frame`.
+
+**`fighter_id` and `corner` stay separate nullable columns**, each pinned to one `source` via `CHECK`, exactly matching the existing `label-events-corner-is-box-not-person` design note: `fighter_id` is a resolved identity (FK, prediction-only, derived from the fight's red/blue→fighter mapping); `corner` is a raw track-slot index a labeller clicks on-screen, and can be transiently "wrong" mid corner-swap. Conflating them was rejected specifically to avoid ever writing a labeller's box-click into the identity-resolved column.
+
+### Constraints and indexes
+
+```sql
+ALTER TABLE fight_events
+  ADD CONSTRAINT ck_fight_events_source
+    CHECK (source IN ('prediction', 'label')),
+  ADD CONSTRAINT ck_fight_events_kind
+    CHECK (kind IN ('point', 'round', 'corner_swap', 'excluded')),
+  ADD CONSTRAINT ck_fight_events_point_has_description
+    CHECK (kind &lt;&gt; 'point' OR description IS NOT NULL),
+  ADD CONSTRAINT ck_fight_events_point_has_no_end_frame
+    CHECK (kind &lt;&gt; 'point' OR end_frame IS NULL),
+  ADD CONSTRAINT ck_fight_events_corner_range
+    CHECK (corner IS NULL OR corner IN (0, 1)),
+  ADD CONSTRAINT ck_fight_events_corner_is_label_only
+    CHECK (corner IS NULL OR source = 'label'),
+  ADD CONSTRAINT ck_fight_events_fighter_id_is_prediction_only
+    CHECK (fighter_id IS NULL OR source = 'prediction');
+
+CREATE INDEX ix_fight_events_fight_source ON fight_events (fight_id, source);
+CREATE INDEX ix_fight_events_fight_kind   ON fight_events (fight_id, kind);
+-- existing indexes kept unchanged: ix_fight_events_fight_id,
+-- ix_fight_events_fighter_id, ix_fight_events_fighter_action
+```
+
+`source`/`kind` must **not** keep a column default after the backfill migration — every future write path (the AI pipeline's raw SQL, and the unified `event_service.create_event`) must state both explicitly. A lingering default is exactly the kind of silent-mislabel risk the old two-table design existed to rule out.
+
+No new uniqueness constraint is proposed (none existed on `label_spans` for "one open span per kind" either — that invariant was only ever enforced client-side via `openSpanRef`); flagged as optional future hardening, not part of this migration.
+
+---
+
+## 2. Migration plan (ordered Alembic revisions)
+
+All new revisions chain off the current head, `e6f7a8b9c0d1_add_purpose_to_fights`.
+
+**Migration A — `add_source_kind_columns_to_fight_events`**
+```sql
+ALTER TABLE fight_events
+  ADD COLUMN source      VARCHAR(20)  NOT NULL DEFAULT 'prediction',
+  ADD COLUMN kind         VARCHAR(20)  NOT NULL DEFAULT 'point',
+  ADD COLUMN end_frame    INTEGER      NULL,
+  ADD COLUMN corner       INTEGER      NULL,
+  ADD COLUMN target       VARCHAR(10)  NULL,
+  ADD COLUMN value        VARCHAR(200) NULL,
+  ADD COLUMN labeler      VARCHAR(100) NULL,
+  ADD COLUMN created_at   TIMESTAMP    NOT NULL DEFAULT now();
+
+ALTER TABLE fight_events ALTER COLUMN description DROP NOT NULL;
+```
+The `DEFAULT` fills in every pre-existing row (`source='prediction'`, `kind='point'`) as part of the `ADD COLUMN`, which is exactly right for legacy predictions. `created_at` for these old rows is stamped with the migration's execution time, not their real write time — call out as accepted, undocumented-until-now data loss (see Risks).
+
+**Migration B — `migrate_label_events_into_fight_events`**
+```sql
+INSERT INTO fight_events
+  (fight_id, frame, end_frame, description, fighter_id, action, success, state,
+   source, kind, corner, target, value, labeler, created_at)
+SELECT
+  fight_id, frame, NULL, description, NULL, action, success, NULL,
+  'label', 'point', corner, target, NULL, labeler, created_at
+FROM label_events;
+```
+New PKs are issued (old `label_events.id` values are not preserved). Nothing has an FK to `label_events.id` today, and the only client-side thing that ever caches an id (`Annotate.tsx`'s `openSpanRef`, for spans not events) is a component ref that's naturally rebuilt on refetch — safe.
+
+**Migration C — `migrate_label_spans_into_fight_events`**
+```sql
+INSERT INTO fight_events
+  (fight_id, frame, end_frame, description, fighter_id, action, success, state,
+   source, kind, corner, target, value, labeler, created_at)
+SELECT
+  fight_id, start_frame, end_frame, NULL, NULL, NULL, NULL, NULL,
+  'label', kind, NULL, NULL, value, NULL, created_at
+FROM label_spans;
+```
+`label_spans.kind` reuses the exact same three string values (`round`/`corner_swap`/`excluded`) the new `kind` enum needs — direct copy, no value mapping table required.
+
+**Pre-flight checks to run before B/C/D (add as migration-time assertions, fail loudly rather than silently drop rows):**
+```sql
+-- label_events.corner had no DB check before now — verify before trusting the new CHECK
+SELECT DISTINCT corner FROM label_events WHERE corner NOT IN (0, 1) AND corner IS NOT NULL;
+-- label_spans.kind had NO DB check constraint at all ("no DB check constraint" per current schema) — verify before the new CHECK goes on
+SELECT DISTINCT kind FROM label_spans WHERE kind NOT IN ('round', 'corner_swap', 'excluded');
+```
+If either returns rows, migration D's `CHECK ADD` will fail at apply time anyway (Postgres validates existing rows by default) — but running these first turns an opaque migration failure into an actionable pre-check.
+
+**Migration D — `add_constraints_and_indexes_to_fight_events`**
+- Add all six `CHECK` constraints listed above.
+- `ALTER COLUMN source DROP DEFAULT`, `ALTER COLUMN kind DROP DEFAULT`.
+- Create `ix_fight_events_fight_source`, `ix_fight_events_fight_kind`.
+
+**Migration E — `drop_label_events_and_label_spans_tables`**
+```sql
+DROP INDEX ix_label_events_fight_id;
+DROP TABLE label_events;
+DROP INDEX ix_label_spans_fight_id;
+DROP TABLE label_spans;
+```
+
+**Sequencing note:** B/C/D/E must land in the same deploy as the backend/AI code changes below — old backend code paths (`label_event_service.py`, `label_span_service.py`, the `/label-events/`/`/label-spans/` routes) cannot still be live when E runs, or they'll 500 against dropped tables. Given this is a small single-environment project, treat migrations A–E plus the backend/pipeline code change as one atomic deploy, not five independent ones landed over time.
+
+**Data-loss / type-cast risks called out explicitly:**
+- `label_events.success` (Boolean) → unified `success` (Boolean): identical type, zero risk.
+- `fight_events` rows created before this migration get a fabricated `created_at` (migration run time) — there is no way to recover their real write time since the column didn't exist; document this loudly in the migration docstring the way `e6f7a8b9c0d1` documents its `purpose` backfill assumption.
+- `label_spans.kind` and `label_events.corner` were never DB-constrained — verify with the pre-flight queries above before trusting the new `CHECK`s to apply cleanly.
+
+---
+
+## 3. Backend changes
+
+**Delete:** `backend/app/models/label_event.py`, `backend/app/models/label_span.py`, `backend/app/services/label_event_service.py`, `backend/app/services/label_span_service.py`.
+
+**`backend/app/models/fight_event.py`** — extend the ORM model with all new columns; schemas:
+
+```python
+class FightEventResponse(BaseModel):
+    id: int
+    fight_id: int
+    source: str
+    kind: str
+    frame: int
+    end_frame: Optional[int]
+    description: Optional[str]
+    fighter_id: Optional[int]
+    corner: Optional[int]
+    action: Optional[str]
+    target: Optional[str]
+    success: Optional[bool]
+    state: Optional[str]
+    value: Optional[str]
+    labeler: Optional[str]
+    created_at: datetime
+
+class FightEventCreate(BaseModel):
+    kind: str = "point"          # 'point' | 'round' | 'corner_swap' | 'excluded'
+    frame: int
+    end_frame: Optional[int] = None
+    description: Optional[str] = None
+    corner: Optional[int] = None
+    action: Optional[str] = None
+    target: Optional[str] = None
+    success: Optional[bool] = None
+    labeler: Optional[str] = None
+    value: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -&gt; "FightEventCreate":
+        if self.kind == "point" and not self.description:
+            raise ValueError("description is required for a point event")
+        if self.kind not in ("point", "round", "corner_swap", "excluded"):
+            raise ValueError("kind must be one of point/round/corner_swap/excluded")
+        if self.corner is not None and self.corner not in (0, 1):
+            raise ValueError("corner must be 0 (red) or 1 (blue)")
+        if self.action and self.action.startswith("state_") and self.corner is not None:
+            raise ValueError("corner must be null for a state_* action")
+        return self
+
+class FightEventUpdate(BaseModel):
+    frame: Optional[int] = None
+    end_frame: Optional[int] = None
+    value: Optional[str] = None
+```
+
+**Decisive choice: one flexible schema, not a discriminated union.** `FightEventCreate` never accepts `source` from the client at all — the service always sets `source="label"` when constructing the row, because the REST API is exclusively Annotate's write path; the AI pipeline writes predictions via raw SQL directly and never goes through this schema. This removes the possibility of a client ever spoofing `source='prediction'`. A discriminated union (`Union[PointCreate, RangeCreate]`) was considered and rejected: it adds FastAPI/pydantic-v2 discriminator wiring for a validation job a single `model_validator` already does today for `LabelEventCreate`'s `state_*`/corner guard — same pattern, just extended.
+
+**`backend/app/services/event_service.py`** becomes the single home:
+- `get_events_by_fight(fight_id, fighter_id=None, action=None, success=None, kind=None, source=None)` — extends the existing predictions query with `kind`/`source` filters.
+- `create_event(fight_id, payload: FightEventCreate) -&gt; FightEvent` — always `source="label"`; folds in both `create_label_event` and `create_label_span`.
+- `update_event(fight_id, event_id, payload: FightEventUpdate) -&gt; Optional[FightEvent]` — folds in `update_label_span`; must reject (404/400) updates to `source='prediction'` rows and to `kind='point'` rows (point labels stay create+delete-only, matching today's "edits are delete+recreate" behavior — never introduce update semantics that didn't exist).
+- `delete_event(fight_id, event_id) -&gt; bool` — folds in both deletes; **must filter `.filter(FightEvent.source == "label")`** so the label-editing API can never delete a prediction row. This is the single most important service-layer guard in the whole refactor, since the old design made it structurally impossible and the new one only makes it constrained.
+- `_ensure_round_spans_seeded(session, fight_id)` — the `label_span_service.get_label_spans()` auto-seed side effect, ported almost verbatim (same query against the `rounds` table), now inserting `FightEvent(source='label', kind='round', frame=r.start_frame, end_frame=r.end_frame, value=str(r.round_number))`. Call it from `get_events_by_fight` whenever the caller requests `source='label'` (Annotate's own fetch), so a Player's `source='prediction'` call for an `ai_labeled` fight never triggers a spurious insert.
+- `rounds_fully_annotated(fight_id, session=None) -&gt; bool` — ported from `label_span_service.py`, now filtering `WHERE fight_id = :fid AND source = 'label' AND kind = 'round'`. **Update the import in `backend/app/services/fight_service.py`** from `app.services.label_span_service` to `app.services.event_service`.
+
+**Note on `fighter_service.get_events_by_fighter`:** no code change required — since `fighter_id` is now `CHECK`-constrained to `source='prediction'` rows only, the existing `.filter(FightEvent.fighter_id == fighter_id)` query automatically excludes every label row without needing an explicit `source` filter. Worth a comment update to make that non-obvious guarantee explicit rather than accidental.
+
+**`backend/app/api/routes/fights.py`:**
+- Remove the six label-events/label-spans routes.
+- `GET /{fight_id}/events/` — add `kind: Optional[str] = None`, `source: Optional[str] = None` query params alongside the existing three.
+- `POST /{fight_id}/events/` (new, 201) — body `FightEventCreate`, calls `event_service.create_event`.
+- `PUT /{fight_id}/events/{event_id}` (new) — body `FightEventUpdate`, calls `event_service.update_event`, 404 if missing/not-updatable.
+- `DELETE /{fight_id}/events/{event_id}` (new, 204) — calls `event_service.delete_event`, 404 if missing or not label-sourced.
+- The route-level `corner not in (0,1)` and `kind not in SPAN_KINDS` checks move into `FightEventCreate`'s validator, shrinking the route back to thin dispatch + exception translation.
+
+**`backend/app/api/routes/events.py`** (legacy top-level `GET /events/`) and **`event_service.get_fight_events()`** (the unscoped, all-fights query) — **delete both**. Confirmed dead: `frontend/src/hooks/useEvents.ts` only calls the no-fightId `fetchEvents()` branch when `fightId == null`, and its only caller, `Player.tsx`, always passes a real `fightId`. Beyond being dead code, an unscoped cross-fight query is now actively dangerous post-merge — it would return every fight's hand labels and spans mixed with predictions, with no filter, which is precisely the hazard this whole design is defending against. Also drop the router registration in `backend/app/main.py` (`app.include_router(fight_events_router, prefix="/events")`).
+
+---
+
+## 4. AI pipeline changes (`ai/`)
+
+**`ai/fight_processing/fight_processing.py`:**
+- `_insert_event()` — add `source="prediction"`, `kind="point"` to the literal `INSERT INTO fight_events` (both the column list and the params dict). Every call site (`process_fight`, `write_frames_and_rounds`) is unaffected otherwise since they never write range rows.
+- `process_fight()`'s `DELETE FROM fight_events WHERE fight_id = :fid` → `DELETE FROM fight_events WHERE fight_id = :fid AND source = 'prediction'`.
+- `write_frames_and_rounds()`'s equivalent `DELETE FROM fight_events WHERE fight_id = :fid` → same `AND source = 'prediction'` scoping.
+
+Per the user's decision #2, no fight_id is ever re-run today, so this scoping is defensive insurance rather than a live bug fix — but it's the cheapest possible insurance (one clause) against the exact hazard the old table split existed to eliminate, so it must not be skipped.
+
+**`ai/eval/predictions.py` (`load_predictions`)** — its `SELECT frame, description, action, success, state FROM fight_events WHERE fight_id = :fid` must add `AND source = 'prediction'`. Today the regex fallbacks (`_STRIKE_RE`, `_STATE_RE`) happen not to match label-authored description text (different wording — `taxonomy.ts`'s `handStrikeText` vs. the pipeline's `"fighter_red threw a jab_head (landed)"`), so this isn't visibly broken yet, but that's incidental wording divergence, not a guarantee — add the explicit filter rather than rely on it.
+
+**`ai/eval/labels_db.py` (`build_labels`)** — every one of its four `SELECT ... FROM label_spans WHERE fight_id = :fid AND kind = '...'` becomes `SELECT ... FROM fight_events WHERE fight_id = :fid AND source = 'label' AND kind = '...'` (column names line up: `start_frame`→`frame`, `end_frame`→`end_frame`, `value`→`value`). Its `SELECT frame, corner, action, target, success FROM label_events WHERE fight_id = :fid` becomes `SELECT frame, corner, action, target, success FROM fight_events WHERE fight_id = :fid AND source = 'label' AND kind = 'point'`.
+
+**`ai/CLAUDE.md`** documentation (the "DB Schema" and "Predictions vs. labels" sections) needs a full rewrite to describe one table with `source`/`kind` instead of three tables — flag this as required doc maintenance, not optional, since this file is clearly treated as living architecture documentation the team actively relies on (it's unusually detailed and cross-referenced from code comments).
+
+**`ai/eval/cli.py` — secondary, but a concrete proposal per the user's request:** `score` currently reads both predictions and ground truth from one `video` positional arg / one fight_id. Under the dual-upload workflow, propose:
+```
+python -m eval.cli score --pred-video &lt;ai_labeled_video&gt; --truth-video &lt;training_data_or_reference_video&gt;
+```
+with the existing single positional `video` argument kept as a **deprecated alias** meaning `--pred-video video --truth-video video` (needed for backward compatibility with any already-processed single-fight_id fixture, e.g. the pre-existing fight referenced in the `purpose` migration). `_cmd_score` threads two video identifiers into `load_predictions(pred_video)` and `FightLabels.for_video(truth_video)` independently — both already resolve fight_id internally via `lookup_fight`, so no change needed inside `predictions.py`/`labels_db.py` beyond the `source` filter above. `export` (truth-only) and `agreement` (two label passes of the *same* fight) are unaffected — neither compares across two fight_ids.
+
+---
+
+## 5. Frontend changes
+
+**Types** — delete `frontend/src/types/LabelEvent.ts` and `LabelSpan.ts`; rewrite `frontend/src/types/Event.ts`:
+```ts
+export type EventKind = 'point' | 'round' | 'corner_swap' | 'excluded';
+export type EventSource = 'prediction' | 'label';
+
+export interface Event {
+  id: number;
+  fight_id: number;
+  source: EventSource;
+  kind: EventKind;
+  frame: number;                 // start_frame for range kinds
+  end_frame: number | null;
+  description: string | null;
+  fighter_id: number | null;     // prediction-only resolved identity
+  corner: number | null;         // label-only track-slot (0=red/1=blue)
+  action: string | null;
+  target: string | null;
+  success: boolean | null;
+  state: string | null;
+  value: string | null;
+  labeler: string | null;
+  created_at: string;
+}
+```
+
+**`services/api.ts`** — delete `fetchEvents` (bare, no-fightId), `fetchLabelEvents`, `createLabelEvent`, `deleteLabelEvent`, `fetchLabelSpans`, `createLabelSpan`, `updateLabelSpan`, `deleteLabelSpan`; replace with:
+```ts
+fetchEvents(fightId, params?: { source?, kind?, fighter_id?, action?, success? })
+createEvent(fightId, payload)      // POST /fights/{id}/events/
+updateEvent(fightId, eventId, payload)  // PUT  /fights/{id}/events/{eventId}
+deleteEvent(fightId, eventId)      // DELETE /fights/{id}/events/{eventId}
+```
+Note the one real payload-shape change Annotate must adopt: span creation currently sends `start_frame`; the unified create payload sends `frame` for the same value (matches the schema decision to keep `frame`, not rename it).
+
+**Hooks** — delete `useLabelEvents.ts` and `useLabelSpans.ts`; keep one `useEvents(fightId, params?)` hook, parameterized:
+- `Player.tsx`: `useEvents(fightId, { source: 'prediction' })`.
+- `Annotate.tsx`: `useEvents(fightId, { source: 'label' })`, returning the full mixed point+range array plus `setEvents` for optimistic local updates (replacing the old `useLabelSpans`'s `spans, setSpans` pattern). Annotate derives `pointLabels = events.filter(e =&gt; e.kind === 'point')` and `spans = events.filter(e =&gt; e.kind !== 'point')` via `useMemo` for the three components (`AnnotationTimeline`, `AnnotationList`, `EventPalette`) that currently take separate `LabelEvent[]`/`LabelSpan[]` props — those prop types become filtered slices of `Event[]`.
+
+**`Player.tsx`** — no structural change beyond the hook's new `source: 'prediction'` param; `LiveFeed`'s `deriveEventCat`/`eventMeta.ts` classification over `description` is unaffected since prediction rows are always `kind='point'` with a non-null description. Recommend also filtering `kind === 'point'` defensively before handing events to `LiveFeed`/`liveStats` (prediction rows are always `kind='point'` by construction today, so this is pure insurance against a future accidental prediction-side range row).
+
+**`Annotate.tsx`** — replace `createLabelEvent(fightId, payload)`/`deleteLabelEvent` with `createEvent(fightId, { kind: 'point', ...payload })`/`deleteEvent`; replace `createLabelSpan`/`updateLabelSpan`/`deleteLabelSpan` with `createEvent(fightId, { kind, frame: startFrame, end_frame, value })`/`updateEvent`/`deleteEvent`. `openSpanRef`'s per-kind open-span-id tracking is unaffected structurally. The round-seeding side effect needs no client change — it's still triggered server-side by Annotate's own `GET .../events/?source=label` fetch.
+
+**`utils/liveStats.ts`** — explicitly out of scope per the user's instruction; the regex-over-`description` approach is unchanged. The only latent risk (see below) is that it's only safe because its only caller (`Player.tsx`) only ever feeds it `source='prediction'` events; add a defensive `e.description != null` guard as cheap insurance if trivial, but don't restructure it.
+
+**Dead code note (not required, opportunistic):** `components/EventFeed.tsx`/`EventItem.tsx` are already unused; worth deleting alongside this refactor since they reference the old `Event`/`LabelEvent` shapes and would otherwise silently bit-rot further.
+
+---
+
+## 6. Risk list
+
+1. **The merge reintroduces the exact hazard the split was built to prevent** (documented verbatim in `backend/CLAUDE.md`: "so a query can't accidentally blend model output into training data by forgetting a filter"). Every raw-SQL query against `fight_events`, present and future, must be audited for a `source`/`kind` filter — this is not a one-time migration concern, it's an ongoing discipline the schema can only partially enforce (via the `fighter_id`/`corner` `CHECK`s). Treat any new `fight_events` query without an explicit `source` or `kind` clause in code review as a red flag.
+2. **`round_start`/`round_end` are `source='prediction'` even on `training_data`/`reference` fights.** An implementer who assumes "`purpose != ai_labeled` ⇒ all its `fight_events` rows are `source='label'`" will get this wrong and, e.g., point the pipeline's DELETE at the wrong scope, or filter them out of Annotate's view incorrectly.
+3. **`label_span_service.get_label_spans()`'s auto-seed side effect** is easy to lose or duplicate during the service merge — it must fire exactly once, only for `source='label'` fetches, and its ported query must key off `kind='round' AND source='label'`, or an `ai_labeled` fight's Player fetch could spuriously trigger it against the `rounds` table.
+4. **`corner`-vs-`fighter_id` semantic gap.** Now that they live in the same table, a naive `SELECT *` or a lazily-written new frontend consumer is one field-name typo away from treating a track-slot as a resolved identity. The two `CHECK` constraints (`corner` only when `source='label'`, `fighter_id` only when `source='prediction'`) are the DB-level backstop for this; keep them.
+5. **`ai/eval/predictions.py`'s regex fallback is only accidentally safe today.** `_STRIKE_RE`/`_STATE_RE` happen not to match label-authored description text because of wording differences that were never designed as a safety boundary (`taxonomy.ts`'s strike text vs. the pipeline's). Adding the explicit `source='prediction'` filter is required, not optional, even though nothing appears broken pre-migration.
+6. **`success` typing is identical** across the old tables (Boolean/Boolean) — no cast risk, but worth a quick sanity check during migration B in case any historical raw `INSERT` into `label_events` ever wrote a non-boolean-compatible value outside the ORM.
+7. **`label_spans.kind` and `label_events.corner` were never DB-constrained** before this migration — run the two pre-flight `SELECT DISTINCT` sanity queries (Section 2) before applying migration D, since an unexpected historical value will otherwise surface as an opaque `CHECK` violation at migration time.
+8. **Stale test file:** `backend/tests/test_event_service.py` already references `FightEventCreate`, `event_service.create_event`, and `event_service.delete_event` — none of which exist in the current `event_service.py` (only `get_fight_events`/`get_events_by_fight` exist today). This test is currently broken/dead, predating the label_event/label_span split. The new unified service will happen to define functions with matching names, so this file will likely start passing again by accident — it must be rewritten, not just left alone, to actually cover the new schema: `kind='round'/'corner_swap'/'excluded'` rows, the delete-guard rejecting `source='prediction'` deletes, and the validator-level checks (SQLite in tests won't enforce Postgres `CHECK` constraints, so the Pydantic validator is the only thing actually tested there).
+9. **`created_at` backfill for legacy prediction rows** is fabricated at migration time, not historically accurate — harmless today (nothing orders by it), but should be documented in the migration so it isn't mistaken for real data later.
+10. **Frontend payload rename** (`start_frame` → `frame` for span creation) is a small but real breaking change to `Annotate.tsx`'s `toggleSpan`/update-span code paths — easy to miss since it's "just" a field rename inside an already-passing test suite that likely doesn't cover it.
+
+---
+
+### Critical Files for Implementation
+- /Users/filip.culig/Developer/fight-ai/backend/app/models/fight_event.py
+- /Users/filip.culig/Developer/fight-ai/backend/app/services/event_service.py
+- /Users/filip.culig/Developer/fight-ai/backend/app/api/routes/fights.py
+- /Users/filip.culig/Developer/fight-ai/ai/fight_processing/fight_processing.py
+- /Users/filip.culig/Developer/fight-ai/ai/eval/labels_db.py
+- /Users/filip.culig/Developer/fight-ai/ai/eval/predictions.py
+- /Users/filip.culig/Developer/fight-ai/frontend/src/services/api.ts
+- /Users/filip.culig/Developer/fight-ai/frontend/src/pages/Annotate.tsx</result>
+<usage><subagent_tokens>144505</subagent_tokens><tool_uses>32</tool_uses><duration_ms>445136</duration_ms></usage>
+</task-notification>
