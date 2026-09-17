@@ -1,0 +1,40 @@
+<task-notification>
+<task-id>abacc8e351a0aa844</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/987b6ba3-6398-4634-a403-606a65baf11e/tasks/abacc8e351a0aa844.output</output-file>
+<status>completed</status>
+<summary>Agent "Find existing dashboard/eval code" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Report
+
+**1. Training Lab / accuracy / eval dashboard — none exists in the frontend.**
+No frontend page, route, or component references "lab", "accuracy dashboard", or "eval" (the string matches found are unrelated: "training_data" purpose, "evaluate" prose comments). The entire eval/scoring system lives only in Python at `ai/eval/` (CLI-driven, no web API):
+- `ai/eval/schema.py` — `FightLabels` ground-truth format (JSON files in `ai/eval/labels/&lt;video&gt;.json`)
+- `ai/eval/score.py` — `score()` produces a `Report` dataclass: `strikes` (`StrikeScore`: detection `PRF{tp,fp,fn}` + precision/recall/f1, `fighter_accuracy`, `family_accuracy`, `target_accuracy`, `landed_accuracy`, `offset_bias`/`offset_jitter`, `family_confusion`), `state` (`StateScore`: per-frame accuracy, transitions/min, dwell time, confusion matrix), `rounds` (`RoundScore`: IoU, count_correct).
+- `ai/eval/report_io.py` — persists reports as JSON with an envelope `{git_sha, constants_sha256, video, tolerance_frames, generated_at, report}`.
+- `ai/eval/baselines/*.json` — example saved reports (e.g. `JURICvsNOGUEIRA-ai-1.0.json`), useful as the exact JSON shape a future API/frontend would consume.
+- `ai/eval/sanity.py` — label-free sanity checks (`SanityReport`: `checks[]` with `{name, value, passed, detail, band}`, `type_counts`).
+
+There is currently no backend route or frontend service exposing any of this — building a "Training Lab" page would need a new backend endpoint to run/read these reports plus new frontend types/hooks/pages.
+
+**2. Fight/fight-event modeling.**
+- Backend: `backend/app/models/fight.py` (`Fight` table + `FightResponse`) and `backend/app/models/fight_event.py` (`FightEvent` table + `FightEventResponse`/`FightEventCreate`/`FightEventUpdate`). `fight_events` columns: `id, fight_id, source('prediction'|'label'), kind('point'|'round'|'corner_swap'|'excluded'), frame, end_frame, description, fighter_id, corner(0=red/1=blue), action, target, success, state, value, labeler, created_at`.
+- Frontend mirror: `frontend/src/types/Event.ts` (`Event` interface, matches DB shape) and `frontend/src/types/Fight.ts` (`Fight` interface + `FightPurpose` = `'training_data'|'reference'|'ai_labeled'`, with `PURPOSE_LABELS/COLORS/ICONS`).
+- No stored OCR/scoreboard-confidence field anywhere in the DB or types; scoreboard OCR is only used transiently in the pipeline (`ai/video_processing/round_clock.py`, `ai/pipeline.py`) to derive rounds, not persisted per-event.
+- Corner assignment / round labels / states (STRIKING/CLINCH/GROUND) are captured via `kind`, `action` (e.g. `state_clinch`, `round_start`), and `corner`.
+
+**3. Reusable UI patterns worth copying**, all under `frontend/src/components/player/` and `frontend/src/utils/`:
+- `AccGauge.tsx` — circular % gauge (SVG stroke-dasharray), ideal for an accuracy metric tile.
+- `MiniStat.tsx` — simple stat tile (`.inner-tile` value/label).
+- `SegBar.tsx` — horizontal proportion/segmented bar with legend, good for confusion/category breakdowns.
+- `PaceChart.tsx` — SVG line/area time-series chart pattern (gradients, red/blue corner lines).
+- `frontend/src/utils/eventTaxonomy.ts` — `categoryForAction`/`colorForAction`/`iconForAction` mapping actions to colors/icons (uses CSS vars `--f-red`, `--f-blue`, `--accent`, `--green-500`, `--orange-400`, `--slate-400`).
+- `frontend/src/components/annotate/AnnotationTimeline.tsx` (480 lines) — the main timeline: corner-colored clips, span blocks for round/corner_swap/excluded, state coloring (`GROUND`→`--f-red`, `CLINCH`→`--orange-400`, `STRIKING`→`--accent`).
+
+**4. Reference fight / ground truth / pipeline version.**
+- `FIGHT_PURPOSES = ("training_data", "reference", "ai_labeled")` in `backend/app/models/fight.py` (mirrored in `frontend/src/types/Fight.ts`) — a `reference` fight is one whose purpose is fixed at upload so the pipeline can re-run against it repeatedly for scoring; used in `UploadDialog.tsx` and `Player.tsx`.
+- No `ground_truth` table/field in the DB — ground truth lives only as JSON files in `ai/eval/labels/`.
+- No "fight 60/62" or `pipeline_version` field found anywhere; versioning is done via `git_sha` + `constants_sha256` hash in `ai/eval/report_io.py`'s envelope, not a DB column.
+- `plan/01-prerequisite.md` and `plan/00-checklist.md` describe the baseline/scoring workflow (`git tag baseline/pre-stage-1`, `eval/baselines/&lt;video&gt;.&lt;sha&gt;.json`) — useful background if the Training Lab is meant to visualize this baseline-comparison concept.</result>
+<usage><subagent_tokens>53037</subagent_tokens><tool_uses>16</tool_uses><duration_ms>78162</duration_ms></usage>
+</task-notification>
