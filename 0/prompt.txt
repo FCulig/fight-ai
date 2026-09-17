@@ -1,0 +1,1 @@
+Check pipeline run bachxi5kb output — verify no crash, and that output is identical to before (excluded_ranges should be empty since this video's scoreboard OCR isn't detecting), then report to user and mark the replay-exclusion work in plan/03-stage1-artifacts.md as done.
