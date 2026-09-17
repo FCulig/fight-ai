@@ -1,0 +1,3 @@
+In the AI pipeline after implementing the previous improvements, after camera cuts, identity swaps are more often and they last until the another camera cut.
+
+Also I noticed that hands are not part of the rectangle. Ex. fighter throws a left hook and rectangle is drawn only around fighters body while the hand is out of the rectangle.
