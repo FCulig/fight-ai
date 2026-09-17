@@ -1,0 +1,1 @@
+In the manual labeling mode when I load the page and press the plus sign to zoom in the timeline. The whole page doesn't fit to screen anymore and it becomes horizontally scrollable. I don't want the whole page to be horizontally scrollable in that case
