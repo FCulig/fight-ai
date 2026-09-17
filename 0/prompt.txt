@@ -1,0 +1,7 @@
+<task-notification>
+<task-id>bixq1own8</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/ccc3d997-402b-4036-a586-3cd013fd7d24/tasks/bixq1own8.output</output-file>
+<status>completed</status>
+<summary>Background command "source .venv/bin/activate &amp;&amp; python main.py fight_videos/JURICvsNOGUEIRA.mp4 &gt; /tmp/pipeline_run2.log 2&gt;&amp;1; echo "EXIT=$?"" completed (exit code 0)</summary>
+</task-notification>
