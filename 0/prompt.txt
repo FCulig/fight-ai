@@ -1,0 +1,49 @@
+<task-notification>
+<task-id>ac379e3370963a727</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/d8f6c318-d85c-4a88-80fa-aa552843c312/tasks/ac379e3370963a727.output</output-file>
+<status>completed</status>
+<summary>Agent "Explore AI pipeline event read/write paths" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Inventory: `fight_events` / `label_events` touchpoints in `ai/`
+
+**1. `ai/fight_processing/fight_processing.py`**
+
+- `_insert_event()` (L34-59): the single write helper, used by both functions.
+```
+"INSERT INTO fight_events "
+"(frame, description, fight_id, action, fighter_id, success, state) "
+"VALUES (:frame, :description, :fight_id, :action, :fighter_id, :success, :state)"
+```
+- `process_fight()` (L249-646): idempotency delete at L303: `DELETE FROM fight_events WHERE fight_id = :fid` (also deletes `fighter_frames`, `rounds` same txn). Writes via `_insert_event` at: L211/216→L408/413 (round_start/round_end, action only), L529-531 (confirmed strikes, sets `action`, `fighter_id`, `success`), L552-553 (grappling strikes, no `success`), L611-613 (state-change rows, sets `action`∈{takedown_initiated,clinch_initiated}, `fighter_id`, `state`=`current_fight_state.name`), L625-626 (end-of-video unconfirmed strikes). Single `db.commit()` at L640.
+- `write_frames_and_rounds()` (L167-246) — the "manual-labeling lightweight counterpart." Also does `DELETE FROM fight_events WHERE fight_id = :fid` (L186) plus `fighter_frames`/`rounds` deletes, and **does** write to `fight_events`: only `round_start`/`round_end` events (L211, L216), via the same `_insert_event`. It skips the whole strike/state-machine — no strikes, no state-change rows.
+
+**2. `ai/eval/labels_db.py`** — `build_labels()` builds `FightLabels` from Postgres:
+- `label_spans` reads: rounds (`kind='round'`, L94-98), excluded (`kind='excluded'`, L106-110), corner_swaps (`kind='corner_swap'`, L115-119).
+- `label_events` read (L124-127):
+```
+"SELECT frame, corner, action, target, success FROM label_events "
+"WHERE fight_id = :fid ORDER BY frame, id"
+```
+Rows are split: `action in STATE_ACTION_MAP` → `StateSpan`; `action == "takedown_landed"` → `Takedown(fighter="red" if corner==0 else "blue")`; else looked up in `LABEL_FAMILY_MAP` → `Strike(fighter=..., family, target=e.target or "unknown", landed=e.success)`. Note: `label_events` has no `state`/`description`-driven state column — states are derived purely from `action` change-points, not a `description` regex.
+
+**3. `ai/eval/predictions.py`** — `load_predictions()` reads pipeline output:
+```
+"SELECT frame, description, action, success, state FROM fight_events "
+"WHERE fight_id = :fid ORDER BY frame, id"   (L124-126)
+```
+Structured-first, regex-fallback: `row.action` preferred, `_STRIKE_RE` over `description` as fallback match/family lookup (L132-145); `row.state` preferred for state changes, `_STATE_RE` regex over `description` only used "for rows written before that column existed" (L147-155, per module docstring L7-10).
+
+**4. `score.py` / `sanity.py` / `corner_swap_check.py` / `corner_accuracy.py`** — none touch `fight_events`/`label_events` SQL directly; no `ai/eval/agreement.py` file exists (the `agreement` CLI subcommand is implemented in `score.py`).
+- `score.py` imports `Predictions`/`PredictedStrike` (predictions.py) and `FightLabels`/`Strike` (schema.py) — this is exactly the ground-truth-vs-prediction comparison layer (`score_strikes`, `score_state`, `score_rounds`, `score()`).
+- `sanity.py` only consumes `Predictions` (label-free structural checks).
+- `corner_swap_check.py` only touches `fighter_frames` (`UPDATE fighter_frames SET corner = 1 - corner ...`, L38) and `label_spans`/`fights` via `lookup_fight`.
+- `corner_accuracy.py` only touches `fighter_frames`/`fights` (L96, L101).
+
+**5. `ai/eval/schema.py`** — `FightLabels`/`Strike`/`Takedown`/etc. are DB-agnostic dataclasses (no SQL). Key taxonomy: `PIPELINE_ACTION_MAP` (L60-77) maps `fight_events.action` strings (e.g. `jab_head`) → `(family, target)`; `STATE_ACTIONS` (L80) lists non-strike actions written to `fight_events`. `label_events` columns map via `labels_db.LABEL_FAMILY_MAP` instead (different vocabulary: `left_hook`/`right_hook` etc. collapse to `hook`). `Strike.fighter`/`Takedown.fighter` are always the string `"red"|"blue"`, not a `fighter_id` — schema.py is corner/box-space, not identity-space.
+
+**6. `fighter_id` vs `corner` distinction** — explicit in code comments: `fight_processing.py` L285-297 (`_fighter_id_for`) resolves a corner label to `fights.red_fighter_id`/`blue_fighter_id` (identity), written to `fight_events.fighter_id`. `labels_db.py` reads `label_events.corner` (0/1) directly and converts to the string `"red"/"blue"` (L145, L154) — never resolved to a `fighters.id`. `schema.py` L153-168 has the load-bearing comment: `label_events.corner`/`fighter_frames.corner` are consistently "wrong" together inside a corner-swap span (box identity, not person identity); flipping `corner_swaps` at the label layer would misattribute. Applying `corner_swaps` is needed only where a person is required — "e.g. per-fighter stats and `fight_events.fighter_id`" — but the current pipeline code never applies `corner_swaps` at all (it's consumed only by `corner_swap_check.py`'s injection/recall tooling, not by `process_fight`/`labels_db`).
+
+**7. `ai/main.py` / `ai/pipeline.py`** — `--skip-events` flag defined `ai/main.py:101`, threaded as `skip_events=args.skip_events` (`ai/main.py:138`) into `run_pipeline` (`ai/pipeline.py:140`). At `ai/pipeline.py:462-481`: when `skip_events=True`, calls `write_frames_and_rounds` (state → `LABELING_IN_PROGRESS`, no `COMPLETED`); else calls `process_fight` (state → `ANALYZING`→`COMPLETED`). As shown above, `write_frames_and_rounds` **does still touch `fight_events`** — it deletes existing rows and writes `round_start`/`round_end` events only, unlike a full skip.</result>
+<usage><subagent_tokens>77979</subagent_tokens><tool_uses>19</tool_uses><duration_ms>76890</duration_ms></usage>
+</task-notification>
