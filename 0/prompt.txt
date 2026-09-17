@@ -1,0 +1,15 @@
+I would like to have some kind of a source/type for fights. I need following labels:
+
+* training_data - label using which we would select all data for model training
+* reference - manually labeled fight, which is not used for training, but rather as a part of the validation pipeline which would be used to calculate the accuracy of the current model/pipeline
+* ai_labeled - every fight that is processed by the full AI pipeline
+
+
+This label should be displayed on the fight list, add this label to the subtitle of the fight item. 
+
+Also it should be visible in the player. It should be displayed above the player. Right of the "fight name" and all fights back button.
+
+How this type is set:
+
+* ai_labeled - automatically when user chooses AI annotation in the upload video dialog, user should not influence this choice
+* reference/training_data - when user selects self-annotate in the upload video dialog, new form row is displayed with radio button for each of the types
