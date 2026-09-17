@@ -1,0 +1,1 @@
+When the player comes to the corner swap span, does player still render "wrong" corner rectangles/skeletons/event assignements? Or the real "swap" is done
