@@ -1,0 +1,45 @@
+<task-notification>
+<task-id>a4cabc1bcdaf894c6</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/d8f6c318-d85c-4a88-80fa-aa552843c312/tasks/a4cabc1bcdaf894c6.output</output-file>
+<status>completed</status>
+<summary>Agent "Explore frontend event/label consumption" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Confirmed dead: `EventFeed`/`EventItem` aren't referenced by any page — truly legacy/unused now. I have enough to report.
+
+## Inventory: fight_events / label_events in `frontend/`
+
+**1. Types**
+- `frontend/src/types/Event.ts:1-8` (fight_events / predictions): `{ id, frame, description, fight_id, fighter_id: number|null, action: string|null, success: boolean|null }`
+- `frontend/src/types/LabelEvent.ts:1-12` (label_events): `{ id, frame, description, fight_id, corner: number|null (0=red/1=blue), action, target: string|null, success, labeler: string|null, created_at }`
+- Differences: `LabelEvent` adds `target`, `labeler`, `created_at`; uses `corner` where `Event` uses `fighter_id` (same 0=red/1=blue semantic per `FighterOverlay`/`FighterFrame` convention, but **`Event.fighter_id` is never actually read anywhere in the frontend** — grep across `frontend/src` shows zero consumers of it besides the type decl and `services/api.ts` form fields for `red_fighter_id`/`blue_fighter_id` on `Fight`, which are unrelated).
+
+**2. Hooks**
+- `frontend/src/hooks/useEvents.ts:1-21` → `fetchFightEvents(fightId)` (`GET /fights/{id}/events/`) or `fetchEvents()` (`GET /events/`) when no id. Sole consumer: `frontend/src/pages/Player.tsx:42`.
+- `frontend/src/hooks/useLabelEvents.ts:1-25` → `fetchLabelEvents(fightId)` (`GET /fights/{id}/label-events/`). Sole consumer: `frontend/src/pages/Annotate.tsx:47`.
+- `frontend/src/services/api.ts:19-29,105-127`: `fetchEvents`, `fetchFightEvents`, `fetchLabelEvents`, `createLabelEvent`, `deleteLabelEvent`. **No `updateLabelEvent` exists** (only fetch/create/delete for label events; update exists only for label_spans).
+
+**3. Player.tsx**
+- `frontend/src/pages/Player.tsx:3,42`: only ever calls `useEvents(fightId)` → `fetchFightEvents`; never touches label events.
+- Renders via `LiveFeed` (`frontend/src/components/player/LiveFeed.tsx`), plus `FightStatistics.tsx`/`Momentum.tsx`. `LiveFeed` uses `event.description` (regex-classified via `deriveEventCat` in `eventMeta.ts:3-8`) and `event.frame`; it does **not** use `fighter_id`, `action`, or `success` at all (`LiveFeed.tsx:39-43,89,101`).
+- Legacy `components/EventFeed.tsx`/`EventItem.tsx` are unused (no importer in `pages/` or `components/`) — dead code, not part of the live Player path.
+
+**4. Annotate.tsx**
+- `frontend/src/pages/Annotate.tsx:47` reads via `useLabelEvents`; `createLabelEvent`/`deleteLabelEvent` used at lines 179, 196 (`addEvent`/`removeEvent`); no update — edits are delete+recreate.
+- Fields filled per logged event (`logTool`, `Annotate.tsx:272-303`): `frame`, `description` (human-readable, built by `taxonomy.ts` `ToolItem.text()`, e.g. `"BATUR jab to the head"`), `corner` (0/1 or null for fighter-independent state marks), `action`, `target` (head/body/leg or null), `success` (`successForAction` — null except `knockdown`/`takedown_landed` = true). `labeler` is **never set client-side** (omitted from every payload). Fight-end (`confirmFightEnd`, line 305) sets `corner` to winner's corner, `action: 'fight_end'`, `success: null`.
+- Distinguishes from fight_events purely by never importing `useEvents`/`fetchEvents`/`fetchFightEvents` (confirmed via grep — zero matches in `Annotate.tsx`) and by hitting `/fights/{id}/label-events/` exclusively.
+- Critical format mismatch: label_event `description` strings are natural-language (`"&lt;fighter&gt; jab to the head"`), while fight_event `description` strings follow a machine format (`"fighter_red threw a jab_head (landed)"`). `utils/liveStats.ts` (`STRIKE_RE`, line ~130-131) and `deriveStatsForRange`/`derivePaceBuckets` parse **only** the fight_event format via regex on `description` — label_event descriptions would not match and would silently produce zero stats if fed through unchanged.
+
+**5. `purpose` usage**
+- `frontend/src/types/Fight.ts:10,26-32`: `purpose: string`; `FightPurpose = 'training_data'|'reference'|'ai_labeled'`; `PURPOSE_LABELS/_COLORS/_ICONS` maps (no separate `FIGHT_PURPOSES` array constant exists).
+- Only used for **display** (`FightPurposeBadge` in `Player.tsx:209`, `Annotate.tsx:491`, `FightList.tsx:194,225,234`) and at upload (`UploadDialog.tsx:11,28,71-80`, `services/api.ts:70-89`). 
+- Routing between Player vs Annotate is driven by **`Fight.state`**, not `purpose`: `FightList.tsx:120-128` uses `isLabelingReady(fight.state)` to pick `/fights/{id}/annotate` vs `/fights/{id}`. No component branches on `purpose` for data-fetching logic today.
+
+**6. Stats components**
+- `frontend/src/components/player/FightStatistics.tsx:9,25-33` and `Momentum.tsx:4,17` call `deriveStatsForRange`/`derivePaceBuckets` in `frontend/src/utils/liveStats.ts`.
+- These functions derive red/blue attribution **entirely by regex-matching `fighter_red`/`fighter_blue` literals inside `description`** (`liveStats.ts` `strikeM`/`STRIKE_RE`), not from any `fighter_id`/`corner` field. If label_events (which carry `corner` but no such description substring) flow through this path unchanged, they would need either a `corner`→description-rewrite shim or a rewrite of `liveStats.ts` to key off `corner`/`fighter_id` directly instead of regexing text.
+
+**7. `TODO_BACKEND_DATA.md`**
+- Confirms `events` shape is `{ id, frame, description, fight_id }` plus enrichment fields (§3, lines 71-91) proposing a future `category`/`fighter_id`/`sub` structured shape — i.e., the doc already anticipates moving off text-regex parsing, which is directly relevant groundwork for a merge. It does not mention `label_events` or `purpose` anywhere (git-modified status is unrelated to this merge — no mention of the two tables merging).</result>
+<usage><subagent_tokens>69295</subagent_tokens><tool_uses>25</tool_uses><duration_ms>83591</duration_ms></usage>
+</task-notification>
