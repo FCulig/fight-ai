@@ -1,0 +1,1 @@
+Now fight with ID 44 has wrong round recognition. Real fight is 1 round but AI pipeline before labeling has recognized 3 rounds
