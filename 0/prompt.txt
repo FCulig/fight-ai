@@ -1,0 +1,1 @@
+Okay lets refactor this. Lets have all labeled and fight events in the fight events table. Fight events for querying will be queried via fights. Fight have a purpose type which describe purpose of a fight
