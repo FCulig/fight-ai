@@ -1,0 +1,67 @@
+<task-notification>
+<task-id>aedbdc5d75455a5e1</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/78f5c11b-187b-40b6-9026-62ff92e355f7/tasks/aedbdc5d75455a5e1.output</output-file>
+<status>completed</status>
+<summary>Agent "Find rounds unverified label in fight list" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Now I have a full picture. Here is the report.
+
+## 1. Where the label is rendered
+
+**`frontend/src/pages/FightList.tsx:206-219`** — the fight-list card badge:
+```tsx
+{needsRoundReview(fight) &amp;&amp; (
+  &lt;p style={{ margin: '4px 0 0', fontSize: 12, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 5 }}&gt;
+    &lt;span className="material-symbols-outlined" style={{ fontSize: 15 }}&gt;rule&lt;/span&gt;
+    Rounds unverified — check before labelling
+  &lt;/p&gt;
+)}
+```
+Imported at `frontend/src/pages/FightList.tsx:11` (`needsRoundReview` from `../types/Fight`). It only renders inside the `ready` branch (fight is `completed`/`labeling_complete`), alongside `FightPurposeBadge`.
+
+There's a sibling banner with the same underlying condition on the Annotate page: **`frontend/src/pages/Annotate.tsx:540-565`**, headed "Round boundaries are unverified", showing `selectedFight.segmentation_review_reason` as its body text. Imported at `Annotate.tsx:16`.
+
+## 2. Condition controlling visibility
+
+Both call the same predicate, defined in **`frontend/src/types/Fight.ts:106-113`**:
+```ts
+/**
+ * Segmentation could not corroborate its own round list against the scoreboard,
+ * so the rounds are a detection-only guess and should be confirmed by hand.
+ * The pipeline sets this at segmentation time — see ai/video_processing/
+ * fight_segmentation.py `_review_verdict`.
+ */
+export const needsRoundReview = (fight: Fight): boolean =&gt;
+  fight.segmentation_needs_review === true;
+```
+So the controlling field is `Fight.segmentation_needs_review` (boolean), declared in `frontend/src/types/Fight.ts:13` (with a companion `segmentation_review_reason: string | null` at line 14, used as the explanatory text in Annotate.tsx).
+
+This is unrelated to labeling status — it's purely about whether AI round-segmentation was scoreboard-corroborated at pipeline time. It is **not** currently gated by any manual-labeling-complete flag, so it stays visible even after labeling finishes (unless something else clears the underlying DB column).
+
+## 3. Field(s) indicating "manual labeling finished"
+
+The data model's manual-labeling-finished signal is the fight's `state` field, not a boolean flag:
+
+- `frontend/src/types/Fight.ts:100-101`: `isLabelingReady(state) =&gt; state === 'labeling_in_progress'`
+- `frontend/src/types/Fight.ts:96-97`: `isFightViewable(state) =&gt; state === 'completed' || state === 'labeling_complete'`
+- State transition target `'labeling_complete'` plus timestamp `labeled_at` (set together) — `backend/app/services/fight_service.py:171-204`, specifically the `UPDATE` at line 186: `"UPDATE fights SET state = 'labeling_complete', labeled_at = now() ..."`.
+- `Fight.labeled_at: string | null` — `frontend/src/types/Fight.ts:9`. Per backend/CLAUDE.md, this is "the durable ground-truth-finalised marker — distinct from `state`, which resets when a labelled fight is re-run through the AI pipeline."
+
+So: `fight.state === 'labeling_complete'` (or non-null `fight.labeled_at`) is the field to check for "manual labeling finished."
+
+## 4. Backend/API code supplying these flags
+
+- **`segmentation_needs_review` origin (the "unverified" flag):**
+  - Set by the AI pipeline at segmentation time: `ai/video_processing/fight_segmentation.py:184` calls `_review_verdict(...)` (defined at line 211), whose result is persisted via `ai/database.py:54` `set_segmentation_review(...)` (SQL `UPDATE fights SET segmentation_needs_review = :needs, ... ` at line 68).
+  - Model/column: `backend/app/models/fight.py:33` (SQLAlchemy `Column`) and `:55` (Pydantic default `segmentation_needs_review: bool = False`).
+  - Never written by the labeling flow — per `backend/CLAUDE.md`: "written by the pipeline via `ai/database.py`'s `set_segmentation_review`, never by labelling."
+
+- **"Labeling finished" origin:**
+  - `POST /fights/{fight_id}/finish-labeling` route: `backend/app/api/routes/fights.py:267-270`.
+  - Implementation: `backend/app/services/fight_service.py:171` `finish_labeling(fight_id)` — gated by `rounds_fully_annotated()` (`backend/app/services/label_span_service.py`, raises `NotFullyAnnotated` at `fight_service.py:166-168` if any round lacks a confirmed `round` label-span), then flips `state` to `labeling_complete` and stamps `labeled_at` (`fight_service.py:184-199`), notifying via `pg_notify('fight_state', ...)`.
+  - Frontend call site: `frontend/src/services/api.ts` exposes `finishLabeling(...)`, invoked from `Annotate.tsx`'s `handleFinishLabeling`.
+
+**Conclusion for suppressing the badge post-labeling:** there is currently no code path that ties `segmentation_needs_review` to labeling completion — they're independent columns. To suppress "Rounds unverified" once manual labeling is done, the `needsRoundReview` predicate (`frontend/src/types/Fight.ts:112-113`) would need to also check fight state/`labeled_at`, e.g. `fight.segmentation_needs_review === true &amp;&amp; fight.state !== 'labeling_complete'` (and mirror that in `Annotate.tsx:540`'s condition) — or, on the backend, `finish_labeling()` in `fight_service.py` could additionally clear `segmentation_needs_review` when it flips state to `labeling_complete`.</result>
+<usage><subagent_tokens>51785</subagent_tokens><tool_uses>10</tool_uses><duration_ms>57913</duration_ms></usage>
+</task-notification>
