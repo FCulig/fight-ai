@@ -1,0 +1,20 @@
+<task-notification>
+<task-id>a831e60053f906c98</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/1d8b388e-d71e-4a1d-9787-c4d65862d283/tasks/a831e60053f906c98.output</output-file>
+<status>completed</status>
+<summary>Agent "Investigate camera cut detection and strike handling" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Now I have enough to report.
+
+## Findings
+
+**1. No dedicated cut/scene-change detector exists.** Searched for `calcHist`/`compareHist`/scene-detect patterns across `ai/`; the only histogram code is `ai/video_processing/corner_assignment/corner_assignment.py` (torso-color histogram for red/blue re-ID, unrelated to cuts). The only thing resembling cut detection is `ai/video_processing/fight_segmentation.py`'s `detect_replay_ranges()`, which infers a replay/cutaway indirectly from the scoreboard OCR — a run of `MIN_REPLAY_SAMPLES` (3) consecutive `timer_smoothed_out` readings (timer jumping backward). It feeds `excluded_ranges` into `process_fight(..., excluded_ranges=...)` (`ai/pipeline.py:443-530`, `ai/fight_processing/fight_processing.py:266-349`), which simply skips strike/state detection in that span — it doesn't detect true camera cuts (angle changes with a visible clock) and falls back to `[]` when OCR fails.
+
+**2. `fight_events`/`label_spans` does have an `excluded` kind**, documented in `ai/CLAUDE.md` and `plan/02c-labelling-ui.md:38-65` — `(start, end, value=reason)`, e.g. "replay". Currently it's a **purely manual** labeller toggle (`P` key, `frontend/src/pages/Annotate.tsx:226-253,442`), defaulting `value: 'replay'` but editable. `ai/eval/schema.py:159-208` and `ai/eval/labels_db.py:152-158` use it only to drop frames from scoring (`is_excluded`/`scoreable_frames`). No code currently auto-creates an `excluded` span from a detected cut.
+
+**3. `FighterTracker` (`ai/models/FighterTracker.py`) is pure geometry** (IoU + centroid, Hungarian). It has no cut awareness: a slot coasts up to `TRACK_MAX_MISSING_SECS` (0.6s/30 frames) then is pruned and a fresh slot id is assigned to the next detection — nothing resets on a cut specifically, so a hard cut can silently re-match slots to the wrong person if positions/geometry overlap. Keypoints ride along with whatever box they attach to, so a slot swap carries the wrong skeleton with it. `assign_corners()` (per-frame appearance re-ID, hysteresis `CORNER_SWAP_CONFIRM_SECS`=0.08s/4 frames) is the actual mitigation, but per `box_smoothing.py:77-84`, identity resolution at a camera cut is explicitly named as an open weak point.
+
+**4. No existing handling for strikes spanning a cut.** Strikes are single-frame labels; the planned ~1s training window (`plan/04-stage2-model.md:22-24`, `ai/eval/export.py` — not yet built) has no cut-awareness designed in yet. Recommend: adding a real visual cut detector, auto-flagging `excluded`/a new `cut` marker, and having `export.py` skip or truncate windows crossing one.</result>
+<usage><subagent_tokens>80888</subagent_tokens><tool_uses>23</tool_uses><duration_ms>123212</duration_ms></usage>
+</task-notification>
