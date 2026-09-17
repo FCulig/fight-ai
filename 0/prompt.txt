@@ -1,0 +1,1 @@
+So If I run two fights via pipeline, they will override each other?
