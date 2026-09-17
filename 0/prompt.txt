@@ -1,0 +1,1 @@
+You still need to wire in the fighter names. Fighter names are still hardcoded
