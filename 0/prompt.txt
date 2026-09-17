@@ -1,0 +1,1 @@
+Current accuracy page is now showing only a reference fight 60, I need you to add a fight 62 as a first version of the pipeline for the comparison
