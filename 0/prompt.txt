@@ -1,0 +1,1 @@
+On the video player screen ex [/fights/42](http://localhost:5173/fights/42). on the bottom statistics widgets are not connected to the events that are going on at the time. I would like you to wire those events that are dispayed on the right sidebar to the widgets at the bottom.
