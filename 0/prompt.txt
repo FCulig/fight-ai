@@ -1,0 +1,1 @@
+So this fight 44 should now be able to exit the self annotate mode when finish labeling is pressed, thats all I care about
