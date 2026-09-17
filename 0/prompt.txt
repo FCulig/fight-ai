@@ -1,0 +1,1 @@
+Lets fix this issue, lets drop all code related to the nano model and use xl for fighter and corner detection
