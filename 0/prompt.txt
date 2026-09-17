@@ -1,0 +1,1 @@
+Now also add me a possibility to set the playback speed and play it frame by frame. When I select a playback speed, it should be persisted locally somewhere (persist page reloads and etc.) Speeds should be 0.25 and 0.5
