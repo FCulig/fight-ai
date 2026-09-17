@@ -1,0 +1,1 @@
+This is an improvement. I started labeling fight 48 which was half labeled. I would like to transfer these labels to the fight 52. They are the same fight, but 52 went through the new pipeline
