@@ -1,0 +1,3 @@
+So lets say red fighter is joe and blue fighter roy. When labeling I see that swap happened, roy now has a red rectangle and joe blue. When roy (originally blue corner fighter, but now red corner fighter) throws a punch, I select red corner and then a punch.
+
+So when labeling corner swaps I select a rectangle that is around a fighter that throws a punch.
