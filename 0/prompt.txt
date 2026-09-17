@@ -1,0 +1,1 @@
+For the fight ID 46, there is an error regarding scoreboard note being able to be read. But it can be read for example it is visible from 30th second of the video for the first round
