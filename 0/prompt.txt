@@ -1,0 +1,1 @@
+What would be a best way to host this app for free? I was thinking of vercel for FE, but not sure of BE
