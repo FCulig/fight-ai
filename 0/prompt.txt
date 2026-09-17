@@ -1,0 +1,1 @@
+I would like to add a change where when selecting a strike/event type, user is navigated to a new URL /training-data/{TYPE} and then in the playback, there is a new URL also containing a fight_event ID
