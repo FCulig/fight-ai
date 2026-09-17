@@ -1,0 +1,30 @@
+<task-notification>
+<task-id>ac5dae7d715ec92df</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/4e0a8a41-8cad-431f-9158-66b61ceca3aa/tasks/ac5dae7d715ec92df.output</output-file>
+<status>completed</status>
+<summary>Agent "Explore fight player page components" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Report
+
+**Route/page:** `frontend/src/App.tsx:43` maps `/fights/:id` → `frontend/src/pages/Player.tsx`.
+
+**1. Video player / currentTime ownership**
+`Player.tsx` owns everything: `videoRef` (`Player.tsx:26`), `currentTime` state (`Player.tsx:32`), and `isPlaying` (`Player.tsx:31`). `&lt;video&gt;` itself lives in `frontend/src/components/VideoPlayer.tsx:97-105`, a presentational `forwardRef` wrapper — it just forwards `onTimeUpdate`/`onPlay`/`onPause` callbacks up to `Player.tsx:260-263`. There is no context/store; it's plain lifted `useState` in the page component, prop-drilled down. A `requestVideoFrameCallback` loop (`Player.tsx:53-79`) also updates `currentTime` per-frame while playing (more precise than `timeupdate`). `currentFrame = Math.floor(currentTime * fps) + 1` is derived at `Player.tsx:81` and passed to children as a prop — **this is the value already used as "current playback time" everywhere downstream**.
+
+**2. Right sidebar (events)**
+`frontend/src/components/player/LiveFeed.tsx`, rendered at `Player.tsx:324-339`. Props: `events`, `currentFrame`, `fps`, `onSeek`. It already filters to only show events at/before playhead: `visible = enriched.filter(e =&gt; e.frame &lt;= currentFrame &amp;&amp; matchFilter(...))` (`LiveFeed.tsx:45-48`). Events come from `frontend/src/hooks/useEvents.ts`, calling `GET /fights/{id}/events/` (`services/api.ts:25-27`) — these are AI pipeline **predictions**, not hand labels (`label_events` is a separate table/hook, `useLabelEvents.ts`, used only in Annotate.tsx, not Player). Event shape (`frontend/src/types/Event.ts:1-8`):
+```ts
+{ id: number; frame: number; description: string; fight_id: number; fighter_id: number|null; action: string|null; success: boolean|null }
+```
+`description` strings like `"fighter_red threw a jab_head (landed)"`, `"Fight state changed to FightState.GROUND (takedown initiated by fighter_red)"`, `"Round 1 started"` are regex-classified into categories by `frontend/src/components/player/eventMeta.ts:3-9` (`deriveEventCat`).
+
+**3. Bottom statistics widgets**
+`frontend/src/components/player/FightStatistics.tsx`, rendered at `Player.tsx:347-353` with props `currentFrame`, `events`, `fps`, `rounds`. It already has a `ScopeToggle` (`ScopeToggle.tsx`) with three scopes: `'fight'`, `'live'`, or a round number (`Scope` type at `ScopeToggle.tsx:3`). Crucially:
+- `scope === 'fight'` or a round number → **static mock data** from `stats['fight']`/`stats[1]`/`stats[2]` in `frontend/src/mocks/fightMock.ts:89-101`.
+- `scope === 'live'` → **already wired to real, time-aware data** via `deriveLiveStats(events, currentFrame, fps)` (`FightStatistics.tsx:25-26`), defined in `frontend/src/utils/liveStats.ts:8-116`, which parses the same `description` strings to accumulate strikes/takedowns/control-time up to `currentFrame`.
+- Renders two `FighterColumn` (`FighterColumn.tsx`), each taking a `FighterStats` object (`fightMock.ts:22-36`: `{ sig:[landed,attempted], total, head, body, leg, distance, clinch, ground, td:[landed,attempted], ctrl(seconds), kd, sub, acc }`).
+
+**Bottom line for the wiring task:** the "Live" scope path is already fully live-time-aware (feeds off the same `currentFrame`/`events` LiveFeed uses); the gap is just that `'fight'`/round scopes still read hardcoded `mocks/fightMock.ts` instead of deriving fight-wide/round-scoped stats from `events` (e.g. `deriveLiveStats(events, roundEndFrame, fps)` or unfiltered for whole-fight), and that `'live'` isn't the default/only mode. No new current-time plumbing is needed — `currentFrame` already flows from `Player.tsx` into both `LiveFeed` and `FightStatistics`.</result>
+<usage><subagent_tokens>62744</subagent_tokens><tool_uses>17</tool_uses><duration_ms>42613</duration_ms></usage>
+</task-notification>
