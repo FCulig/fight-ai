@@ -1,0 +1,1 @@
+Remove a fighter filter from the /training-data at the top of the page
