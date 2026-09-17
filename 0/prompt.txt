@@ -1,0 +1,97 @@
+<task-notification>
+<task-id>a66b1169bb0908ab7</task-id>
+<tool-use-id>toolu_01D1QDFi2wRrbdscSjucsANo</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/d8f6c318-d85c-4a88-80fa-aa552843c312/tasks/a66b1169bb0908ab7.output</output-file>
+<status>completed</status>
+<summary>Agent "Explore DB schema and backend event routes" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result># Inventory: `fight_events` / `label_events` / `label_spans` / `fights.purpose`
+
+## 1. Final schema (migration chain, chronological, in `db/alembic/versions/`)
+
+Chain order (by down_revision): `92f72188aec1` → `a1b2c3d4e5f6` → `b2c3d4e5f6a7` → `b7e91f2d3a08` → `c1d2e3f4a5b6` → `c2d3e4f5a6b7` → `c3d4e5f6a7b8` → `c4d5e6f7a8b9` → `d1e2f3a4b5c6` → `e5f6a7b8c9d0` → `f1a2b3c4d5e6` → `a2b3c4d5e6f7` → `b3c4d5e6f7a8` → `c5d6e7f8a9b0` → `d6e7f8a9b0c1` → `e6f7a8b9c0d1` (head).
+
+**`fight_events`** (pipeline predictions, rewritten wholesale every pipeline run) — built by `92f72188aec1_create_fight_events_table.py`, `a1b2c3d4e5f6_add_fights_fighter_frames_rounds.py`, `b2c3d4e5f6a7_fight_events_fight_id_not_null.py`, `c3d4e5f6a7b8_restructure_fight_events.py`, `c5d6e7f8a9b0_add_state_to_fight_events.py`:
+- `id` INTEGER PK
+- `frame` INTEGER NOT NULL
+- `description` String(100)/TEXT NOT NULL (model uses `Text`)
+- `fight_id` INTEGER NOT NULL, FK → `fights.id` ON DELETE CASCADE (index `ix_fight_events_fight_id`)
+- `fighter_id` INTEGER NULL, FK → `fighters.id` ON DELETE SET NULL, constraint `fk_fight_events_fighter_id` (index `ix_fight_events_fighter_id`)
+- `action` VARCHAR(50) NULL
+- `success` BOOLEAN NULL
+- `state` VARCHAR(20) NULL
+- Composite index `ix_fight_events_fighter_action` (`fighter_id`, `action`)
+- No `target`, no `labeler`, no `corner`, no unique constraints.
+
+**`label_events`** (hand labels, Annotate's only write path) — created whole by `f1a2b3c4d5e6_create_label_events_table.py`; never altered afterward:
+- `id` INTEGER PK (index)
+- `fight_id` INTEGER NOT NULL, FK → `fights.id` ON DELETE CASCADE (index `ix_label_events_fight_id`)
+- `frame` INTEGER NOT NULL
+- `corner` INTEGER NULL (0=red, 1=blue; null for state marks)
+- `action` VARCHAR(50) NULL
+- `target` VARCHAR(10) NULL (head/body/leg)
+- `success` VARCHAR/BOOLEAN NULL
+- `description` TEXT NOT NULL
+- `labeler` VARCHAR(100) NULL
+- `created_at` TIMESTAMP NOT NULL, `server_default now()`
+- No `fighter_id`, no `state`. No unique constraints.
+
+**`label_spans`** (hand-labelled stretches: round/corner_swap/excluded) — created whole by `b3c4d5e6f7a8_create_label_spans_table.py`; never altered afterward:
+- `id` INTEGER PK (index)
+- `fight_id` INTEGER NOT NULL, FK → `fights.id` ON DELETE CASCADE (index `ix_label_spans_fight_id`)
+- `kind` VARCHAR(20) NOT NULL (`SPAN_KINDS = ("round","corner_swap","excluded")`, app-level check only)
+- `start_frame` INTEGER NOT NULL
+- `end_frame` INTEGER NULL (null = toggle still open)
+- `value` VARCHAR(200) NULL (round number or exclusion reason)
+- `created_at` TIMESTAMP NOT NULL, `server_default now()`
+
+## 2. `fights.purpose`
+
+`backend/app/models/fight.py:13`: `FIGHT_PURPOSES = ("training_data", "reference", "ai_labeled")`. Column: VARCHAR(32) NOT NULL, `server_default 'ai_labeled'`, added by `db/alembic/versions/e6f7a8b9c0d1_add_purpose_to_fights.py` (backfilled existing rows to `training_data` except id 31).
+- `training_data`: labels feed model training.
+- `reference`: held out of training, scored against to measure pipeline accuracy.
+- `ai_labeled`: produced by the full AI pipeline.
+
+Read/write sites:
+- **Write**: `backend/app/api/routes/fights.py` `upload_fight()` (validates against `FIGHT_PURPOSES`, line 111; passes to `fight_service.create_fight(..., purpose=purpose)`) → `backend/app/services/fight_service.py:59,73`. Written once, never updated elsewhere.
+- **Read**: same handler picks pipeline mode — `run_validation_async(relative_path, fight.id, skip_events=(purpose != "ai_labeled"))` (fights.py ~line 183). Exposed read-only via `FightResponse.purpose` (fight.py:52). Not read/written anywhere in `ai/` (`ai/database.py` has no `purpose` reference) — by design (`run_pipeline`'s `ON CONFLICT (video_path) DO UPDATE` must never touch it, per migration docstring).
+
+## 3. Code touching `fight_events` / `label_events` / `label_spans`
+
+| File : function | Ops | R/W |
+|---|---|---|
+| `backend/app/models/fight_event.py` | `FightEvent` ORM + `FightEventResponse` | model def |
+| `backend/app/models/label_event.py` | `LabelEvent` ORM + `LabelEventCreate/Response` (validator blocks `corner` on `state_*` actions) | model def |
+| `backend/app/models/label_span.py` | `LabelSpan` ORM + `SPAN_KINDS` + Create/Update/Response | model def |
+| `backend/app/services/event_service.py:get_fight_events()` | SELECT all | read-only |
+| `backend/app/services/event_service.py:get_events_by_fight()` | SELECT filter fight_id/fighter_id/action/success | read-only |
+| `backend/app/services/label_event_service.py:get_label_events()` | SELECT by fight_id | read-only |
+| `backend/app/services/label_event_service.py:create_label_event()` | INSERT | read-write |
+| `backend/app/services/label_event_service.py:delete_label_event()` | DELETE | read-write |
+| `backend/app/services/label_span_service.py:get_label_spans()` | SELECT, plus auto-INSERT seed `round` spans from `rounds` on first call | read-write |
+| `backend/app/services/label_span_service.py:create_label_span/update_label_span/delete_label_span/rounds_fully_annotated()` | INSERT/UPDATE/DELETE/SELECT COUNT | read-write |
+| `backend/app/services/fighter_service.py:get_events_by_fighter()` | SELECT `FightEvent` filtered by fighter_id/action/success | read-only |
+| `backend/app/api/routes/fights.py` (`get_fight_events`, `get_label_events`/`create_label_event`/`delete_label_event`, `get_label_spans`/`create_label_span`/`update_label_span`/`delete_label_span`, `finish-labeling`) | delegates to above services; also validates `corner∈{0,1}` and `kind` | read-write (label routes), read-only (`/events/`) |
+| `backend/app/api/routes/events.py:get_fight_events()` | SELECT (legacy global endpoint) | read-only |
+| `backend/app/api/routes/fighters.py` (`/{id}/events/`) | delegates to `fighter_service` | read-only |
+| `ai/fight_processing/fight_processing.py:_insert_event()` | INSERT into `fight_events` (raw SQL) | write |
+| `ai/fight_processing/fight_processing.py:process_fight()` | `DELETE FROM fight_events WHERE fight_id=:fid` then reinserts (idempotent full rewrite) | read-write |
+| `ai/fight_processing/fight_processing.py` (manual-track function, ~line 179-243) | same delete-then-insert shape, writes only round-boundary `fight_events` | read-write |
+| `ai/eval/predictions.py:load_predictions()` | raw `SELECT frame, description, action, success, state FROM fight_events` | read-only |
+| `ai/eval/schema.py` | comments only, maps `fight_events.action` strings to taxonomy | n/a |
+
+No code in `ai/` or `backend/` touches `label_events`/`label_spans` — confirmed only the label service/route/model files above reference them.
+
+## 4. Structural differences
+
+- `fight_events` has `fighter_id` (FK to `fighters`) + `state`; lacks `target`, `labeler`, `corner`.
+- `label_events` has `corner`, `target`, `labeler`; lacks `fighter_id`, `state`.
+- Both have `action`/`success`/`description`/`frame`/`fight_id` (all FK CASCADE to `fights.id`).
+- `label_events`/`label_spans` have `created_at`; `fight_events` does not.
+- No unique constraints on any of the three tables.
+
+## 5. Docs on the split
+
+No `db/CLAUDE.md` exists. `backend/CLAUDE.md` section **"Predictions vs. labels — never mix them"** (lines ~121-122): `fight_events` is pipeline output, `DELETE`d and rewritten by `process_fight()` every run; `label_events`/`label_spans` are hand labels written only by the Annotate frontend via the label services, never touched by the pipeline; "This split (rather than a `source` column on one table) exists specifically so a query can't accidentally blend model output into training data by forgetting a filter — see plan `0c(5)`." Also documented in the creation migration `f1a2b3c4d5e6`'s docstring and in `plan/02b-label-schema.md` / `plan/02-stage0-labelling.md` (`0c(5)` = "Move labels off `fight_events` into their own `label_events` table — closes the bug where running the AI pipeline over a labelled fight silently destroys the labels").</result>
+<usage><subagent_tokens>75553</subagent_tokens><tool_uses>40</tool_uses><duration_ms>117046</duration_ms></usage>
+</task-notification>
