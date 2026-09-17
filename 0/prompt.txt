@@ -1,0 +1,1 @@
+How could I achieve this app.fight.ai and fight.ai domain structure in production? How would that work? Two separate domains?
