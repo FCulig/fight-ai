@@ -1,0 +1,1 @@
+Currently in the fight training playback, there are kinda radnom times on how long events are playbacked. I want all events to last 0.6 seconds. This needs to be adjusted based on the FPS of a video and strictly 0.6 seconds long.
