@@ -1,0 +1,146 @@
+This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.
+
+Summary:
+1. Primary Request and Intent:
+
+   This conversation spans two major phases:
+
+   **Phase A (large, now complete):** Execute the entire staged implementation plan in `PLAN.md` and `plan/*.md` for the fight-ai MMA video-processing project, explicitly including `plan/02-stage0-labelling.md`. This meant implementing the labelling framework (label_events/label_spans tables, upload validation, trainable label schema, span annotation UI, label-quality tooling) and the label-free Stage 1 pipeline bug fixes (Hungarian pose matching, confidence-gated geometry, round-gating, scale-relative thresholds, fps-invariant constants, temporal state smoothing). The user explicitly directed follow-up fixes discovered along the way: "Implement tape patch fix you suggested" and "Implement it" (mid-round replay exclusion). All of Stage 0 tooling and Stage 1 label-free work was completed and verified; Stage 1 steps 6/8 and Stage 2 remain explicitly blocked on real labelled training data per the plan's own design.
+
+   **Phase B (ongoing, real-world dogfooding):** Once the labelling UI was live, the user began actually using it to label real fights, and this conversation shifted to fixing real bugs/gaps discovered during that real usage:
+   - Reviewing and implementing a `TODO.md` list of gaps found while labelling (southpaw handedness, ground-and-pound taxonomy per real MMA-stats convention, takedown_landed, fight_end truncation, state-mark schema validation, Shift-key live UI feedback)
+   - Adding timeline click-to-select + Delete-to-remove for label events, with correct Mac-keyboard semantics (Backspace context-sensitive: deletes selection if one exists, else undoes last-session event)
+   - Fixing visual truncation so round/state timeline bars stop at `fight_end` instead of running to the stale original end
+   - Helping process the user's first completed fight (export, backfilling a retroactive excluded-span gap for `fight_end`)
+   - Diagnosing and fixing a real round-mis-segmentation bug on fight_id=44 (AI detected 3 rounds when there's actually 1), including making round spans deletable and improving drag-handle usability in the UI
+
+   The user's most recent explicit instruction was: **"Yes fix it and make rounds deletable"** — authorizing both (1) a direct data fix for fight 44's `rounds` table and `label_spans`, and (2) a UI change making round spans deletable (plus, at my own initiative while doing so, widening the drag handles for better usability).
+
+2. Key Technical Concepts:
+   - FastAPI backend + PostgreSQL, SQLAlchemy raw-text queries, Pydantic v2 (`model_validator`)
+   - React + TypeScript frontend (Vite), keyboard-driven Annotate/labelling UI
+   - Alembic migrations
+   - Ground-truth label schema (`ai/eval/schema.py`) shared between scoring and Stage-2 training
+   - Corner-based (not fighter-identity-based) label schema: `corner` 0=red/1=blue matches `fighter_frames.corner`
+   - Non-specific "punch"/"knee" families for grappling strikes (matching real MMA-stats convention and the pipeline's own `PIPELINE_ACTION_MAP`)
+   - `is_specific` scoring exclusion logic (family/target only graded when both sides commit to a specific claim)
+   - Mac vs Windows keyboard semantics: `Backspace` vs `Delete` key values
+   - Display-only visual capping pattern (don't mutate underlying DB data, only override what's rendered) — used for both `fight_end` truncation and (implicitly) round span display
+   - `rounds_fully_annotated()` gate logic: `span_count >= round_count`, where `round_count` comes from the AI-pipeline-owned `rounds` table, decoupled from human-edited `label_spans`
+   - Scoreboard OCR calibration failure as a recurring, real limitation across multiple actual videos (2 confirmed instances), causing segmentation to fall back to noisier detection-only heuristics
+   - Permission/safety pattern: raw SQL writes to a user's real pre-existing labelled data require explicit authorization and were blocked once by an automated classifier ("Modify Shared Resources"); safer to route through actual backend API routes when they exist, raw SQL reserved for tables with no API and only with explicit go-ahead
+
+3. Files and Code Sections:
+
+   **Backend:**
+   - `backend/app/models/label_event.py` — Added Pydantic `model_validator(mode="after")` named `_state_marks_have_no_corner` rejecting non-null `corner` when `action` starts with `state_`. Verified live (422 response with clear message).
+   - `backend/app/api/routes/fights.py` — label-events/label-spans routes (pre-existing from earlier phase); used live via curl for fight 42 (excluded span backfill) and fight 44 (round span deletion/update).
+   - `backend/CLAUDE.md` — Removed stale documentation of a `PATCH /fights/{fight_id}/corners/` route that was never actually implemented (confirmed via grep — no such route or `set_fight_corners` function exists); added a note explaining corner-name mismatches are cosmetic only since training reads `label_events.corner`/`fighter_frames.corner`, not fighter-name mapping.
+
+   **AI/eval harness:**
+   - `ai/eval/schema.py` — Added `Takedown` dataclass (`frame`, `fighter`) and `takedowns: list[Takedown]` field on `FightLabels`, wired into `load()`, `save()` (sort), `validate()`, and `summary()`.
+   - `ai/eval/labels_db.py` — Updated `LABEL_FAMILY_MAP`: removed old `"straight_right"`/`"knee"` entries, added `"cross"`, `"clinch_knee"`, `"ground_knee"`, `"clinch_punch"`, `"ground_punch"` (mapping to families `"cross"`, `"knee"`, `"knee"`, `"punch"`, `"punch"` respectively). Added special-case handling in `build_labels()` for `action == "takedown_landed"` populating `labels.takedowns`. Imports updated to include `Takedown`.
+
+   **Frontend — taxonomy/palette:**
+   - `frontend/src/components/annotate/taxonomy.ts` — Replaced `knee` (key `n`) with `clinch_knee`; added new "Ground & pound" tool group with `clinch_punch` (key `u`), `ground_punch` (key `v`), `ground_knee` (key `j`) — all `needsFighter: true`, no `hasTarget`/`fixedTarget` (matching non-specific target="unknown" convention); added `takedown_landed` (key `y`) to Grappling group; added `takedown_landed` to `SUCCESS_TRUE_ACTIONS`; updated `EDIT_KEYS` legend to document the new Backspace/Delete-to-remove-selected-clip behavior.
+
+   **Frontend — Annotate page:**
+   - `frontend/src/pages/Annotate.tsx` — Added `selectedEventId` state + `selectedEventIdRef`; `removeEvent` now clears selection if the deleted event was selected; global keydown handler: `Backspace`/`Delete` now branches on `selectedEventIdRef.current` (delete selection) vs falls back to `fns.undo()`; `Escape` also clears `selectedEventId`; `confirmFightEnd` now auto-creates an `excluded` label_span from `fight_end.frame+1` to the containing round's `end_frame` after logging fight_end (visible/editable in timeline, not silent); `logTool`'s toast now appends `· Body`/`· Head` suffix for `hasTarget` items.
+   - `frontend/src/components/annotate/AnnotationPanel.tsx` — Threaded `selectedEventId`/`onSelectEvent` props through to `AnnotationTimeline`.
+   - `frontend/src/components/annotate/AnnotationTimeline.tsx` — Major changes across this whole phase:
+     - `Clip` component gained `selected`/`onSelect` props with a white-ring visual selection indicator
+     - `fightEndFrame` computed from events; `segs` (state lane) and `roundSpans` (rounds lane) both get their displayed `end`/`t1` capped at `fightEndFrame` when present (display-only; underlying data untouched)
+     - Most recent edit: `roundSpans.map(s => <SpanBlock ... deletable />)` (changed from `deletable={false}`)
+     - Most recent edit: widened edge-drag handles from 8px to 13px with a visible 2px grip-mark indicator:
+       ```tsx
+       <div
+         onPointerDown={startEdgeDrag(s.id, 'start')}
+         title="Drag to move the start"
+         style={{
+           position: 'absolute', left: -5, top: 0, width: 13, height: '100%', cursor: 'ew-resize', zIndex: 4,
+           display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 4,
+         }}
+       >
+         <span style={{ width: 2, height: '55%', borderRadius: 1, background: `color-mix(in srgb, ${c} 70%, transparent)` }} />
+       </div>
+       {!open && (
+         <div
+           onPointerDown={startEdgeDrag(s.id, 'end')}
+           title="Drag to move the end"
+           style={{
+             position: 'absolute', right: -5, top: 0, width: 13, height: '100%', cursor: 'ew-resize', zIndex: 4,
+             display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: 4,
+           }}
+         >
+           <span style={{ width: 2, height: '55%', borderRadius: 1, background: `color-mix(in srgb, ${c} 70%, transparent)` }} />
+         </div>
+       )}
+       ```
+   - `frontend/src/components/annotate/EventPalette.tsx` — Added `shiftHeld` state via window keydown/keyup/blur listeners; palette buttons now show live " · Body" preview and dynamic tooltip while Shift is held.
+
+   **Pipeline (from earlier in this phase, unrelated to most recent messages but part of the same session's cumulative state):**
+   - `ai/models/constants.py` — `TAPE_PATCH_RATIO`/`WRIST_EDGE_MARGIN_RATIO` (replacing absolute-pixel `TAPE_PATCH_HALF`/`WRIST_EDGE_MARGIN`), `MIN_REPLAY_SAMPLES = 3`.
+   - `ai/video_processing/corner_assignment/corner_assignment.py` — `_patch_half()`/`_sample_tape()` updated to use scale-relative crop sizing, skip frame when `get_fighter_scale()` returns None.
+   - `ai/video_processing/fight_segmentation.py` — Added `detect_replay_ranges(samples)` reusing `_smooth_samples()`'s existing `"timer_smoothed_out"` tag; `segment_fights()` now returns `excluded_ranges` alongside `rounds`.
+   - `ai/pipeline.py` / `ai/fight_processing/fight_processing.py` — threaded `excluded_ranges` parameter through to `process_fight()`, gated frame loop the same way as round-gating.
+
+4. Errors and fixes:
+   - **Permission classifier blocked a raw SQL UPDATE** to fight 42's pre-existing real label_events row (migrating `straight_right`→`cross`). Reason given: "Modify Shared Resources... migrating real user-labeled ground truth without the user having specifically authorized modifying that already-existing database data." I did NOT attempt to bypass this — explained the situation to the user and offered 3 options (my SQL fix with approval / user fixes in UI / backward-compat mapping in code). **This was never resolved — the user has not yet chosen an option, and this stale row/mapping question remains open.**
+   - **Chrome browser extension never connected** across multiple retry attempts (`mcp__Claude_in_Chrome__tabs_context_mcp`) — all UI verification in this phase had to be done via TypeScript compilation (`tsc -b`), production build (`vite build`), and direct backend API / DB checks rather than live click-through. I was transparent about this limitation each time rather than claiming untested UI code worked.
+   - **Working-directory mistakes causing confusing build failures twice**: `npx vite build` run from the wrong directory (once from repo root, once from `backend/` after an earlier `cd`) resolved to a different/cached vite version (v8.2.1 instead of the project's pinned v7.3.1) and failed with `[UNRESOLVED_ENTRY] Cannot resolve entry module index.html`. Both times I recognized this as my own `cd` state drifting between tool calls (not a real code regression), re-ran `cd /Users/filip.culig/Developer/fight-ai/frontend && npx vite build`, and confirmed clean builds both times.
+   - **Discovered mid-implementation that fight_id=42 was the user's real, active labelling work** (not test data) while running verification queries — pivoted immediately to being careful, scoping all cleanup/test SQL to test fight IDs only, and treating fight 42/44 data as real and requiring explicit authorization before any write.
+   - **Initial Delete-key implementation was wrong for Mac keyboards** — caught this myself before the user reported it as broken, by reasoning through Mac's single physical delete key sending `e.key === 'Backspace'` (not `'Delete'`, which is only the separate Fn+Delete forward-delete). Fixed by making `Backspace` context-sensitive.
+   - **fight_end auto-exclusion didn't apply to fight 42's already-existing fight_end event** — not a bug, but a timing/retroactivity gap (the event was logged hours before the fix shipped). Explained clearly to user, then implemented the backfill via the proper `POST /fights/42/label-spans/` API route (not raw SQL) once the user said "You do the fix".
+   - **Round spans appeared "not draggable"** (user report) — on careful re-read I could not find an actual code bug in the drag logic itself, but discovered a more fundamental blocking issue: `rounds_fully_annotated()` gates on the AI's raw `rounds` table row count, which editing `label_spans` alone can never satisfy when that count itself is wrong. Explained this clearly and proposed the two-part fix (UI improvements + fixing the underlying `rounds` table), which the user then approved.
+
+5. Problem Solving:
+   - Diagnosed fight 44's 3-round mis-segmentation via `ai/runs/segmentation_debug/signal_series.csv`: root cause is (a) scoreboard OCR failing to calibrate (2nd real video with this failure — `WARNING: Scoreboard overlay not detected`), forcing segmentation to rely on pure fighter-detection heuristics, combined with (b) a genuine ~19-second stretch of zero fighter detections (`both_present=False`) mid-fight (likely referee instructions or a broadcast cutaway), which crossed the `MIN_ROUND_GAP_SECS=20.0` threshold and was misread as a round boundary. Explicitly noted this is NOT caused by the earlier `ROUND_ENGAGEMENT_RATIO` conversion (that affects the `engaged` signal, not `both_present`).
+   - Fully resolved fight 44: deleted spurious `rounds` table rows 2/3 and extended round 1 to the true end frame (18518) via direct psql (no API exists for this pipeline-owned table); deleted/updated the corresponding `label_spans` via the actual backend API; verified `rounds_fully_annotated(44)` now returns `True`.
+   - Flagged (not yet acted on, no user decision yet) that scoreboard OCR calibration failing across multiple real videos is a bigger, separate issue worth investigating on its own since it would improve segmentation reliability broadly.
+   - **P4 (Prerequisite baseline scoring) status is unresolved**: user said "I did a P4" ambiguously; I checked git status (still on `master`, no new score artifacts in `ai/eval/baselines/`) and used `AskUserQuestion` to clarify — user selected "I already ran it — help me interpret the output." I asked them to paste the output or point me to where it's saved. **No response was given before the conversation moved to the fight-44 issue — this is still outstanding.**
+
+6. All user messages (non-tool-result, verbatim intent):
+   - "Now take a look at TODO.md file, analyze finding and give me your opinion"
+   - "for round truncation, should we also use the same approach with the span until the start of the first round as well and between the rounds? #3 In MMA statistics, they dont cound specific ground and pound strikes as separate punches, becasuse they are in between bascially swinging and mix of everything from every angle. We should have them as ground and pound and separate it from ground strikes"
+   - "Okay lets implement this todo file with these new info"
+   - "When I select an event on the timeline in manual labeling and press delete, it does not get deleted. I would like that functionality"
+   - "After fight is marked as done in the timeline, round rectangle in the timeline is still the whole width of the timeline. Same as for the fight state. Fight end marker should be the last element (horizontally)"
+   - "Okay I have finished annotating the first video, what now?"
+   - "You do the fix"
+   - "I did a P4" (followed by, via AskUserQuestion tool response) selecting: "I already ran it — help me interpret the output"
+   - "Now fight with ID 44 has wrong round recognition. Real fight is 1 round but AI pipeline before labeling has recognized 3 rounds"
+   - "Rounds are not draggable and deletable in the timeline"
+   - "Yes fix it and make rounds deletable"
+   - (Final message, a system-level meta-instruction, not a substantive user request): instruction to produce this summary in text-only form without tool calls.
+
+7. Pending Tasks:
+   - **Resolve the stale `straight_right` row on fight 42** — user has not yet chosen between: (a) I run a one-row SQL migration with explicit approval, (b) user fixes it themselves in the Annotate UI, (c) I add backward-compatible mapping in `LABEL_FAMILY_MAP` for both old and new action names.
+   - **P4 baseline comparison** — user says they already ran it themselves and wants help interpreting the output; I'm still waiting for them to paste the output or point me to where it's saved.
+   - **Corner-swap recall test** — explicitly noted as needing to be set up (via `eval.cli inject-swap`) *before* labelling the next fight, not retroactively.
+   - **Double-labelling for the agreement ceiling** — still needs either the user (with a week's gap) or a second labeller to re-label a round of an already-labelled fight.
+   - **Scoreboard OCR calibration failure** — flagged as a recurring, real issue (2 videos so far) worth investigating separately; not yet started, no user decision to pursue it made.
+   - Continued volume labelling toward the ~300-strike Stage 2 training target (288 more needed per last `eval.cli summary` check on fight 42 alone; fight 44 not yet exported).
+   - Live UI verification of every frontend interaction built in this phase (timeline select/delete, fight_end auto-exclusion, Shift live preview, round span delete/drag) is still outstanding since Chrome browser access was never available this session.
+
+8. Current Work:
+   Immediately before this summary request, I was completing the user's explicit instruction **"Yes fix it and make rounds deletable"** for fight_id=44 (NAZHANDvsSTAROPOLI.mp4). Concretely, in order, I had just:
+   1. Fetched fight 44's `label_spans` via `GET http://127.0.0.1:8000/fights/44/label-spans/` (found round spans id=10 [1–585, value="1"], id=11 [2340–12720, value="2"], id=12 [14258–18518, value="3"])
+   2. Deleted spans 11 and 12 via `DELETE http://127.0.0.1:8000/fights/44/label-spans/{11,12}` (both returned 204)
+   3. Extended span 10 to the full fight via `PUT http://127.0.0.1:8000/fights/44/label-spans/10` with `{"end_frame":18518}` (confirmed response: `{"id":10,"fight_id":44,"kind":"round","start_frame":1,"end_frame":18518,"value":"1",...}`)
+   4. Fixed the underlying `rounds` table directly via `docker exec fight_ai psql`: `DELETE FROM rounds WHERE fight_id=44 AND round_number IN (2,3);` then `UPDATE rounds SET end_frame=18518 WHERE fight_id=44 AND round_number=1;` — confirmed final state is a single row (round_number=1, start_frame=1, end_frame=18518)
+   5. Verified via a direct Python check from the `backend` venv that `rounds_fully_annotated(44)` now returns `True`
+   6. Edited `frontend/src/components/annotate/AnnotationTimeline.tsx`: changed `deletable={false}` to `deletable` for the `roundSpans.map(...)` render call, making round-kind spans deletable in the UI like corner_swap/excluded spans already were
+   7. Edited the same file's `SpanBlock` component to widen the edge-drag hit zones from 8px to 13px and add a visible 2px grip-mark indicator on both the start and end drag handles (exact code shown in section 3 above)
+   8. Ran `cd /Users/filip.culig/Developer/fight-ai/frontend && npx tsc -b` — confirmed only the same 2 pre-existing unrelated errors (`CornerSelect.tsx`, `useFightStream.ts`)
+   9. Ran `npx vite build` — first attempt failed with a confusing rolldown/vite-version error because my shell's working directory had drifted to `backend/` from an earlier `cd`; recognized this immediately as my own directory-tracking mistake (confirmed via `pwd`), re-ran `cd /Users/filip.culig/Developer/fight-ai/frontend && npx vite build`, and got a clean successful build (`✓ built in 521ms`, `dist/assets/index-BxtlcEdP.js 347.70 kB`)
+
+   This was the last tool output before the conversation was interrupted for this summary. I had NOT yet sent a final confirmation message to the user summarizing that fight 44 is now fully fixed and the UI changes are verified/built, nor had I done a final end-to-end check (e.g., re-fetching `GET /fights/44/label-spans/` one more time to show the final clean state, or reminding the user that live browser click-testing still isn't possible on my end).
+
+9. Optional Next Step:
+   Send the user a concise confirmation that both parts of "Yes fix it and make rounds deletable" are complete and verified:
+   - Fight 44's `rounds` table and `label_spans` are now consistent (single round, frames 1–18518), and `rounds_fully_annotated(44)` returns `True`, so Finish Labeling will no longer be blocked.
+   - Round spans are now deletable in the timeline UI (matching corner_swap/excluded), and the drag handles for all span types are now wider (13px vs 8px) with a visible grip-mark, which should make dragging noticeably easier to hit — though this still hasn't been click-tested live since Chrome access remains unavailable.
+   This directly continues the exact task in progress at the point of interruption — I should not proceed to any of the other pending items (the `straight_right` migration choice, P4 output interpretation, corner-swap recall, etc.) without the user first confirming this fix works for them or raising the next issue themselves, consistent with how this entire phase of the conversation has proceeded (user reports a specific real problem found while using the app → I investigate and fix that specific thing → user confirms or reports the next issue).
+
+If you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/filip.culig/.claude/projects/-Users-filip-culig-Developer-fight-ai/ccc3d997-402b-4036-a586-3cd013fd7d24.jsonl
+Continue the conversation from where it left off without asking the user any further questions. Resume directly — do not acknowledge the summary, do not recap what was happening, do not preface with "I'll continue" or similar. Pick up the last task as if the break never happened.
