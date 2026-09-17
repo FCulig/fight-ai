@@ -1,0 +1,13 @@
+In /Users/filip.culig/Developer/fight-ai/ai, `video_processing/fighter_tracking/box_smoothing.py` can detach a box from its own skeleton, contradicting its module docstring ("smoothing moves a box without any risk of detaching it from its skeleton").
+
+Mechanism: the median prefilter (`_median`, BOX_MEDIAN_WINDOW_SECS = 0.1 → 5 frames @ 50fps) exists to reject a short, large excursion in the box series. A 1-2 frame FighterTracker identity swap IS such an excursion, so the box series gets silently repaired while the keypoints — which nothing smooths — keep the swapped values. The stored `fighter_frames` row then has one fighter's box around the other fighter's skeleton.
+
+Measured 2026-08-30 on the DB (docker exec fight_ai psql -U admin -d fight_ai): the skeleton's torso centre (mean of confident COCO joints 5/6/11/12) falls outside its own stored box on 585/71177 rows (0.82%) for fight 52 and 474/76606 (0.62%) for fight 54. A clear worked example is fight 52 frames 57302-57303, where corner 1's shoulder x jumps 1245 → 68 → 630 → 1242 while its box sits still at x≈1216-1280.
+
+This matters because keypoints are the training signal for the planned skeleton action model (plan/04-stage2-model.md) — a mislabelled skeleton is worse than a missing one, and it is invisible because the box looks correct.
+
+There is already a `_same_person(bbox, keypoints)` helper in box_smoothing.py that detects the condition (it currently only guards the new skeleton-floor step from acting on a mismatched pair). It does not repair anything.
+
+Decide and implement a repair. Options worth weighing: detect the excursion before the median filter and swap the keypoints along with the box; or mark such rows so downstream export can drop them; or leave the box unsmoothed on those frames so box and skeleton stay consistent. Note the root cause is the tracker swap itself — see the memory notes tracker-swaps-at-cuts-and-clinches and corner-hysteresis-cannot-fix-swaps — so this is mitigation, and the fix should not pretend otherwise in its comments.
+
+Follow ai/CLAUDE.md conventions: thresholds go in models/constants.py, and the module docstring must be corrected since it currently states this cannot happen. Validating needs a pipeline re-run (XL pose over the whole video), so also verify by replaying the new logic over the stored rows in Postgres first.
