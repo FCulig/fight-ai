@@ -1,0 +1,1 @@
+I am labeling a fight 60. Round 1 ended with a corner swap span open event. I exited the labeling page. When I come back I cannot end that span. It just starts a new one without ending the one that started.
