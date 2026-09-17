@@ -1,0 +1,167 @@
+<task-notification>
+<task-id>a277203a0b8f65366</task-id>
+<tool-use-id>toolu_01CLTDcL57dLSFFS8iEEdgF3</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/987b6ba3-6398-4634-a403-606a65baf11e/tasks/a277203a0b8f65366.output</output-file>
+<status>completed</status>
+<summary>Agent "Design Pipeline Accuracy section implementation" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result># Pipeline Accuracy (Section E) — Implementation Plan
+
+I read the actual code end-to-end before drafting this: `ai/eval/schema.py`, `score.py`, `report_io.py`, `predictions.py`, `labels_db.py`, `cli.py`, a real baseline JSON (`ai/eval/baselines/JURICvsNOGUEIRA-ai-1.0.json`), `backend/app/models/fight.py`, `fight_event.py`, `event_service.py`, `fight_service.py`, `pipeline_runner.py`, `api/routes/fights.py`, `ai/database.py`, and on the frontend `App.tsx`, `Fight.ts`, `eventTaxonomy.ts`, `AccGauge.tsx`, `SegBar.tsx`, `PaceChart.tsx`, `MiniStat.tsx`, `AnnotationTimeline.tsx`, `index.css`, `DESIGN_SYSTEM.md`, plus both `ai/CLAUDE.md`, `backend/CLAUDE.md`, `frontend/CLAUDE.md`. Two corrections to the brief up front, then the plan.
+
+## Corrections to the brief's assumptions
+
+1. **`backend/app/services/label_span_service.py` does not exist.** The round-seeding logic the brief describes lives in `backend/app/services/event_service.py`, function `_ensure_round_events_seeded` (lines 36–70), triggered from `get_events_by_fight` (line 17-18) whenever `source='label'` and `kind` is `None`/`round`. This is the file the round-circularity check (E7) must key off.
+
+2. **There is no way today to score predictions from one fight against labels from a different fight, and that's exactly what the intended workflow requires.** `backend/CLAUDE.md` and `frontend/CLAUDE.md` both state the real methodology: "Pipeline accuracy is validated by uploading the *same* source video a second time as a brand-new fight (`purpose='ai_labeled'`, a different `fight_id`) and comparing its predictions against the first upload's hand labels across the two fight IDs — never by re-processing an already-labelled fight in place." But `ai/eval/cli.py`'s `_cmd_score` (line 138) calls `FightLabels.for_video(args.video)` **and** `load_predictions(args.video)` with the *same* `video` argument — both resolve through `lookup_fight()`/`for_video()`, which key off a single `fights.video_path`/filename stem (`predictions.py:71-103`, `schema.py:230-240`). Since `POST /fights/upload` renames a re-uploaded file to avoid a collision (`fights.py:48-59`, `_unique_path`), fight 62's `video_path` won't share a stem with the reference fight's `video_path`/label JSON. **This is a real gap that has to be closed as part of this plan** — see Backend API section below (`score-pair`).
+
+## 1. DB schema: `eval_runs`
+
+No migration framework exists — `backend/app/utils/db.py:35` calls `Base.metadata.create_all(bind=engine)` on import, so a new SQLAlchemy model is auto-provisioned on backend startup. No existing table needs an `ALTER`.
+
+**Fixture identity — reuse `reference_fight_id`, don't invent a new concept.** A "fixture" per the brief is a stable identity for the same source fight tracked across pipeline versions. The natural, already-existing anchor is the `fights` row with `purpose='reference'` and `labeled_at IS NOT NULL` (`backend/app/models/fight.py:13`, `FIGHT_PURPOSES`) — it holds the hand labels once and is never re-run (`backend/CLAUDE.md`, "Fight purpose"). Every re-upload of the same source video through a newer pipeline version becomes a **new** `fights` row with `purpose='ai_labeled'`. So: `eval_runs.reference_fight_id` *is* the fixture key. No new column on `fights`, no new `fixtures` table — E2's "per-fixture table" is `GROUP BY reference_fight_id`, E8's trend query is `WHERE reference_fight_id = :fixture_id ORDER BY generated_at`.
+
+New file `backend/app/models/eval_run.py`, following the exact style of `fight.py`/`fight_event.py`:
+
+```python
+class EvalRun(Base):
+    __tablename__ = "eval_runs"
+    id = Column(Integer, primary_key=True, index=True)
+    reference_fight_id = Column(Integer, ForeignKey("fights.id", ondelete="CASCADE"), nullable=False)
+    scored_fight_id = Column(Integer, ForeignKey("fights.id", ondelete="CASCADE"), nullable=False)
+    git_sha = Column(String(40), nullable=False)
+    constants_sha256 = Column(String(64), nullable=False)
+    tolerance_secs = Column(Float, nullable=False)      # the requested tolerance (pinned default 0.25)
+    tolerance_frames = Column(Integer, nullable=False)   # resolved at label fps — score.py's actual matching window
+    scored_minutes = Column(Float, nullable=False)
+    report = Column(JSONB, nullable=False)  # the `report` sub-object from ai/eval/report_io.py's envelope, unmodified
+    generated_at = Column(TIMESTAMP, nullable=False, server_default=text("now()"))
+    triggered_by = Column(String(200), nullable=True)  # who/what kicked it off (email or "cli")
+```
+
+Index `ix_eval_runs_reference_fight (reference_fight_id, generated_at)` for the E8/E2 queries.
+
+**Reuse the `Report`/envelope shape verbatim, don't invent a new JSON contract.** `report_io.save_report` (`report_io.py:102-108`) already does the one non-trivial transform (`family_confusion`/`state.confusion` tuple-keys → `"gt&gt;pred"` strings, `report_io.py:49-58`) needed to make a `Report` JSON-safe. Store that exact `d` dict (after `_confusion_to_json`) in `eval_runs.report`; the frontend gets the identical shape whether it reads a live DB row or one of the checked-in `ai/eval/baselines/*.json` files, which is valuable for local dev/testing without a live pipeline run.
+
+Do **not** try to normalize the report into relational columns (per-family accuracy, per-round IoU, etc.) — every E1–E9 panel needs different slices of a nested structure that changes shape as `score.py` evolves (e.g. `takedowns` scoring is explicitly "not yet scored... follow-up" per `schema.py:171-178`); a JSONB blob plus the handful of top-level columns actually needed for filtering/sorting (git_sha, tolerance, generated_at, the two fight FKs) is the right amount of structure. Frontend does the shaping, same as `format_report()` in `score.py` already does for the CLI's text output.
+
+**Multiple runs per pipeline version.** No uniqueness constraint — `eval_runs` is an append-only log, same spirit as the baseline JSON files. E8's frontend query dedupes to "latest run per `git_sha`" when building trend points; E2's fixture table shows the latest run per `scored_fight_id`.
+
+## 2. Backend API
+
+Follow the existing thin-router/service pattern exactly (`api/routes/fights.py` → `app/services/*.py` → `app/models/*.py`, registered in `main.py` with `app.include_router(..., prefix=...)`).
+
+New files:
+- `backend/app/models/eval_run.py` — `EvalRun` (above) + Pydantic `EvalRunResponse`, `EvalRunSummary` (a trimmed version without the full `report` blob, for list endpoints), `EvalRunCreate`.
+- `backend/app/services/eval_run_service.py` — `list_runs(reference_fight_id, scored_fight_id=None)`, `get_run(id)`, `list_fixtures()` (reference fights with `labeled_at IS NOT NULL`, each annotated with its latest run + an `is_measurable` bool), `create_run(reference_fight_id, scored_fight_id, tolerance_secs)` — this one shells into the `ai/` venv (see below) and, on success, re-reads the row `ai/eval` just wrote.
+- `backend/app/api/routes/eval_runs.py` — new top-level router (not nested under `/fights/`, since a run spans two fight IDs and isn't naturally a child collection of one):
+  - `GET /eval-runs/fixtures` — every candidate fixture (reference fights, `labeled_at IS NOT NULL`) with latest-run summary or the E0 not-measurable flag; also returns the list of `ai_labeled`/`completed` fights available to pair against each, for the "run a new scoring pass" UI action.
+  - `GET /eval-runs/?reference_fight_id=X&amp;scored_fight_id=Y` — list (E2 table, E8 trend source).
+  - `GET /eval-runs/{id}` — one full report (E3–E9 drill-down).
+  - `POST /eval-runs/` — body `{reference_fight_id, scored_fight_id, tolerance_secs?}`; validates `scored_fight_id` fight has `purpose='ai_labeled'` and `state='completed'`, `reference_fight_id` fight has `purpose='reference'` and `labeled_at IS NOT NULL`, then triggers scoring.
+- `backend/app/main.py` — add `app.include_router(eval_runs_router, prefix="/eval-runs")`, following the existing three-line pattern.
+
+**Closing the cross-fight-id gap (ai/ side).** Add a new `eval.cli` subcommand, `score-pair`, alongside the existing `score`/`agreement` (`cli.py:319-346`), that takes the two fight identities explicitly instead of assuming one video for both:
+
+```
+python -m eval.cli score-pair --labels-fight-id &lt;reference_fight_id&gt; --predictions-fight-id &lt;scored_fight_id&gt; [--tolerance-override S] --json &lt;path&gt; --write-db
+```
+
+Internally: reuse `labels_db.build_labels()` but change its signature (or add a `build_labels_by_fight_id(fight_id)` sibling in `labels_db.py`) to resolve by `fight_id` directly rather than by `lookup_fight(db, video)`'s path/stem matching (`labels_db.py:66`) — same for `load_predictions` in `predictions.py:106`, which needs a `load_predictions_by_fight_id(fight_id)` sibling. Both already do the fight-row lookup as their first step (`predictions.py:71-103`), so this is a small, low-risk change: skip the video-string resolution, take the id straight. `--write-db` calls a new `save_eval_run_db()` (new function in `ai/eval/report_io.py` or a small new `ai/eval/db_io.py`) that does a plain `INSERT INTO eval_runs (...)` via `SessionLocal()`/`text()`, mirroring the existing pattern in `ai/database.py` (`set_fight_state`, `set_segmentation_review`, etc. — open session, execute, commit, close). This keeps "ai/ owns every write to Postgres" true, consistent with how `process_fight()` and `ai/database.py` already work, and keeps the backend a thin orchestrator — exactly the same shape as `pipeline_runner.run_validation_async` spawning `eval.cli video --fight-id`.
+
+**Sync vs async.** Unlike pipeline runs (`run_pipeline_async`, minutes of video decode), scoring is a DB read plus an in-memory Hungarian-matching pass over a few hundred events — genuinely fast. `eval_run_service.create_run()` should `subprocess.run(..., cwd=AI_DIR, timeout=60)` **synchronously** and return the new row directly, no polling/SSE needed. Follow `pipeline_runner.py`'s existing `AI_DIR`/`AI_PYTHON` env-var conventions and add `"eval.cli"` is already in `_AI_ENTRYPOINTS` (`pipeline_runner.py:92-95`) — no change needed there since it's already spawned via `eval.cli`.
+
+## 3. E0 "not-measurable" detection
+
+Concretely, per fixture (`reference_fight_id`):
+- **Not a fixture at all**: `fights.purpose != 'reference'` or `labeled_at IS NULL` — excluded from the fixture picker entirely (not an E0 state, just not listed).
+- **E0 "not scorable yet"**: fixture exists (`purpose='reference'`, `labeled_at IS NOT NULL`) but `SELECT COUNT(*) FROM eval_runs WHERE reference_fight_id = :id` is `0`. This is deliberately **not** "does any `ai_labeled`/`completed` fight exist anywhere" — that would false-positive on an unrelated fight. The pairing is a human decision made once via `POST /eval-runs/`, so "not measurable" is exactly "nobody has run and recorded a scoring pass against this fixture's labels yet." `GET /eval-runs/fixtures` returns this as `is_measurable: false` per fixture.
+- **CLI text shown in the E0 empty state** must reflect the real two-step flow, not the single-video `score` command: upload the source video again (`purpose=ai_labeled`) to get a `scored_fight_id`, then either click "Run scoring" in the UI (hits `POST /eval-runs/`) or run `python -m eval.cli score-pair --labels-fight-id &lt;reference_fight_id&gt; --predictions-fight-id &lt;scored_fight_id&gt; --json &lt;path&gt; --write-db` by hand.
+
+## 4. Frontend
+
+New standalone route (not nested under a single fight, since it compares across fights): add `&lt;Route path="/accuracy" element={&lt;PipelineAccuracy /&gt;} /&gt;` to `App.tsx` (alongside the existing four routes, `App.tsx:41-47`) and a `{ label: 'Accuracy', to: '/accuracy' }` entry to `Header.tsx`'s `NAV_LINKS` (`Header.tsx:5-8`).
+
+New page `frontend/src/pages/PipelineAccuracy.tsx`: fixture picker (dropdown sourced from `GET /eval-runs/fixtures`) at top, then the provenance line, then E1–E9 for the selected fixture's latest run (with a run-picker/history if useful later).
+
+New feature folder `frontend/src/components/accuracy/`, mirroring the existing `player/`/`annotate/` convention:
+
+| Design piece | Component | Reuse vs. new |
+|---|---|---|
+| Provenance line | `ProvenanceLine.tsx` | new, trivial (text row) |
+| E0 | `NotMeasurable.tsx` | new — empty state + copyable CLI command |
+| E1 headline | `HeadlineF1.tsx` | **reuse `AccGauge`** for the big F1 ring, **reuse `MiniStat`** for P/R/TP/FP/FN/n tiles; new small `ChangeTile.tsx` for the vs-previous/vs-baseline delta (handles the greyed-out "not comparable" / hollow-flag states) |
+| E2 fixture table | `FixtureTable.tsx` | new (plain table styled with existing `inner-tile`/`glass card` classes) |
+| E3 classification | `ClassificationBreakdown.tsx` | **reuse `SegBar`** for family/target proportion bars; new `CircularBadge.tsx`/`NotMeasuredBadge.tsx` (shared, icon+text per honesty rule 3/6) |
+| E4 family confusion | `ConfusionHeatmap.tsx` | new — genuinely no existing heatmap primitive; parametrize by axis labels so it's reusable for both E4 (7×7ish family) and E6 (3×3 state) |
+| E5 timing | `OffsetDotStrip.tsx` | new — closest existing analog is `PaceChart`'s SVG scaffolding (`PaceChart.tsx`) for viewBox/scale conventions, but it's a fundamentally different mark (dot strip, not area/line) |
+| E6 fight state | `StateDumbbell.tsx` (transitions/dwell truth-vs-pred rows) + reuse `ConfusionHeatmap.tsx` for the 3×3 | new dumbbell; heatmap shared with E4 |
+| E7 rounds | `RoundsCheck.tsx` | new — per-round row with "Seeded — not verified" badge (reuses `NotMeasuredBadge`) instead of an IoU number when seeded |
+| E8 trend | `VersionTrendChart.tsx` | new — model the SVG/viewBox scaffolding on `PaceChart.tsx` but it needs hollow markers (constants changed) and a visual line break + note (tolerance/fixture-set changed), which `PaceChart` has no equivalent of |
+| E9 worst misses/FPs | `WorstMissesList.tsx`, `WorstFPList.tsx` | new — row styling can borrow `LiveFeed.tsx`'s list-row pattern |
+
+**Colors**: reuse `frontend/src/utils/eventTaxonomy.ts`'s `colorForAction`/`iconForAction` for strike-family rows in E4/E9 — but note the adapter gap: `eventTaxonomy.ts` keys off pipeline `action` strings (`jab_head`, `cross_body`, …), while eval's `Strike.family`/`.target` are decomposed (`schema.py:47-52`). Build family+target back into a pseudo-action (`` `${family}_${target}` ``) before calling into `eventTaxonomy.ts`, or add a small new `familyColor(family)` helper alongside it — either is fine, just don't re-derive a second color mapping by hand.
+
+**Fight-state colors — do not copy `AnnotationTimeline.tsx`'s scheme.** Verified at `AnnotationTimeline.tsx:379`: `GROUND → var(--f-red)`, `CLINCH → var(--orange-400)`, `STRIKING → var(--accent)`. This is the exact collision the brief calls out — GROUND is literally the red-corner red (`--f-red: #ff4d4d`, `index.css:32`). New E6 components should instead use `STRIKING: var(--cyan-600)` (or `--accent`), `CLINCH: var(--orange-400)` (unchanged, already reasonable), `GROUND: var(--purple-600)` (`#7c3aed`, already in the palette, already used for the "event"/knockdown-adjacent category in `eventTaxonomy.ts:20`) — satisfies the brief's "GROUND purple" without inventing a new hex. This is a new, local mapping scoped to the accuracy components; do not touch `AnnotationTimeline.tsx` itself (out of scope, and changing shared label-UI colors is a separate decision).
+
+**Visual system**: confirmed against `frontend/DESIGN_SYSTEM.md` and `index.css` — dark glass-card system (`--bg-base: #050709`, `--surface-glass: rgba(255,255,255,0.04)`, `--surface-inner: rgba(0,0,0,0.30)`), Bebas Neue for stat numbers (`.font-display`, used by `MiniStat.tsx:9`), Manrope for UI text — all already loaded and in active use; no new tokens needed. Status badges (Circular/Seeded/Not measured) should follow the existing badge pattern (see `FightPurposeBadge.tsx`, mentioned in `frontend/CLAUDE.md`) — icon + text, never color-only, per honesty rule about red-green colorblindness.
+
+**E9 click-through**: confirmed `Player.tsx` has no `?frame=` param support today (no `useSearchParams` usage anywhere in `frontend/src/pages`). Two options: (a) stub the click as a plain `navigate(`/fights/${scored_fight_id}`)` with no auto-seek for the initial build, or (b) add minimal `useSearchParams` handling to `Player.tsx` that seeks to `frame/fps` once the video/rounds are loaded. (b) is a small, isolated addition but touches a page outside this feature's component tree — I'd sequence it as a fast-follow, not block E9's first cut on it.
+
+## 5. E7 round-circularity guard — concrete check
+
+A label span is "seeded, not verified" when it is **byte-identical to what `_ensure_round_events_seeded` wrote and has never been touched since**. Concretely, given a `fight_events` row with `source='label'`, `kind='round'` for the reference fight, cross-reference it against the corresponding `rounds` row (same `fight_id`, `round_number = value`):
+
+```
+is_seeded_unverified =
+    label_event.frame == round.start_frame
+    AND label_event.end_frame == round.end_frame
+```
+
+That's the entire check available — `event_service._ensure_round_events_seeded` (`event_service.py:60-68`) copies `start_frame`/`end_frame` verbatim into `frame`/`end_frame` and never writes any other marker (no "edited" flag, no distinct `labeled_at` on the event row — `fight_events` has no per-row edited timestamp at all, only `created_at`, which doesn't change on a `PUT`). **This means exact-match-on-frame-bounds is the only honest signal available today**, and it has a known false-negative: a labeller who nudges a boundary by exactly 0 frames but genuinely reviewed it looks identical to never-touched. That's an acceptable false-negative for a first cut (errs toward *more* "unverified" labels, never fewer — matches honesty rule 2's bias). If ever it matters, `PUT /fights/{fight_id}/events/{event_id}` (`fights.py:218-223` → `event_service.update_event`, `event_service.py:97-121`) would need to start stamping something like `edited_at`, but that's a change to core labelling infra and explicitly out of scope for this Section-E-only plan — note it as a known limitation in the UI copy itself ("Seeded — not verified" rather than a false "verified").
+
+Implementation: this check runs at **report-generation time in `ai/eval/score.py`/`report_io.py`**, not at display time — `RoundScore` (`score.py:135-157`) currently has no field for it. Add a per-matched-round `seeded: bool` (or a fight-level `rounds_seeded: dict[int, bool]`) computed by `score_rounds()`, which needs `labels` to know each round's seeded status. Since `FightLabels` (`schema.py`) has no notion of "seeded," the cleanest place to compute it is in `labels_db.build_labels()` (which already reads both `fight_events` and can join `rounds`) — stamp each `Round` label with whether it matched its seed, and thread that through into `RoundScore` in `score.py`. The frontend's `RoundsCheck.tsx` then reads `report.rounds.matched[i].seeded` and renders "Seeded — not verified" instead of the IoU % when true.
+
+## 6. Sequencing
+
+Given exactly 3 fights exist today (a reference fight with hand labels, "fight 60", "fight 62" as a first-pipeline-version run), and the cross-fight-id scoring gap above must close before *any* real run can be recorded:
+
+**One clarification needed from the user first** (flag, don't block on it in the plan): confirm which of "fight 60"/"fight 62" is the `purpose='reference'` fixture holding hand labels, and which is the `purpose='ai_labeled'` fight that went through pipeline v1 to be scored against it — the plan above assumes one reference + one-or-more ai_labeled fights per fixture, and "fight 60" and "fight 62" need to map onto that pairing (or "fight 60" might be a second, independent fixture). This changes nothing structurally, just which `POST /eval-runs/` calls get made first.
+
+**Phase 0 — unblock scoring (ai/, no DB table yet)**
+1. Add `score-pair`/`--labels-fight-id`/`--predictions-fight-id` to `eval.cli` + the `build_labels`/`load_predictions` by-fight-id siblings. Verify by hand: `python -m eval.cli score-pair --labels-fight-id &lt;ref&gt; --predictions-fight-id &lt;fight 62&gt; --json /tmp/run1.json` produces a sane report. This alone lets the user get their first real number today, no UI required.
+
+**Phase 1 — persistence + minimal API**
+2. `eval_runs` table (`backend/app/models/eval_run.py`) — auto-created on backend restart.
+3. `save_eval_run_db()` in `ai/eval` + `--write-db` flag on `score-pair`.
+4. `backend/app/services/eval_run_service.py` + `backend/app/api/routes/eval_runs.py` (list/get/create/fixtures), registered in `main.py`.
+5. Manually run `score-pair --write-db` for the fight-60/fight-62 pairing → first row in `eval_runs`.
+
+**Phase 2 — minimal frontend (E0, E1, E2, E8 only)**
+6. `PipelineAccuracy.tsx` + fixture picker, `ProvenanceLine`, `NotMeasurable` (E0), `HeadlineF1` (E1, reusing `AccGauge`/`MiniStat` — cheap to build), `FixtureTable` (E2, plain table). This alone is demoable and gives the user the "compare accuracy over time" view they explicitly asked for, even with only two data points on the trend line.
+7. `VersionTrendChart` (E8) — the one genuinely new nontrivial visual piece in this phase; worth its own pass since it has real logic (hollow markers, line breaks) even with just 1–2 points to plot initially.
+
+**Phase 3 — the deeper breakdown (E3–E7, E9)**
+8. `ClassificationBreakdown` + `CircularBadge`/`NotMeasuredBadge` (E3) — mostly wiring `SegBar` to real numbers plus the two honesty-rule badges.
+9. `ConfusionHeatmap` (shared by E4 and E6) — the second genuinely new visual component.
+10. `OffsetDotStrip` (E5).
+11. `StateDumbbell` + round-seeded-check plumbing in `score.py`/`labels_db.py` (E6/E7) — E7 specifically needs the `score.py`/`labels_db.py` change from section 5 above, so do this after Phase 1's `score-pair` work is stable.
+12. `WorstMissesList`/`WorstFPList` (E9), stubbed click-through initially; add `Player.tsx` `?frame=` support as a fast-follow if wanted.
+
+This ordering front-loads the one hard architectural fix (cross-fight-id scoring) that everything else depends on, gets a demoable trend view in front of the user fastest, and defers the two genuinely new/fiddly visual components (heatmap, dot strip, dumbbell) to last since they're pure frontend work that doesn't block anything else.
+
+### Critical Files for Implementation
+- /Users/filip.culig/Developer/fight-ai/ai/eval/cli.py
+- /Users/filip.culig/Developer/fight-ai/ai/eval/predictions.py
+- /Users/filip.culig/Developer/fight-ai/ai/eval/labels_db.py
+- /Users/filip.culig/Developer/fight-ai/ai/eval/report_io.py
+- /Users/filip.culig/Developer/fight-ai/ai/eval/score.py
+- /Users/filip.culig/Developer/fight-ai/backend/app/models/fight.py
+- /Users/filip.culig/Developer/fight-ai/backend/app/services/event_service.py
+- /Users/filip.culig/Developer/fight-ai/backend/app/api/routes/fights.py
+- /Users/filip.culig/Developer/fight-ai/backend/app/services/pipeline_runner.py
+- /Users/filip.culig/Developer/fight-ai/frontend/src/App.tsx
+- /Users/filip.culig/Developer/fight-ai/frontend/src/utils/eventTaxonomy.ts
+- /Users/filip.culig/Developer/fight-ai/frontend/src/components/player/PaceChart.tsx</result>
+<usage><subagent_tokens>132181</subagent_tokens><tool_uses>37</tool_uses><duration_ms>307936</duration_ms></usage>
+</task-notification>
