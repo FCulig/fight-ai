@@ -1,0 +1,6 @@
+`cd frontend && npx tsc -b --noEmit` fails on two pre-existing errors unrelated to any recent refactor (confirmed via `git stash` that they exist on master before any changes):
+
+1. `src/components/CornerSelect.tsx:34` — `useRef<ReturnType<typeof setTimeout>>()` called with no argument; the installed `@types/react` version now requires an explicit initial value. Fix: `useRef<ReturnType<typeof setTimeout>>(undefined)`.
+2. `src/hooks/useFightStream.ts:5` — `fights` is destructured/declared but never read (TS6133 under noUnusedLocals). Inspect the hook and either use it or remove the unused binding.
+
+These block `npm run build` (tsc -b && vite build) from completing even though `vite build` alone succeeds fine. Fix both so `npm run build` passes cleanly.
