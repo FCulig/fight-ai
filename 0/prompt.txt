@@ -1,0 +1,5 @@
+When manually labeling fights, I discovered couple of bugs:
+Fight state should not be bound to a corner. Fight state should not be red/blue also not related to a fighter.
+I need a new event type to annotate successful takedown.
+
+Make a TODO list for now of these issues
