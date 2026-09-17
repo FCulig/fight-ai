@@ -1,0 +1,1 @@
+And for this model to actually work as expected in the predictions, what amount of input data should I feed in for training?
