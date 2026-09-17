@@ -1,0 +1,740 @@
+<task-notification>
+<task-id>af700686c769868ad</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/816a7032-b7e6-478b-b139-6afb21ba8597/tasks/af700686c769868ad.output</output-file>
+<status>completed</status>
+<summary>Agent "Design cross-fight scoring path" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result># Training Lab — measurement + API layer
+
+I read every file you named plus `corner_swap_check.py`, `videocheck.py`, `fight_service.py`, `pipeline_runner.py`, the alembic chain, `frontend/TRAINING_LAB_BRIEF.md` and `frontend/src/utils/liveStats.ts`, and verified the DB claims against the live Postgres container with read-only SELECTs.
+
+---
+
+## 0. Verification of your context — 4 corrections, 3 new blockers
+
+Everything you asserted checks out. Fight 60: `reference`, `labeled_at` set, 227 label strikes (I recounted from `LABEL_FAMILY_MAP`-mapped actions: 77+35+30+22+14+14+10+9+4+4+3+3+1+1 = 227), 14 `corner_swap` spans, 5 state marks (3 `state_striking` + 2 `state_clinch`), rounds 1025-10025 / 13900-22900 / 26525-35525. Fight 62: `ai_labeled`, `completed`, 153 prediction rows = 147 strikes + 3 `round_start` + 3 `round_end`, all 147 with `fighter_id` (78→15, 69→16), same fps 50, same 1920×1080, same `reported_frames`/`decoded_frames` = 43100/43100, same `MAX(fighter_frames.frame)` = 43067, same file size 612577927, same red/blue ids 15/16. Zero `state` rows in the whole DB. Alembic head is `f0a1b2c3d4e5`.
+
+**Corrections and additions:**
+
+**(a) `PIPELINE_ACTION_MAP` covers every action fight 62 emits — no gap.** All 11 (`jab_head`, `jab_body`, `cross_head`, `cross_body`, `hook_head`, `hook_body`, `uppercut_head`, `uppercut_body`, `head_kick`, `middle_kick`, `low_kick`) are in `ai/eval/schema.py:60-77`. The map's four grappling entries are unused here because the state machine never left `STRIKING` on this fight. But the *lookup* at `predictions.py:136` is `PIPELINE_ACTION_MAP.get(action, ("punch", "unknown"))` — a silent default. An unmapped future action (say `elbow_head`) would be scored as a non-specific grappling punch: counted for detection TP, excluded from the family/target denominators. That is a silent metric-inflation path and should become a loud "unmapped action" counter.
+
+**(b) State scoring does not return zeros today — it returns 98.8%, which is much worse.** `Predictions.state_at()` (`predictions.py:57-65`) falls back to `initial_state = "STRIKING"` for every frame. Fight 62 has zero state-change rows, so the "prediction" is the constructor seed at every frame. I computed the labelled state distribution inside fight 60's scored frames:
+
+```
+state_striking  26659
+state_clinch      318        (total scored 26977)
+```
+
+So `score_state` would today print **per-frame state accuracy 98.82%** for a pipeline that made no state claim at all. Your requirement is right, but the failure mode is a spuriously *excellent* number, not a zero — it would sail past review. This is the highest-priority guard in the plan.
+
+**(c) NEW BLOCKER — the corner-swap spans make cross-fight attribution wrong by ~40% unless applied.** `fight_events.corner` on a label row is a track-slot pointer into *fight 60's* `fighter_frames`, not a person. `fight_events.fighter_id` on a prediction row is a resolved person from *fight 62's independent* corner assignment. They are only comparable after fight 60's `corner_swap` spans are applied to the label side. Measured:
+
+```
+round frames total                    27003
+round frames inside a corner_swap     11443   (42%)
+label point rows inside a swap span      91   (of 233, 39%)
+```
+
+`labels_db.build_labels()` (`labels_db.py:149-162`) sets `fighter="red" if e.corner == 0 else "blue"` with no swap correction — correct for single-video use (the docstring at `schema.py:152-169` explains why), **wrong the moment the prediction side comes from a different fight**. Detection F1 is unaffected (matching ignores fighter, `score.py:5-11`), but `fighter_accuracy` and `--strict-fighter` are garbage without it.
+
+There is an upside here that the brief doesn't anticipate: once the swaps *are* applied, `fighter_accuracy` stops being circular. §3.3 of `TRAINING_LAB_BRIEF.md` assumes read-back is always circular; cross-fight with swap correction it becomes a genuine attribution accuracy, because the label side is human-corrected and the prediction side is an independent run's assignment. It needs a new name (`corner attribution`) and a different badge.
+
+**(d) NEW — `landed_accuracy` is permanently unmeasurable for this pair, not temporarily.** All 233 of fight 60's label rows have `success IS NULL` (`taxonomy.ts`'s `successForAction` returns null for every strike). `score.py:254` already handles it correctly (returns `None`), but the API must never coerce it to 0. The brief's §E3 "Landed vs missed · Not measurable" is confirmed by the data, not a placeholder.
+
+**(e) NEW — round IoU is doubly circular for this pair.** Fight 60's `round`-kind label spans are byte-identical to fight 60's own `rounds` rows (auto-seeded by `event_service._ensure_round_events_seeded`, never adjusted), *and* fight 62's `rounds` are byte-identical to both (deterministic segmentation on the same footage). Round IoU will read 1.000 and it measures nothing. `RoundScore` needs a `seeded` flag; the API must return `"seeded — not verified"`, per brief §3.3.
+
+**(f) Minor — `fight_events.target` is NULL on all 153 fight-62 prediction rows.** Target must be derived from `PIPELINE_ACTION_MAP`, never read off the column (matches `liveStats.ts`'s `targetFor()` comment).
+
+**(g) Minor — fight 62 has 4 duplicate `(frame, fighter_id, action)` rows** (f4823 hook_body, f8048 low_kick, f8479 middle_kick, f32246 hook_body). One-to-one Hungarian matching makes 4 of them guaranteed FPs, and `sanity.py`'s "no duplicate events" check will FAIL.
+
+**(h) Stale doc —** the brief's Appendix still names `label_events` / `label_spans` as sources. Those tables were dropped in `e8f9a0b1c2d3`; everything is `fight_events` now.
+
+**Pre-registered expectation:** 227 GT vs 147 predicted, all inside scored frames. Recall ≤ 147/227 = 64.8%, so **F1 ≤ 78.6%** even on a perfect run. Realistically expect 40–60%. Write this down before running so a surprising number gets investigated rather than celebrated.
+
+---
+
+## 1. The new table
+
+### Recommendation: one table, `eval_runs`, cached report as **JSONB in the row**
+
+**Grain:** one row per *measured fight* (`run_fight_id`), `UNIQUE`. Because a fight's pipeline never re-runs, "fight" and "pipeline version" are 1:1 for scored runs — the trend line's x-axis is a sequence of different `ai_labeled` fight ids over the same reference. Re-scoring is an `UPDATE` in place (a score at a different tolerance isn't comparable to the one it replaces anyway).
+
+**`reference_fight_id` is nullable.** A row with it NULL is a label-free measurement of one fight (sanity + corner accuracy only) — that's what serves brief §F for fights 42/44/58 that have no reference pair. A row with it set is a scored fixture (§E). One table, one row = one fight's complete measurement record.
+
+**JSONB, not `ai/eval/reports/`.** Four reasons:
+1. The backend cannot reach `ai/`'s filesystem conventions cleanly — it runs in a different venv with `AI_DIR` as an env override, and would need a whole path-resolution + file-serving layer mirroring `_resolve_video_path`.
+2. Atomicity. The comparability keys (`tolerance_secs`, `reference_fight_id`, `git_sha`) live in columns *beside* the blob, so a SQL query can refuse a comparison without parsing JSON, and the row can never disagree with the file it points at.
+3. The trend query is one statement: `SELECT scored_at, score_report-&gt;'strikes'-&gt;'detection' FROM eval_runs WHERE reference_fight_id = :r AND tolerance_secs = :t ORDER BY scored_at` — no fan-out of file reads, and pooled TP/FP/FN is `SUM((score_report-&gt;'strikes'-&gt;'detection'-&gt;&gt;'tp')::int)`.
+4. Size is trivial: the unbounded parts are `missed`/`spurious`, bounded here at 227 + 147 entries.
+
+Keep `report_io.save_report(path)` and the `--json` flag exactly as they are — `ai/eval/baselines/*.json` stays the git-committed artifact. `report_path` records where that copy went, so the ledger can show "exported". JSONB is the dashboard's source of truth; disk is the archive. Not either/or.
+
+**Rejected alternative:** splitting into `eval_runs` (pairing) + `eval_reports` (blobs, one per kind). It buys a clean re-score history but costs a join on every dashboard query and a second place for the comparability keys to drift. Revisit only if you start wanting multiple tolerances retained per run.
+
+### DDL
+
+```sql
+CREATE TABLE eval_runs (
+    id                 SERIAL       PRIMARY KEY,
+    run_fight_id       INTEGER      NOT NULL REFERENCES fights(id) ON DELETE CASCADE,
+    reference_fight_id INTEGER          NULL REFERENCES fights(id) ON DELETE CASCADE,
+
+    -- Pipeline identity: the version that produced run_fight_id's PREDICTIONS,
+    -- recorded by hand at pairing time. NOT derivable at score time — scoring
+    -- usually happens at a later commit than processing did.
+    git_sha            VARCHAR(40)      NULL,
+    git_dirty          BOOLEAN      NOT NULL DEFAULT false,
+    constants_sha256   VARCHAR(64)      NULL,
+    -- The version of the SCORING code. Filled automatically. A change to
+    -- score.py moves F1 at fixed predictions, so the trend needs both.
+    scorer_git_sha     VARCHAR(40)      NULL,
+
+    tolerance_secs     NUMERIC(5,3)     NULL,
+    tolerance_frames   INTEGER          NULL,
+    strict_fighter     BOOLEAN      NOT NULL DEFAULT false,
+
+    label              VARCHAR(100)     NULL,
+    notes              TEXT             NULL,
+
+    score_report       JSONB            NULL,
+    sanity_report      JSONB            NULL,
+    corner_report      JSONB            NULL,
+    report_path        VARCHAR(500)     NULL,
+
+    scored_at          TIMESTAMP        NULL,
+    last_error         TEXT             NULL,
+    created_at         TIMESTAMP    NOT NULL DEFAULT now(),
+
+    CONSTRAINT uq_eval_runs_run_fight
+        UNIQUE (run_fight_id),
+    -- The "same bout used for training AND evaluation" disaster, structurally.
+    CONSTRAINT ck_eval_runs_distinct_fights
+        CHECK (reference_fight_id IS DISTINCT FROM run_fight_id),
+    CONSTRAINT ck_eval_runs_score_needs_reference
+        CHECK (score_report IS NULL OR reference_fight_id IS NOT NULL),
+    -- A cached number with no tolerance beside it is uncomparable and therefore
+    -- worse than no number.
+    CONSTRAINT ck_eval_runs_score_needs_tolerance
+        CHECK (score_report IS NULL
+               OR (tolerance_secs IS NOT NULL AND tolerance_frames IS NOT NULL)),
+    CONSTRAINT ck_eval_runs_scored_at
+        CHECK ((scored_at IS NULL) = (score_report IS NULL))
+);
+
+CREATE INDEX ix_eval_runs_reference_fight ON eval_runs (reference_fight_id, scored_at);
+CREATE INDEX ix_eval_runs_git_sha         ON eval_runs (git_sha);
+```
+
+Two things a CHECK can't express (they reference another table) and which therefore move into the scorer's guard list (§4): `reference.purpose = 'reference'` with `labeled_at IS NOT NULL`, and `run.purpose = 'ai_labeled'`. A row that fails them keeps `scored_at IS NULL` and carries `last_error` — a first-class "Not scorable, here's why" state the dashboard renders directly, exactly as brief §3.2 requires.
+
+### Migration — `db/alembic/versions/f1b2c3d4e5a6_create_eval_runs_table.py`
+
+House style (from `e6f7a8b9c0d1` and `f0a1b2c3d4e5`): hex-ish 12-char revision id, a long prose docstring explaining *why*, `from typing import Sequence, Union`, `from alembic import op`, `import sqlalchemy as sa`, explicit `revision` / `down_revision` / `branch_labels` / `depends_on`, `op.create_table` with `sa.Column(...)` positional, `server_default=sa.text('now()')`, and a real `downgrade()`.
+
+```python
+"""Create eval_runs — the reference↔run pairing and its cached score
+
+Revision ID: f1b2c3d4e5a6
+Revises: f0a1b2c3d4e5
+Create Date: 2026-09-14 00:00:00.000000
+
+A fight's pipeline never re-runs. Accuracy is therefore measured across two
+fight ids: the SAME source video uploaded a second time as purpose='ai_labeled',
+whose predictions are scored against the first upload's hand labels. Nothing in
+the schema recorded that pairing, so the only place it existed was in whoever
+last ran the command.
+
+Three things have to travel with the pairing or the number it produces cannot be
+compared to another one:
+
+  * which reference it was scored against (a different fixture set is a
+    different measurement),
+  * the matching tolerance (score.py's DEFAULT_TOLERANCE_SECS is a scored
+    quantity, not a free dial — see plan 0f),
+  * the pipeline version that produced the predictions. That is NOT the git sha
+    at score time: processing and scoring routinely happen at different commits.
+    It cannot be derived, which is why git_sha/constants_sha256 are filled in by
+    hand when the pairing row is created, not by the scorer.
+
+The report itself is cached here as JSONB rather than on disk under
+ai/eval/reports/, so the comparability keys sit in columns beside the blob and a
+query can refuse a comparison without parsing JSON. `report_io.save_report()`
+and the CLI's --json flag are unchanged — ai/eval/baselines/*.json remains the
+git-committed archive, and report_path records where that copy went.
+
+reference_fight_id is nullable: a row with it NULL is a label-free measurement
+of one fight (sanity + corner accuracy, which need no ground truth at all) and
+is what the Training Lab's pipeline-health section reads for fights that have no
+reference pair.
+
+Rows are populated manually for now (SQL or `eval.cli pair`) — neither the
+upload flow nor the pipeline writes here.
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+revision: str = 'f1b2c3d4e5a6'
+down_revision: Union[str, Sequence[str], None] = 'f0a1b2c3d4e5'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -&gt; None:
+    op.create_table(
+        'eval_runs',
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('run_fight_id', sa.Integer,
+                  sa.ForeignKey('fights.id', ondelete='CASCADE'), nullable=False),
+        sa.Column('reference_fight_id', sa.Integer,
+                  sa.ForeignKey('fights.id', ondelete='CASCADE'), nullable=True),
+        sa.Column('git_sha', sa.String(40), nullable=True),
+        sa.Column('git_dirty', sa.Boolean, nullable=False,
+                  server_default=sa.text('false')),
+        sa.Column('constants_sha256', sa.String(64), nullable=True),
+        sa.Column('scorer_git_sha', sa.String(40), nullable=True),
+        sa.Column('tolerance_secs', sa.Numeric(5, 3), nullable=True),
+        sa.Column('tolerance_frames', sa.Integer, nullable=True),
+        sa.Column('strict_fighter', sa.Boolean, nullable=False,
+                  server_default=sa.text('false')),
+        sa.Column('label', sa.String(100), nullable=True),
+        sa.Column('notes', sa.Text, nullable=True),
+        sa.Column('score_report', sa.dialects.postgresql.JSONB, nullable=True),
+        sa.Column('sanity_report', sa.dialects.postgresql.JSONB, nullable=True),
+        sa.Column('corner_report', sa.dialects.postgresql.JSONB, nullable=True),
+        sa.Column('report_path', sa.String(500), nullable=True),
+        sa.Column('scored_at', sa.TIMESTAMP, nullable=True),
+        sa.Column('last_error', sa.Text, nullable=True),
+        sa.Column('created_at', sa.TIMESTAMP, nullable=False,
+                  server_default=sa.text('now()')),
+    )
+    op.create_unique_constraint('uq_eval_runs_run_fight', 'eval_runs', ['run_fight_id'])
+    op.create_check_constraint(
+        'ck_eval_runs_distinct_fights', 'eval_runs',
+        'reference_fight_id IS DISTINCT FROM run_fight_id')
+    op.create_check_constraint(
+        'ck_eval_runs_score_needs_reference', 'eval_runs',
+        'score_report IS NULL OR reference_fight_id IS NOT NULL')
+    op.create_check_constraint(
+        'ck_eval_runs_score_needs_tolerance', 'eval_runs',
+        'score_report IS NULL OR (tolerance_secs IS NOT NULL '
+        'AND tolerance_frames IS NOT NULL)')
+    op.create_check_constraint(
+        'ck_eval_runs_scored_at', 'eval_runs',
+        '(scored_at IS NULL) = (score_report IS NULL)')
+    op.create_index('ix_eval_runs_reference_fight', 'eval_runs',
+                    ['reference_fight_id', 'scored_at'])
+    op.create_index('ix_eval_runs_git_sha', 'eval_runs', ['git_sha'])
+
+
+def downgrade() -&gt; None:
+    op.drop_table('eval_runs')
+```
+
+(`sa.dialects.postgresql.JSONB` needs `from sqlalchemy.dialects import postgresql` at the top and `postgresql.JSONB` — this DB is Postgres-only, per `docker-compose.yml` and the `pg_notify` usage.)
+
+### Populating the fight 60/62 row by hand
+
+```sql
+INSERT INTO eval_runs (run_fight_id, reference_fight_id, git_sha, constants_sha256, label, notes)
+VALUES (62, 60, '9bd41d1', '&lt;sha256 of ai/models/constants.py at that commit&gt;',
+        'post-fight_events-merge',
+        'First cross-fight fixture. BILANDZICvsLUPASCU_2.mp4 re-upload of fight 60''s source.');
+```
+
+Then `python -m eval.cli score-fixture --run 62 --persist` fills `tolerance_*`, `scorer_git_sha`, `score_report`, `scored_at` (or `last_error`).
+
+---
+
+## 2. Fixing `ai/eval/predictions.py`
+
+### The bug, precisely
+
+`predictions.py:130-145`. `desc = row.description or ""` → `""`. `_STRIKE_RE.match("")` (line 132) → `None`, so the strike branch never runs. Control falls to `if row.state:` (NULL, no rows anywhere) and then `_STATE_RE.search("")` → `None`. Every one of the 147 rows is silently discarded. `preds.strikes == []`, detection F1 = 0.0, and nothing prints a warning.
+
+### The change
+
+**Step 1 — `lookup_fight` returns `red_fighter_id` instead of the dead `0` placeholder** (`predictions.py:71-103`). Line 78's SELECT gains `red_fighter_id`; line 103 becomes `return row.id, row.video_path, int(row.fps), row.red_fighter_id`. All three call sites already unpack four values with `_` in the last slot (`predictions.py:110`, `labels_db.py:72`, `corner_swap_check.py:35`), so this is source-compatible everywhere; only `load_predictions` binds it.
+
+**Step 2 — drive the loop off `action` + `fighter_id`, not `description`.** Replace the SELECT at lines 123-127 (drop `description`, add `fighter_id`) and the body of the loop:
+
+```python
+rows = db.execute(
+    text("SELECT frame, action, fighter_id, success, state FROM fight_events "
+         "WHERE fight_id = :fid AND source = 'prediction' AND kind = 'point' "
+         "ORDER BY frame, id"),
+    {"fid": fight_id},
+).all()
+
+for row in rows:
+    action = row.action or ""
+
+    # State-change rows first: clinch_initiated / takedown_initiated carry BOTH
+    # a `state` and an `action`, and they are state transitions, not strikes.
+    if row.state:
+        preds.state_changes.append(StateChange(frame=row.frame, state=row.state))
+        continue
+
+    if action in STATE_ACTIONS:      # round_start / round_end / *_initiated
+        continue
+
+    mapped = PIPELINE_ACTION_MAP.get(action)
+    if mapped is None:
+        # Never silently bucket an unknown action as a non-specific punch:
+        # it would count toward detection TP while being excluded from the
+        # family/target denominators, inflating both.
+        preds.unmapped_actions[action] += 1
+        continue
+
+    family, target = mapped
+    preds.strikes.append(PredictedStrike(
+        frame=row.frame,
+        fighter=_corner_of(row.fighter_id, red_fighter_id),
+        family=family,
+        target=target,
+        landed=row.success,
+        action=action,
+    ))
+```
+
+with, mirroring `frontend/src/utils/liveStats.ts`'s `attributedCorner`:
+
+```python
+def _corner_of(fighter_id: Optional[int], red_fighter_id: Optional[int]) -&gt; str:
+    """Resolve a prediction's fighter_id to a corner name.
+
+    Mirror of liveStats.ts's attributedCorner(): fight_events.fighter_id is a
+    resolved person (FK), compared against fights.red_fighter_id. `corner` is
+    never populated on a prediction row (DB CHECK ck_fight_events_..._is_label_only).
+    """
+    if fighter_id is None or red_fighter_id is None:
+        return "unknown"          # unassigned corner — excluded from the
+                                  # attribution denominator, never scored wrong
+    return "red" if fighter_id == red_fighter_id else "blue"
+```
+
+**Step 3 — `target` and `family` come only from `PIPELINE_ACTION_MAP`.** Confirmed: `fight_events.target` is NULL on all 153 fight-62 prediction rows, so reading the column would produce `"unknown"` for every strike and collapse the target denominator to zero. `PIPELINE_ACTION_MAP` (`schema.py:60-77`) already encodes the flattened vocabulary; it covers all 11 actions fight 62 emits. Add `unmapped_actions: Counter` to `Predictions` and surface it in `format_report` and `sanity.format_sanity`.
+
+**Step 4 — delete `_STRIKE_RE` (line 25) and `_STATE_RE` (line 27) outright.** There is exactly one non-NULL `description` in the entire database (fight 60's `fight_end` label), and zero prediction rows predate the `state` column. The regexes are dead weight that made the current bug silent, and the module docstring's "kept only as a fallback" is no longer true. Update the docstring at `predictions.py:7-11` to say `action`/`fighter_id` are the source of truth.
+
+**Step 5 — new id-taking loader** (needed for §3):
+
+```python
+def load_predictions(video: str) -&gt; Predictions:            # unchanged signature
+    db = SessionLocal()
+    try:
+        fight_id, *_ = lookup_fight(db, video)
+    finally:
+        db.close()
+    return load_predictions_for_fight(fight_id)
+
+def load_predictions_for_fight(fight_id: int) -&gt; Predictions:   # NEW — all the work
+    ...
+```
+
+**Blast radius:** `sanity.py` reads `preds.strikes[].action`/`.fighter` and `preds.state_changes` — all still populated, and `sanity` on fight 62 will now finally produce real numbers (and will FAIL "no duplicate events" on the 4 duplicates). `score.py:448`'s `getattr(m, "action", ...)` fallback stays as-is (it exists for the `agreement` path where `preds` is a second `FightLabels`).
+
+---
+
+## 3. Making `score.py` cross-fight
+
+### Recommendation: new loaders + a new entry point. `score()` itself does not change.
+
+`score()` is already the right shape and already polymorphic — `cli._cmd_agreement` (line 209) passes a second `FightLabels` as `preds`. The single-video assumption is not in `score()` at all; it lives entirely in the two loaders and in `cli._cmd_score` (lines 143-144), which feeds one `args.video` string to both `FightLabels.for_video()` and `load_predictions()`.
+
+So thread nothing through `score()`. Add three functions:
+
+```python
+# ai/eval/labels_db.py
+def build_labels(video: str) -&gt; FightLabels:                      # unchanged, delegates
+def build_labels_for_fight(fight_id: int) -&gt; FightLabels:         # NEW — body moves here
+
+# ai/eval/predictions.py
+def lookup_fight(db, video: str) -&gt; tuple[int, str, int, int]     # 4th is now red_fighter_id
+def load_predictions(video: str) -&gt; Predictions:                  # unchanged, delegates
+def load_predictions_for_fight(fight_id: int) -&gt; Predictions:     # NEW — body moves here
+
+# ai/eval/score.py
+def score(labels, preds, tolerance_secs=DEFAULT_TOLERANCE_SECS,
+          strict_fighter=False) -&gt; Report:                        # UNCHANGED
+
+def score_fixture(reference_fight_id: int,
+                  run_fight_id: int,
+                  tolerance_secs: float = DEFAULT_TOLERANCE_SECS,
+                  strict_fighter: bool = False) -&gt; Report:        # NEW
+    """Score one fight's predictions against a different fight's hand labels.
+
+    The two fights are the same source video uploaded twice: the reference
+    carries the ground truth, the run carries the predictions. Runs the guard
+    list first (see check_fixture) and refuses rather than returning a number
+    it cannot stand behind.
+    """
+```
+
+`score_fixture` is ~40 lines: load both, run `check_fixture`, and if no blocking guard failed, call the existing `score()` with `resolve_corner_swaps=True`.
+
+**`build_labels_for_fight`, not `FightLabels.for_video()`.** There is no `ai/eval/labels/BILANDZICvsLUPASCU.json` — only `MILIDRAGOVICvsMOOSMAN.json` exists. Reading the DB also means the dashboard's numbers need no export step. Keep an optional `--from-labels-file` on the CLI for reproducing a historical score against a committed artifact.
+
+**Exactly what changes in `labels_db.py`:** the `NotLabeled` check (lines 74-81) moves into the guard list, so `build_labels_for_fight` can load labels from a fight that isn't finished (the Lab's "in progress" ledger rows need that) while `score_fixture` still refuses to score one. `build_labels(video)` keeps raising `NotLabeled` so `_cmd_export` is unchanged.
+
+**Exactly what changes in `predictions.py`:** only §2 above, plus the split.
+
+### `Report` gains four defaulted fields — no new report type
+
+```python
+@dataclass
+class Report:
+    video: str                 # the reference's video — unchanged meaning
+    fps: int
+    scored_minutes: float
+    strikes: StrikeScore
+    state: StateScore
+    rounds: RoundScore
+    # Cross-fight fields. Defaulted, so every existing construction site,
+    # dataclasses.asdict(), report_io.save_report() and the two committed
+    # baselines in eval/baselines/ keep working untouched.
+    reference_fight_id: Optional[int] = None
+    run_fight_id: Optional[int] = None
+    run_video: Optional[str] = None
+    guards: list[Guard] = field(default_factory=list)
+```
+
+One report type means one `save_report`, one JSONB shape, one trend query. `format_report` grows a provenance header when `run_fight_id is not None`; the single-video path renders identically.
+
+### Corner-swap resolution (blocker (c))
+
+Add to `FightLabels` in `schema.py`, mirroring `frontend/src/utils/cornerSwap.ts`:
+
+```python
+def resolved_fighter(self, frame: int, slot_fighter: str) -&gt; str:
+    """Map a track-slot corner to a PERSON by applying corner_swap spans.
+
+    Only call this where a person is required — i.e. comparing against a
+    different fight's fight_events.fighter_id. Never for the label-&gt;keypoint
+    join, which must stay on the raw slot (see this class's corner_swaps
+    docstring).
+    """
+    if any(s.contains(frame) for s in self.corner_swaps):
+        return "blue" if slot_fighter == "red" else "red"
+    return slot_fighter
+```
+
+and a new keyword-only parameter on `score_strikes`, defaulted off so the single-video and `agreement` paths are untouched:
+
+```python
+def score_strikes(labels, preds, tolerance_secs=DEFAULT_TOLERANCE_SECS,
+                  strict_fighter=False, *, resolve_corner_swaps: bool = False) -&gt; StrikeScore:
+```
+
+with the comparison at `score.py:236-237` becoming
+
+```python
+gt_fighter = labels.resolved_fighter(g.frame, g.fighter) if resolve_corner_swaps else g.fighter
+if gt_fighter == "unknown" or p.fighter == "unknown":
+    pass                       # no attribution claim on either side — not a miss
+else:
+    out.fighter_total += 1
+    if gt_fighter == p.fighter:
+        out.fighter_correct += 1
+```
+
+and the same substitution inside `_match_strikes` when `strict_fighter=True`. Rename the reported figure when `resolve_corner_swaps=True`: it is **corner attribution**, not the circular "read-back", and the `format_report` caveat at lines 393-395 must be swapped for one that says so.
+
+---
+
+## 4. Guard rails
+
+Mirror `sanity.Check`'s shape for house consistency:
+
+```python
+@dataclass
+class Guard:
+    name: str
+    passed: bool
+    blocking: bool
+    detail: str
+
+def check_fixture(reference_fight_id: int, run_fight_id: int,
+                  labels: FightLabels, preds: Predictions) -&gt; list[Guard]:
+```
+
+### Blocking — refuse to produce any number
+
+| Guard | Check | 60 vs 62 |
+|---|---|---|
+| `reference is labelled` | `fights.labeled_at IS NOT NULL` (reuse `labels_db.NotLabeled`'s message) | ✓ |
+| `run is an AI run` | `fights.purpose = 'ai_labeled'` — a `--skip-events` fight has 0 strikes by construction and would read F1 0% | ✓ |
+| `run completed` | `fights.state = 'completed'` — a partial run's missing strikes are not false negatives | ✓ |
+| `distinct fights` | `reference_fight_id != run_fight_id` — the "⚠ Both" disaster | ✓ |
+| `same fps` | `reference.fps == run.fps`. **`score.py:348-350` currently only `print`s a warning here and carries on using the label fps.** Cross-fight that must become a refusal: the tolerance window, `scored_minutes`, dwell and transitions/min all silently rescale | 50 = 50 ✓ |
+| `same footage` | `reported_frames`, `decoded_frames`, `MAX(fighter_frames.frame)` and on-disk file size all equal | 43100/43100, 43067, 612577927 ✓ |
+| `run has predictions` | `len(preds.strikes) &gt; 0`. **This is the guard that would have caught blocker #1** — today it reads 0.0 F1 with no complaint. The message must name both candidate causes: "the loader is broken, or this fight was processed with `--skip-events`" | 147 ✓ |
+| `reference has labels` | `len(labels.strikes) &gt; 0` | 227 ✓ |
+
+On "same footage": these are *consistency* checks, not proof — a re-encode can preserve all four. The honest long-term fix is a content hash (first 8 MB + last 8 MB + size is ~50 ms and effectively conclusive). Propose `fights.video_sha256_head` as a follow-up; say plainly in the report that today's check is a proxy.
+
+### Warning — score, but annotate the report
+
+| Guard | Check | 60 vs 62 |
+|---|---|---|
+| `same corner mapping` | `reference.red_fighter_id == run.red_fighter_id` and blue likewise. If these differ, every attribution number is meaningless → **blocks the attribution sub-metric only**, not detection | 15/16 = 15/16 ✓ |
+| `rounds agree` | `preds.rounds` vs `labels.rounds` — predictions outside a labelled round are *dropped*, not counted FP (`score.py:219-221`), so a round disagreement silently shrinks the denominator | identical ✓ |
+| `round spans not seeded` | label `round` spans differ from the `rounds` row | **FAILS** — identical, so round IoU is circular |
+| `segmentation reviewed` | `NOT reference.segmentation_needs_review` | check at run time |
+| `pinned tolerance` | `tolerance_secs == DEFAULT_TOLERANCE_SECS` (reuse `cli._resolve_tolerance`'s warning) | ✓ |
+
+### Unmeasurable sub-metrics — a typed reason, never a zero
+
+Add `not_measured: Optional[str]` to `StateScore` and `seeded: bool` to `RoundScore`, and have the `Optional[float]` accessors stay `None`:
+
+```python
+def score_state(labels, preds) -&gt; StateScore:
+    if not getattr(preds, "state_changes", None):
+        return StateScore(not_measured=
+            "the pipeline emitted no state transitions, so every frame would be "
+            "scored against Predictions.initial_state's STRIKING seed — a "
+            "constructor default, not a prediction. On fight 60 vs 62 that "
+            "reads 98.8% (26659 of 26977 scored frames are labelled STRIKING) "
+            "for a pipeline that made no state claim at all.")
+    if not labels.states:
+        return StateScore(not_measured="no state marks labelled on the reference fight")
+    ...
+```
+
+The full "not a number" set for the 60/62 pair as it stands today:
+
+- **fight state** → `not_measured` (zero prediction transitions). Without this guard: a fake 98.8%.
+- **landed vs missed** → `None` already (`score.py:254`); all 233 label rows have `success IS NULL`. Permanent, by design of the labelling taxonomy.
+- **round IoU** → `seeded=True`, render "Seeded — not verified", no number.
+- **corner attribution** → `None` if the `same corner mapping` guard fails, `None` if `fighter_total == 0`.
+- **family / target accuracy** → already `None` when the denominator is 0 (`score.py:90-91`).
+
+The API renders every one of these through a single shape so the frontend can never accidentally coerce:
+
+```python
+class Measure(BaseModel):
+    value: Optional[float] = None
+    n: Optional[int] = None
+    status: str        # measured | not_measured | not_scorable | unverified | circular | seeded
+    reason: Optional[str] = None
+```
+
+---
+
+## 5. API surface
+
+New files, following existing conventions exactly (`APIRouter()` at module level, service functions wrapping `run_db_query`, SQLAlchemy model + Pydantic Response in one `app/models/*.py`, `ConfigDict(from_attributes=True)`):
+
+- `backend/app/api/routes/lab.py` — registered in `app/main.py` as `app.include_router(lab_router, prefix="/lab")`
+- `backend/app/services/eval_service.py` — `eval_runs` reads
+- `backend/app/services/lab_stats_service.py` — the live SQL aggregates
+- `backend/app/models/eval_run.py` — `EvalRun` (SQLAlchemy) + `EvalRunSummary` / `EvalRunDetail` / `Measure` / `Provenance` / `GuardResult`
+- `backend/app/models/lab.py` — the aggregate response models
+
+### The live-vs-cached boundary
+
+**The backend must never import `ai/eval`.** It runs in a separate venv (`pipeline_runner.AI_PYTHON`), and `score.py` pulls numpy + scipy, `corner_accuracy.py` pulls cv2, and everything under `eval/` imports `ai/database.py`'s own `SessionLocal`. `pipeline_runner.py` already establishes the boundary: cross-venv work is a subprocess that writes JSON.
+
+That draws the line cleanly:
+
+- **Live SQL** — anything expressible over `fights` / `fight_events` / `rounds` / `fighter_frames`: sections A, B, C, D, G2 and the tolerance ceiling in G1.
+- **Cached (`eval_runs` JSONB)** — anything that needs `ai/eval` code to run: score (E), sanity (F1), corner accuracy (F2), agreement ceiling and swap recall (G1).
+
+Every live query must carry an explicit `source`/`kind` filter — `backend/CLAUDE.md`'s standing rule for `fight_events`, and the one most likely to be broken by a new aggregate.
+
+### Routes
+
+| Route | Brief | Query params | Source |
+|---|---|---|---|
+| `GET /lab/summary` | §6 A | `fight_ids`, `since` | **live** |
+| `GET /lab/labels/aggregate` | §7 B1–B3 | `fight_ids`, `group_by` = `action`\|`family`\|`fight` | **live** |
+| `GET /lab/labels/activity` | §7 B4 | `days=30` | **live** |
+| `GET /lab/spans` | §8 C1–C3 | `fight_id` | **live** |
+| `GET /lab/fights/{fight_id}/coverage` | §8 C4 | `bucket_seconds=10` | **live** |
+| `GET /lab/ledger` | §9 D | — | **live** + join `eval_runs` |
+| `GET /lab/runs` | §10 E2 | `reference_fight_id`, `tolerance_secs` | **cached** |
+| `GET /lab/runs/{run_id}` | §10 E1,E3–E7 | — | **cached** |
+| `GET /lab/runs/{run_id}/examples` | §10 E9 | `limit=8`, `kind` = `missed`\|`spurious` | **cached** |
+| `GET /lab/trend` | §10 E8 | `reference_fight_id`, `tolerance_secs=0.25` | **cached** |
+| `GET /lab/sanity` | §11 F1 | `fight_id` | **cached** |
+| `GET /lab/corner-accuracy` | §11 F2 | `fight_id` | **cached** |
+| `GET /lab/quality` | §12 G1 | — | mixed |
+| `GET /lab/queue` | §12 G2 | `severity` | **live**, derived |
+| `GET /lab/taxonomy` | §13 drawer | — | constant |
+
+### Load-bearing response shapes
+
+`GET /lab/runs/{run_id}` — the section-E payload. Note that every derived percentage is a `Measure`, never a bare float:
+
+```python
+class GuardResult(BaseModel):
+    name: str
+    passed: bool
+    blocking: bool
+    detail: str
+
+class Provenance(BaseModel):
+    run_fight_id: int
+    run_video: str
+    reference_fight_id: Optional[int]
+    reference_video: Optional[str]
+    git_sha: Optional[str]
+    git_dirty: bool
+    constants_sha256: Optional[str]
+    scorer_git_sha: Optional[str]
+    tolerance_secs: Optional[float]
+    tolerance_frames: Optional[int]
+    strict_fighter: bool
+    scored_at: Optional[datetime]
+    label: Optional[str]
+    scored_minutes: Optional[float]
+
+class DetectionScore(BaseModel):
+    tp: int; fp: int; fn: int
+    ground_truth: int; predicted: int
+    precision: float; recall: float; f1: float
+    offset_bias_frames: Optional[float]      # median signed — systematic lag
+    offset_jitter_frames: Optional[float]    # median absolute — spread
+
+class StateBlock(BaseModel):
+    per_frame_accuracy: Measure
+    gt_transitions_per_min: Optional[float]
+    pred_transitions_per_min: Optional[float]
+    gt_median_dwell_secs: Optional[float]
+    pred_median_dwell_secs: Optional[float]
+    confusion: List[ConfusionCell]
+    flapping: bool
+
+class RoundBlock(BaseModel):
+    gt_count: int
+    pred_count: int
+    count_correct: bool
+    seeded: bool                             # spans identical to the `rounds` row
+    per_round: List[RoundMatch]              # mean_iou omitted entirely when seeded
+
+class EvalRunDetail(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    provenance: Provenance
+    guards: List[GuardResult]
+    scorable: bool                           # no blocking guard failed
+    not_scorable_reason: Optional[str]       # eval_runs.last_error
+    detection: Optional[DetectionScore]
+    corner_attribution: Measure              # circular=False cross-fight — new name
+    family: Measure
+    target: Measure
+    landed: Measure                          # always status="not_measured" today
+    nonspecific_matches: int
+    family_confusion: List[ConfusionCell]
+    matched_offsets: List[int]               # E5 dot strip
+    state: StateBlock
+    rounds: RoundBlock
+    human_ceiling: Measure
+```
+
+`GET /lab/trend` — the comparability guard lives in the response, not in the chart:
+
+```python
+class TrendPoint(BaseModel):
+    run_id: int
+    run_fight_id: int
+    git_sha: Optional[str]
+    git_dirty: bool
+    constants_changed: bool        # constants_sha256 != previous point's
+    label: Optional[str]
+    scored_at: datetime
+    f1: float; precision: float; recall: float
+
+class TrendBreak(BaseModel):
+    after_run_id: int
+    reason: str                    # "tolerance changed 0.25s -&gt; 0.18s" | "reference fixture changed"
+
+class TrendSeries(BaseModel):
+    reference_fight_id: int
+    tolerance_secs: float
+    points: List[TrendPoint]
+    breaks: List[TrendBreak]
+    excluded: List[ExcludedRun]    # scored at another tolerance/reference, with the reason
+    human_ceiling: Measure
+```
+
+The endpoint filters `WHERE reference_fight_id = :r AND tolerance_secs = :t AND strict_fighter = false AND score_report IS NOT NULL`, and returns everything it *excluded* with a reason. Brief §3.8 ("numbers are only comparable at the same tolerance and on the same fixture set") is then enforced server-side rather than trusted to the chart component.
+
+`GET /lab/ledger` — one row per fight, joining `fights` to its `eval_runs` row:
+
+```python
+class LedgerRow(BaseModel):
+    fight_id: int; video_path: str; fps: int
+    red_fighter_name: Optional[str]; blue_fighter_name: Optional[str]
+    purpose: str; state: str; labeled_at: Optional[datetime]
+    track: str                       # "AI" | "Manual" — derived from purpose
+    role: str                        # training | reference | ai_labeled | unlabelled | conflict
+    lifecycle: LifecycleDots         # processed/labelling/finished/exported/scored
+    exported: bool; export_stale: bool
+    round_minutes: Optional[float]
+    strikes: int; strikes_per_min: Optional[float]
+    state_marks: int
+    swaps: SwapCoverage              # {count, seconds, share_of_round_time, lower_bound: true}
+    excluded: int; open_spans: int
+    segmentation_needs_review: bool; segmentation_review_reason: Optional[str]
+    video_on_disk: bool
+    reported_frames: Optional[int]; decoded_frames: Optional[int]
+    sanity: Optional[SanityScore]
+    corner_check: Measure
+    strike_f1: Measure
+    warnings: List[str]
+```
+
+`role = "conflict"` when the same source footage appears under both a `reference`/`training_data` fight and an `ai_labeled` one *without* an `eval_runs` row pairing them — i.e. the brief's critical `⚠ Both`. With the pairing row present it's the intended fixture setup, not a conflict. That distinction is only expressible because the table exists.
+
+`GET /lab/spans` — all live SQL, all already verified against this DB:
+
+- **C1 rounds confirmed:** `FULL OUTER JOIN` `fight_events (source='label', kind='round')` against `rounds` on `fight_id`; `frame = start_frame AND end_frame = end_frame` → `seeded`, else `adjusted`. Fight 60 returns 3 seeded, 0 adjusted.
+- **C2 corner swaps:** `SUM(end_frame - frame + 1)` over `kind='corner_swap'`, divided by the round-frame total. Always tagged `lower_bound: true` until swap recall is measured. Fight 60: 14 spans, 11443 of 27003 round frames = **≥42.4%**.
+- **C3 excluded:** `kind='excluded'`, `value` as the reason chip. Fight 60: 1 span (`post fight_end`, 18 frames).
+- **Open spans:** `end_frame IS NULL AND kind &lt;&gt; 'point'` — the "export will skip it" warning.
+
+### The one duplication I can't remove
+
+The Lab's "trains as" column (§13, §B1) needs `LABEL_FAMILY_MAP`, which lives in `ai/eval/labels_db.py:40-56`, and `PIPELINE_ACTION_MAP` from `ai/eval/schema.py:60-77`. The backend can't import either. Options are (i) a backend copy, (ii) a generated JSON file, (iii) shelling out to the AI venv per request.
+
+Recommend (i) — a backend copy in `app/models/label_taxonomy.py` served by `GET /lab/taxonomy` — **plus** a `python -m eval.cli check-taxonomy` subcommand that fetches that endpoint and diffs against the ai-side maps, failing non-zero on drift. It's a real duplication with a real failure mode (a new palette action appears in Annotate, the Lab silently shows it as untrained); naming the guard is better than pretending the copy is free.
+
+---
+
+## 6. Ordering — shortest path to a real F1 on 60 vs 62
+
+**Phase 1 — the number. Four files, no migration, no backend, no frontend.**
+
+1. `ai/eval/predictions.py` — §2. `lookup_fight` returns `red_fighter_id`; action-driven strike branch; delete both regexes; add `load_predictions_for_fight`. **Nothing below produces a non-zero number without this.** ~40 lines.
+2. `ai/eval/labels_db.py` — extract `build_labels_for_fight(fight_id)`; move the `NotLabeled` check out to the guard list. ~15 lines.
+3. `ai/eval/schema.py` — `FightLabels.resolved_fighter()`; `StateScore` is in score.py so nothing else here. ~8 lines.
+4. `ai/eval/score.py` — `Guard`, `check_fixture`, `score_fixture`, the four defaulted `Report` fields, `StateScore.not_measured`, `RoundScore.seeded`, `resolve_corner_swaps` on `score_strikes`, and turn the fps mismatch at line 348 into a blocking guard. ~120 lines.
+5. `ai/eval/cli.py` — `score-fixture --reference 60 --run 62 [--json PATH] [--examples N]`, reusing `_resolve_tolerance` and `_print_agreement_ceiling`. ~35 lines.
+
+Then `python -m eval.cli score-fixture --reference 60 --run 62`. Expect F1 in the 40–60% band, hard-capped at 78.6% by the 147/227 recall ceiling; state reported as *not measured*; rounds as *seeded*; landed as *not measured*. **Stop here and read the number** — it decides whether the rest is worth building.
+
+**Phase 2 — persistence.** Migration `f1b2c3d4e5a6` + `eval_runs`, `--persist` on `score-fixture`, an `eval.cli pair` subcommand, and `git_dirty` in `report_io._git_sha()`. Hand-insert the 62↔60 row.
+
+**Phase 3 — the missing `--json` flags.** `corner_accuracy.py` and `corner-swap-recall` (your blocker #4), both writing through `report_io._envelope` so they carry the same provenance fields, and both landing in `eval_runs.corner_report`. Add a `sanity --persist` so `sanity_report` fills too. Add the new subcommands' markers to `pipeline_runner._AI_ENTRYPOINTS` if the backend is ever going to spawn them.
+
+**Phase 4 — the API.** Live routes first (`/lab/summary`, `/lab/labels/aggregate`, `/lab/spans`, `/lab/ledger`) — they work today against real data with no `eval_runs` row at all, and they're what the brief's §E0 "not measurable yet" state needs to point at. Then the cached routes (`/lab/runs`, `/lab/trend`, `/lab/sanity`, `/lab/corner-accuracy`).
+
+**Phase 5 —** the React page (someone else's spec).
+
+One sequencing note worth flagging to whoever picks this up: Phase 1's `score_fixture` will produce a *correct* F1 but a *provisional* corner-attribution number, because the 42% swap coverage on fight 60 means that figure is unusually sensitive to whether the labeller's span edges are right. The brief's §G1 swap-recall run (Phase 3) is what turns that from "probably fine" into a measured claim. Until then, report corner attribution with its own caveat, not the detection F1's.
+
+---
+
+### Critical files for implementation
+
+- `/Users/filip.culig/Developer/fight-ai/ai/eval/predictions.py`
+- `/Users/filip.culig/Developer/fight-ai/ai/eval/score.py`
+- `/Users/filip.culig/Developer/fight-ai/ai/eval/labels_db.py`
+- `/Users/filip.culig/Developer/fight-ai/ai/eval/cli.py`
+- `/Users/filip.culig/Developer/fight-ai/db/alembic/versions/f0a1b2c3d4e5_relax_fight_events_description_requirement.py` (current head — the new `f1b2c3d4e5a6_create_eval_runs_table.py` chains off it, and it is the migration that caused blocker #1)</result>
+<usage><subagent_tokens>203797</subagent_tokens><tool_uses>52</tool_uses><duration_ms>773104</duration_ms></usage>
+</task-notification>
