@@ -1,0 +1,7 @@
+<task-notification>
+<task-id>bdve4d80j</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/ccc3d997-402b-4036-a586-3cd013fd7d24/tasks/bdve4d80j.output</output-file>
+<status>completed</status>
+<summary>Background command "until ! kill -0 52715 2&gt;/dev/null; do sleep 5; done; echo "PIPELINE DONE"; tail -40 /tmp/pipeline_run3.log" completed (exit code 0)</summary>
+</task-notification>
