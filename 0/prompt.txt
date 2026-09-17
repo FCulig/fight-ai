@@ -1,0 +1,3 @@
+for round truncation, should we also use the same approach with the span until the start of the first round as well and between the rounds?
+
+#3 In MMA statistics, they dont cound specific ground and pound strikes as separate punches, becasuse they are in between bascially swinging and mix of everything from every angle. We should have them as ground and pound and separate it from ground strikes
