@@ -1,0 +1,1 @@
+I am running the pipeline to validate the result, while the pipeline is running, lets discuss potential steps to improve this even further. What can/should be done?
