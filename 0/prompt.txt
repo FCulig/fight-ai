@@ -1,0 +1,17 @@
+I have now reference fight, fight 60 and the fight that went through the first version of the pipeline (62). I will be uploading the same fight for all versions of the pipeline to evaluate the accuracy of the pipeline. Later down the line I will be implementing a dashboard where this accuracy could be tracked/displayed.
+
+Use the claude_design MCP (https://api.anthropic.com/v1/design/mcp, auth via /design-login) to import this project:
+https://claude.ai/design/p/f026815c-9df4-4f33-afd8-2546cd99c220?file=Training+Lab.html
+
+Focus on these files (the whole project is readable):
+- `Training Lab.html`
+
+Also read these files the selection imports:
+- `assets/brand.css`
+- `assets/lab-accuracy.jsx`
+- `assets/lab-app.jsx`
+- `assets/lab-data.js`
+- `assets/lab-parts.jsx`
+- `assets/lab-sections.jsx`
+
+Take a look at this design to extract what will be used on that page. I you see improvements on which data should be displayed, suggest them.
