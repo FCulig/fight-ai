@@ -1,0 +1,1 @@
+what if we setup a system where BE is always live, but video processing is only handled when I decide to turn on my laptop? users upload videos and wait for them to be processed
