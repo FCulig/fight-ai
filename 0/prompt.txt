@@ -1,0 +1,5 @@
+Analyze fighter tracking phase. Currently fighter tracking is not up to desired standards. Bounding boxes around fighters are sometimes too big or too small, in clinch everything gets messed up, fighter identites get messed up. What improvements could I make in this part of the pipeline?
+
+Consider all possible options. This is a crucial part of the pipeline for me now, because I want to use manual labeling feature to train AI to recognize punches kicks and etc. But without reliable fighter tracking I cannot train anything.
+
+For now all possible solutions you find explain shortly and simply.
