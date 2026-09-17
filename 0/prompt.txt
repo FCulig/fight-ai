@@ -1,0 +1,1 @@
+Should I annotate a same video I used as a baseline for evaluating accross? Or should I use a new one?
