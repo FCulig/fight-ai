@@ -1,0 +1,1 @@
+Also one more improvement would be when holding shift, it should adjust naming of strikes to for example (jab to the body)
