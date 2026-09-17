@@ -1,0 +1,1 @@
+Currently when annotating a fight I noticed that rectangles around fighters are not good enough. Especially when fighters are in the clinch or grappling, bounding boxes are all over the place. What are my options to improve that?
