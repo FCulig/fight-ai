@@ -1,0 +1,1 @@
+After fight is marked as done in the timeline, round rectangle in the timeline is still the whole width of the timeline. Same as for the fight state. Fight end marker should be the last element (horizontally)
