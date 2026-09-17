@@ -1,0 +1,1 @@
+Lets ignore this for now. But I would like to manually label a fight for testing the accuracy of the pipeline. I would need to choose a new fight for this. What do you recommend, what kind of a fight should I choose?
