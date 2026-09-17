@@ -1,0 +1,1 @@
+Also in the event playback I want only fighter throwing a punch to be highlighted. For example currently if blue throws a punch there is a blue rectangle and skeleton and red skeleton. It would be easier for users to notice who throws a punch if that one is highlighted.
