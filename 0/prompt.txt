@@ -1,0 +1,158 @@
+I uploaded a fight for manual labeling and in the scoreboard phase I got this error:
+[11:24:46] [smoothing] frame=51500  round corrected None → 3
+[11:24:46] [smoothing] frame=53200  round corrected None → 3
+[11:24:46] [smoothing] frame=53225  round corrected None → 3
+[11:24:46] [smoothing] Round 1: timer direction=down  (280 dec, 0 inc)
+[11:24:46] [smoothing] Round 2: timer direction=down  (206 dec, 0 inc)
+[11:24:46] [smoothing] Round 3: timer direction=down  (279 dec, 0 inc)
+[11:24:52] [extraction] Timer plot → runs/scoreboard_overlay/timer_plot.png
+OCR: 2410 samples extracted
+[11:24:52] [segmentation] Video fps: 50.00
+[11:24:52] [segmentation] Loaded 2410 OCR samples
+[11:24:52] [segmentation] OCR index: 2410 entries  hard boundaries: 2  replay ranges: 0
+[11:24:52] [segmentation] frame=512  FIGHT START (back-dated to 263)
+[11:24:52] [segmentation] frame=16856  ROUND SPLIT: 263–15857
+[11:24:52] [segmentation] frame=18161  FIGHT END
+[11:24:52] [segmentation] frame=20387  FIGHT START (back-dated to 20138)
+[11:24:52] [segmentation] frame=35632  ROUND SPLIT: 20138–34633
+[11:24:52] [segmentation] frame=36937  FIGHT END
+[11:24:52] [segmentation] frame=39012  FIGHT START (back-dated to 38763)
+[11:24:52] [segmentation] frame=54326  ROUND SPLIT: 38763–53327
+[11:24:52] [segmentation] frame=55631  FIGHT END
+[11:24:52] [segmentation] Snap round 2 start 20138 → 20175 (OCR transition)
+[11:24:52] [segmentation] Snap round 3 start 38763 → 38800 (OCR transition)
+[11:24:52] [round_clock] 1631 timer readings, clock counts down
+[11:24:52] [round_clock] Round 1: frames 1200–16200 (300.0s of a 300s round)  support=549  start_anchored=True  end_anchored=True  numbered=True
+[11:24:52] [round_clock] Round 2: frames 19988–34988 (300.0s of a 300s round)  support=534  start_anchored=True  end_anchored=True  numbered=True
+[11:24:52] [round_clock] Round 3: frames 38625–53625 (300.0s of a 300s round)  support=548  start_anchored=True  end_anchored=True  numbered=True
+[11:24:52] [segmentation] Clock is authoritative: 3 round(s) (detection had 3)
+[11:24:52] [segmentation] Result: 3 round(s)  source=clock  valid=True  needs_review=False  OK
+[11:24:52] [segmentation] Signal series CSV → runs/segmentation_debug/signal_series.csv
+[11:24:53] [segmentation] Timeline plot → runs/segmentation_debug/timeline.png
+
+Segmentation result:
+  Rounds : [(1200, 16200), (19988, 34988), (38625, 53625)]
+  Source : clock  (timer coverage 68%, round coverage 64%)
+  Excluded (replays): []
+  Quality: {'is_valid': True, 'reason': '', 'needs_review': False, 'review_reason': '', 'metrics': {'total_frames': 60272, 'valid_frame_ratio': 0.6029333687284311, 'round_count': 3, 'total_fight_duration_frames': 45003, 'total_fight_duration_secs': 900.06, 'ocr_samples_used': 2410, 'ocr_timer_coverage': 0.677, 'ocr_round_coverage': 0.641, 'clock_rounds_found': 3, 'segmentation_source': 'clock', 'fps': 50, 'needs_review': False, 'review_reason': ''}}
+Writing fighter frames + rounds (event detection skipped) …
+Traceback (most recent call last):
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 1936, in _exec_single_context
+    self.dialect.do_executemany(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor,
+        ^^^^^^^
+    ...<2 lines>...
+        context,
+        ^^^^^^^^
+    )
+    ^
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/dialects/postgresql/psycopg2.py", line 800, in do_executemany
+    cursor.executemany(statement, parameters)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.InvalidSchemaName: schema "np" does not exist
+LINE 1: ...x2, y2, confidence, keypoints) VALUES (50, 26, 0, np.float64...
+                                                             ^
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/filip.culig/Developer/fight-ai/ai/main.py", line 142, in <module>
+    main()
+    ~~~~^^
+  File "/Users/filip.culig/Developer/fight-ai/ai/main.py", line 122, in main
+    run_pipeline(
+    ~~~~~~~~~~~~^
+        args.video_input,
+        ^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+        debug_level        = args.debug_level,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/filip.culig/Developer/fight-ai/ai/pipeline.py", line 475, in run_pipeline
+    write_frames_and_rounds(pose_data, fight_id=fight_id, fps=fps, rounds=rounds)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/filip.culig/Developer/fight-ai/ai/fight_processing/fight_processing.py", line 235, in write_frames_and_rounds
+    _flush_frame_batch(db, frame_batch)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/filip.culig/Developer/fight-ai/ai/fight_processing/fight_processing.py", line 155, in _flush_frame_batch
+    db.execute(
+    ~~~~~~~~~~^
+        text(
+        ^^^^^
+    ...<5 lines>...
+        batch,
+        ^^^^^^
+    )
+    ^
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/orm/session.py", line 2351, in execute
+    return self._execute_internal(
+           ~~~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+    ...<4 lines>...
+        _add_event=_add_event,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/orm/session.py", line 2258, in _execute_internal
+    result = conn.execute(
+        statement, params or {}, execution_options=execution_options
+    )
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+    return meth(
+        self,
+        distilled_parameters,
+        execution_options or NO_OPTIONS,
+    )
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/sql/elements.py", line 527, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self, distilled_params, execution_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+        dialect,
+    ...<8 lines>...
+        cache_hit=cache_hit,
+    )
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        dialect, context, statement, parameters
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        e, str_statement, effective_parameters, cursor, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/engine/base.py", line 1936, in _exec_single_context
+    self.dialect.do_executemany(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor,
+        ^^^^^^^
+    ...<2 lines>...
+        context,
+        ^^^^^^^^
+    )
+    ^
+  File "/Users/filip.culig/Developer/fight-ai/.venv/lib/python3.14/site-packages/sqlalchemy/dialects/postgresql/psycopg2.py", line 800, in do_executemany
+    cursor.executemany(statement, parameters)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.InvalidSchemaName) schema "np" does not exist
+LINE 1: ...x2, y2, confidence, keypoints) VALUES (50, 26, 0, np.float64...
+                                                             ^
+
+[SQL: INSERT INTO fighter_frames (fight_id, frame, corner, x1, y1, x2, y2, confidence, keypoints) VALUES (%(fight_id)s, %(frame)s, %(corner)s, %(x1)s, %(y1)s, %(x2)s, %(y2)s, %(confidence)s, CAST(%(keypoints)s AS JSONB))]
+[parameters: [{'fight_id': 50, 'frame': 26, 'corner': 0, 'x1': np.float64(38.0973341386393), 'y1': np.float64(504.61668647514614), 'x2': np.float64(509.26093988104185), 'y2': np.float64(720.0264054183125), 'confidence': 0.3066200017929077, 'keypoints': '[[202.4071807861328, 539.3086547851562, 0.0016798401484265924], [222.8809051513672, 525.518310546875, 0.002039026701822877], [182.0147247314453, 524. ... (683 characters truncated) ... 35156, 712.8746337890625, 0.002434984315186739], [278.656494140625, 720.0, 0.0018785371212288737], [165.2764434814453, 720.0, 0.0011314813746139407]]'}, {'fight_id': 50, 'frame': 27, 'corner': 0, 'x1': np.float64(-17.03045939351216), 'y1': np.float64(493.6405109782797), 'x2': np.float64(452.46521180540657), 'y2': np.float64(719.1462281614872), 'confidence': 0.44421088695526123, 'keypoints': '[[206.15606689453125, 503.25323486328125, 0.001702944515272975], [226.64556884765625, 488.93914794921875, 0.0019086393294855952], [185.7227783203125, ... (703 characters truncated) ... 39062, 713.7059326171875, 0.0018596788868308067], [280.6396484375, 720.0, 0.0013244061265140772], [175.40049743652344, 720.0, 0.0007863995851948857]]'}, {'fight_id': 50, 'frame': 28, 'corner': 1, 'x1': np.float64(0.6756082052712031), 'y1': np.float64(470.83841478955645), 'x2': np.float64(470.645490038526), 'y2': np.float64(720.0000000000005), 'confidence': 0.40462687611579895, 'keypoints': '[[207.42405700683594, 473.10980224609375, 0.001302319928072393], [227.20387268066406, 457.3603515625, 0.0018285616533830762], [186.5996856689453, 456 ... (701 characters truncated) ... 5547, 709.6686401367188, 0.001917425892315805], [280.601318359375, 720.0, 0.0014847477432340384], [181.35836791992188, 720.0, 0.0008467830484732985]]'}, {'fight_id': 50, 'frame': 28, 'corner': 0, 'x1': np.float64(-47.37520337938466), 'y1': np.float64(479.65487079448894), 'x2': np.float64(420.5130945714442), 'y2': np.float64(718.4198046826225), 'confidence': 0.25303924083709717, 'keypoints': 'null'}, {'fight_id': 50, 'frame': 29, 'corner': 1, 'x1': np.float64(0.6783806098685545), 'y1': np.float64(443.8466209998501), 'x2': np.float64(470.3815820714931), 'y2': np.float64(720.0000000000005), 'confidence': 0.6038499474525452, 'keypoints': '[[205.25003051757812, 442.27325439453125, 0.0018919024150818586], [225.850830078125, 425.08428955078125, 0.0017746640369296074], [183.76199340820312, ... (685 characters truncated) ... 438, 715.1221923828125, 0.0018320505041629076], [279.0898132324219, 720.0, 0.0015620087506249547], [183.8126983642578, 720.0, 0.0008231840329244733]]'}, {'fight_id': 50, 'frame': 29, 'corner': 0, 'x1': np.float64(-52.93689781897825), 'y1': np.float64(462.65976592377376), 'x2': np.float64(413.40458817915487), 'y2': np.float64(717.8471349817179), 'confidence': 0.502529501914978, 'keypoints': 'null'}, {'fight_id': 50, 'frame': 30, 'corner': 1, 'x1': np.float64(0.7016610098884541), 'y1': np.float64(416.4465544526277), 'x2': np.float64(470.15676306725516), 'y2': np.float64(720.0000000000005), 'confidence': 0.8027122020721436, 'keypoints': '[[206.1854248046875, 410.3304748535156, 0.0033025979064404964], [226.92041015625, 393.08575439453125, 0.002336270408704877], [185.67327880859375, 392 ... (697 characters truncated) ... 1562, 715.297607421875, 0.0016836347058415413], [280.6242980957031, 720.0, 0.0009540027822367847], [184.86814880371094, 720.0, 0.000729457417037338]]'}, {'fight_id': 50, 'frame': 30, 'corner': 0, 'x1': np.float64(-33.715542712292944), 'y1': np.float64(442.65519636613413), 'x2': np.float64(431.13969262853846), 'y2': np.float64(717.4282190587737), 'confidence': 0.4960467517375946, 'keypoints': 'null'}  ... displaying 10 of 1000 total bound parameter sets ...  {'fight_id': 50, 'frame': 526, 'corner': 0, 'x1': np.float64(825.6429923531044), 'y1': np.float64(71.4132694697879), 'x2': np.float64(1276.102017702754), 'y2': np.float64(719.7305810034679), 'confidence': 0.8516438007354736, 'keypoints': '[[956.5258178710938, 203.0166015625, 0.9899494647979736], [990.0100708007812, 176.31060791015625, 0.9981766939163208], [959.9534301757812, 176.389282 ... (677 characters truncated) ... 937.988037109375, 720.0, 0.0019104020902886987], [1103.34521484375, 720.0, 0.0011232310207560658], [980.3570556640625, 720.0, 0.0016577966744080186]]'}, {'fight_id': 50, 'frame': 526, 'corner': 1, 'x1': np.float64(-0.01861785675262695), 'y1': np.float64(78.83427397187756), 'x2': np.float64(435.37752677010417), 'y2': np.float64(649.4318930885997), 'confidence': 0.7899239659309387, 'keypoints': '[[287.266845703125, 212.63182067871094, 0.9953125715255737], [288.4488830566406, 188.623046875, 0.6877763271331787], [251.3775177001953, 181.87863159 ... (688 characters truncated) ... 785156, 715.27685546875, 0.002048941794782877], [238.0187225341797, 720.0, 0.001522344653494656], [148.85189819335938, 720.0, 0.0008738042088225484]]'}]]
+(Background on this error at: https://sqlalche.me/e/20/f405)
