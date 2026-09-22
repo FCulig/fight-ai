@@ -1,0 +1,113 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M33VWMQF44DH564VY4B4GT5Z",
+  "session_id": "1d8b388e-d71e-4a1d-9787-c4d65862d283",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-22T06:12:14.561411Z",
+  "branch": "master",
+  "checkpoints_count": 2,
+  "save_step_count": 2,
+  "files_touched": [
+    "ai/CLAUDE.md",
+    "backend/CLAUDE.md",
+    "backend/app/api/routes/fights.py",
+    "backend/app/models/fight_event.py",
+    "backend/app/services/event_service.py",
+    "frontend/CLAUDE.md",
+    "frontend/src/App.tsx",
+    "frontend/src/components/FighterOverlay.tsx",
+    "frontend/src/components/Header.tsx",
+    "frontend/src/components/trainingData/ClipPlayer.tsx",
+    "frontend/src/pages/FightList.tsx",
+    "frontend/src/services/api.ts",
+    "frontend/src/types/Event.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-sonnet-5",
+  "turn_id": "061cdba3f3f7",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 88,
+    "cache_creation_tokens": 239048,
+    "cache_read_tokens": 4309010,
+    "output_tokens": 24752,
+    "api_call_count": 44,
+    "subagent_tokens": {
+      "input_tokens": 90,
+      "cache_creation_tokens": 212380,
+      "cache_read_tokens": 2189840,
+      "output_tokens": 17806,
+      "api_call_count": 45
+    }
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-22T06:12:14.519247Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 28,
+    "human_removed": 498,
+    "total_committed": 169,
+    "total_lines_changed": 526,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 1209,
+      "user_lines_removed": 17,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/settings.json": 90,
+        ".claude/settings.local.json": 29,
+        "ai/CLAUDE.md": 5,
+        "backend/CLAUDE.md": 3,
+        "backend/app/api/routes/fights.py": 9,
+        "backend/app/models/fight_event.py": 11,
+        "backend/app/services/event_service.py": 25,
+        "db/alembic/versions/a4b5c6d7e8f9_add_is_verified_to_fight_events.py": 31,
+        "frontend/CLAUDE.md": 52,
+        "frontend/src/App.tsx": 4,
+        "frontend/src/components/FighterOverlay.tsx": 16,
+        "frontend/src/components/Header.tsx": 1,
+        "frontend/src/components/trainingData/ClassGrid.tsx": 70,
+        "frontend/src/components/trainingData/ClipPlayer.tsx": 199,
+        "frontend/src/components/trainingData/EventReview.tsx": 160,
+        "frontend/src/components/trainingData/EventTable.tsx": 117,
+        "frontend/src/components/trainingData/VerdictBadge.tsx": 28,
+        "frontend/src/hooks/useTrainingDataEvents.ts": 60,
+        "frontend/src/pages/FightList.tsx": 1,
+        "frontend/src/pages/TrainingDataQA.tsx": 215,
+        "frontend/src/services/api.ts": 13,
+        "frontend/src/types/Event.ts": 1,
+        "frontend/src/utils/fightLabel.ts": 9,
+        "frontend/src/utils/trainingDataStats.ts": 27,
+        "frontend/src/utils/trainingDataTaxonomy.ts": 33
+      },
+      "user_removed_per_file": {
+        "ai/CLAUDE.md": 1,
+        "backend/CLAUDE.md": 2,
+        "backend/app/api/routes/fights.py": 1,
+        "frontend/CLAUDE.md": 5,
+        "frontend/src/components/FighterOverlay.tsx": 1,
+        "frontend/src/pages/FightList.tsx": 7
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 119,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1090,
+      "agent_lines_removed": 17,
+      "user_added_per_file": {
+        ".claude/settings.json": 90,
+        ".claude/settings.local.json": 29
+      }
+    }
+  ]
+}

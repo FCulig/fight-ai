@@ -1,0 +1,28 @@
+In the fight QA section, don't dispaly the skeleton of a fighter who is not throwing a punch
+
+---
+
+<task-notification>
+<task-id>a5561643fb65bb673</task-id>
+<tool-use-id>toolu_016tNwQtq4i7YXXXBLZ9NXGe</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/1d8b388e-d71e-4a1d-9787-c4d65862d283/tasks/a5561643fb65bb673.output</output-file>
+<status>completed</status>
+<summary>Agent "Find fight QA section skeleton rendering code" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Findings
+
+**1. Files implementing the QA section**
+The relevant work is on the frontend as currently-uncommitted files (not actually part of commit `34b8f07`, which built `/accuracy` — `PipelineAccuracy.tsx` + `components/accuracy/*` — a separate pipeline-metrics dashboard with no skeleton rendering). The pose-overlay "QA" feature is **Training Data QA**, at `/training-data`:
+- `frontend/src/pages/TrainingDataQA.tsx`
+- `frontend/src/components/trainingData/{ClassGrid,EventTable,EventReview,ClipPlayer,VerdictBadge}.tsx`
+- `frontend/src/hooks/useTrainingDataEvents.ts`
+
+**2. Skeleton/pose rendering**
+`frontend/src/components/trainingData/ClipPlayer.tsx:29,166-176` renders `FighterOverlay` (`frontend/src/components/FighterOverlay.tsx`), passing `frameMap` (both fighters' `FighterFrame[]`, each with 17 COCO keypoints), `highlightCorner={corner}` (the event's `corner`), and `dimUnhighlighted`. `frameMap` always contains **both** fighters' detections per frame — there's no per-fighter filtering upstream.
+
+Data model: `frontend/src/types/Event.ts` — `corner: number | null` (0=red/1=blue, "label-only track-slot… **not a resolved person**") identifies who threw the labeled strike (attacker). `target: string | null` is head/body/leg (body-part target, not a fighter role). There is **no explicit defender/target-fighter field** — the non-`corner` detection in the frame is implicitly the defender.
+
+**3. Exact draw logic**
+`frontend/src/components/FighterOverlay.tsx:109-171` — the `for (const d of detections)` loop draws a skeleton for **every** detection (line 138: `if (drawSkeletons &amp;&amp; d.keypoints...)`), regardless of `highlightCorner`. Line 139 only dims (`globalAlpha = 0.3`) the non-highlighted fighter via `dimUnhighlighted` — it never skips drawing. To restrict to the attacker only, gate the skeleton block (and/or box block, line 116) on `d.corner === highlight`.</result>
+<usage><subagent_tokens>63376</subagent_tokens><tool_uses>14</tool_uses><duration_ms>42225</duration_ms></usage>
+</task-notification>
