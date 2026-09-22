@@ -1,0 +1,1 @@
+When the event was labeled during the corner swap span. I would like to display it swapped in the fight playback. So for example: Corner swap is opened. I label blue throws a jab. That in the video playback (/fights/ID) should be played back as red threw a jab
