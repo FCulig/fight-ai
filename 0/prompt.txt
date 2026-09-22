@@ -1,0 +1,13 @@
+Implement me an ability to edit the manually labeled fights. When entering the fight playback, I should be able to press and edit button which would lead me to the manual labeling page where I can re-label a fight. After pressing finish labeling. Fight should be in the state as it was before I entered the edit mode
+
+---
+
+Okay now when I am on the /training-data/jab/3052. Jab is thrown by the red fighter (because of the corner swap, but it is labeled as a blue corner jab), on the right side of the screen it still says corner: Blue shoot. But in this case during a corner swap it should say red. Also change it to just say red or blue.
+
+---
+
+No in the fight QA, I would like to be able to change the type of a strike. It should be something easy and intuitive. Maybe a dropdown or something, no need for a full editor. After this change. This change should also reflect the labeled fight in the playback.
+
+---
+
+In the fight QA, when video playback loops. At the end before the new loop starts playing, fighter skeleton jumps to another place in the video. This happens for all videos, it wasn't here before the changes you made today
