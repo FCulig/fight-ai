@@ -1,0 +1,49 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M3C9B49Y0CHQQV2EADJKCRVW",
+  "strategy": "manual-commit",
+  "branch": "master",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "ai/CLAUDE.md",
+    "backend/CLAUDE.md",
+    "backend/app/api/routes/fights.py",
+    "backend/app/models/fight_event.py",
+    "backend/app/services/event_service.py",
+    "backend/app/services/fight_service.py",
+    "backend/app/services/fighter_frame_service.py",
+    "frontend/CLAUDE.md",
+    "frontend/src/App.tsx",
+    "frontend/src/components/FighterOverlay.tsx",
+    "frontend/src/components/Header.tsx",
+    "frontend/src/components/trainingData/ClipPlayer.tsx",
+    "frontend/src/components/trainingData/EventReview.tsx",
+    "frontend/src/components/trainingData/EventTable.tsx",
+    "frontend/src/hooks/useFighterFrames.ts",
+    "frontend/src/hooks/useTrainingDataEvents.ts",
+    "frontend/src/pages/Annotate.tsx",
+    "frontend/src/pages/FightList.tsx",
+    "frontend/src/pages/Player.tsx",
+    "frontend/src/pages/TrainingDataQA.tsx",
+    "frontend/src/services/api.ts",
+    "frontend/src/types/Event.ts",
+    "frontend/src/types/Fight.ts",
+    "frontend/src/utils/trainingDataTaxonomy.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 60,
+    "cache_creation_tokens": 356442,
+    "cache_read_tokens": 11187173,
+    "output_tokens": 6893,
+    "api_call_count": 30
+  }
+}

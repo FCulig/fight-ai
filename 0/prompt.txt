@@ -1,0 +1,9 @@
+I am now noticing issues where the skeletons are slow to load, is there a way to improve this?
+
+---
+
+Also, in the labeling QA, I should not see any fight events from the reference fight. Only display fights that are training data.
+
+---
+
+Also from the QA page remove the Labeller field. It is not needed.
