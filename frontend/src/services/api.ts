@@ -71,6 +71,38 @@ export const updateEvent = async (fightId: number, eventId: number, payload: Upd
   return response.json();
 };
 
+export const verifyEvent = async (fightId: number, eventId: number, isVerified: boolean | null): Promise<Event> => {
+  const response = await fetch(`/fights/${fightId}/events/${eventId}/verify`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_verified: isVerified }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail ?? `Failed to verify event: ${response.statusText}`);
+  }
+  return response.json();
+};
+
+export interface ReclassifyEventPayload {
+  action: string;
+  target: string | null;
+  success: boolean | null;
+}
+
+export const reclassifyEvent = async (fightId: number, eventId: number, payload: ReclassifyEventPayload): Promise<Event> => {
+  const response = await fetch(`/fights/${fightId}/events/${eventId}/reclassify`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail ?? `Failed to reclassify event: ${response.statusText}`);
+  }
+  return response.json();
+};
+
 export const deleteEvent = async (fightId: number, eventId: number): Promise<void> => {
   const response = await fetch(`/fights/${fightId}/events/${eventId}`, { method: 'DELETE' });
   if (!response.ok) throw new Error(`Failed to delete event: ${response.statusText}`);
@@ -82,8 +114,20 @@ export const fetchFights = async (): Promise<Fight[]> => {
   return response.json();
 };
 
-export const fetchFighterFrames = async (fightId: number): Promise<FighterFrame[]> => {
-  const response = await fetch(`/fights/${fightId}/frames/`);
+export interface FetchFighterFramesParams {
+  /** 1-based, inclusive — narrows to a window instead of the whole fight
+   * (ClipPlayer's ~0.6s clip). Omit both for Player/Annotate's free-scrub
+   * timeline, which needs the whole fight. */
+  start_frame?: number;
+  end_frame?: number;
+}
+
+export const fetchFighterFrames = async (fightId: number, params?: FetchFighterFramesParams): Promise<FighterFrame[]> => {
+  const query = new URLSearchParams();
+  if (params?.start_frame != null) query.append('start_frame', String(params.start_frame));
+  if (params?.end_frame != null) query.append('end_frame', String(params.end_frame));
+  const qs = query.toString();
+  const response = await fetch(`/fights/${fightId}/frames/${qs ? `?${qs}` : ''}`);
   if (!response.ok) throw new Error(`Failed to fetch fighter frames: ${response.statusText}`);
   return response.json();
 };
@@ -141,6 +185,17 @@ export const finishLabeling = async (fightId: number): Promise<Fight> => {
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(body?.detail ?? `Failed to finish labeling: ${response.statusText}`);
+  }
+  return response.json();
+};
+
+/** labeling_complete → labeling_in_progress, so Annotate re-opens the fight for
+ * editing; finishLabeling() is the way back. */
+export const reopenLabeling = async (fightId: number): Promise<Fight> => {
+  const response = await fetch(`/fights/${fightId}/reopen-labeling`, { method: 'POST' });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail ?? `Failed to reopen labeling: ${response.statusText}`);
   }
   return response.json();
 };

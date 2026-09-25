@@ -7,6 +7,7 @@ const NAV_LINKS = [
   { label: 'Analysis', to: '/' },
   { label: 'Library', to: '/library' },
   { label: 'Accuracy', to: '/accuracy' },
+  { label: 'Data QA', to: '/training-data' },
 ];
 
 export default function Header() {

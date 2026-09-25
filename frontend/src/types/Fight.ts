@@ -107,9 +107,26 @@ export const isInvalid = (state: string): boolean => state === 'invalid';
  * Segmentation could not corroborate its own round list against the scoreboard,
  * so the rounds are a detection-only guess and should be confirmed by hand.
  * The pipeline sets this at segmentation time — see ai/video_processing/
- * fight_segmentation.py `_review_verdict`. Once labeling is complete, every
- * round has a hand-confirmed label-span (finish-labeling requires it), so the
- * guess has already been confirmed and the warning no longer applies.
+ * fight_segmentation.py `_review_verdict`. Once labeling has been finished,
+ * every round has a hand-confirmed label-span (finish-labeling requires it), so
+ * the guess has already been confirmed and the warning no longer applies.
+ * `labeled_at` covers the re-opened case: editing a labelled fight puts it back
+ * in `labeling_in_progress`, but its rounds are still confirmed.
  */
 export const needsRoundReview = (fight: Fight): boolean =>
-  fight.segmentation_needs_review === true && fight.state !== 'labeling_complete';
+  fight.segmentation_needs_review === true
+  && fight.state !== 'labeling_complete'
+  && fight.labeled_at === null;
+
+/**
+ * A hand-labelled fight that has been finished and can be re-opened in
+ * Annotate for editing (POST /fights/{id}/reopen-labeling). `ai_labeled`
+ * fights never reach `labeling_complete`, so the state check alone excludes
+ * them — their events are predictions, which Annotate can't edit.
+ */
+export const isLabelEditable = (fight: Fight): boolean =>
+  fight.state === 'labeling_complete';
+
+/** A previously finished fight that has been re-opened in Annotate for editing. */
+export const isEditingLabels = (fight: Fight): boolean =>
+  fight.state === 'labeling_in_progress' && fight.labeled_at !== null;

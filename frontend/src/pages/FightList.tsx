@@ -9,6 +9,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import type { Fight } from '../types/Fight';
 import FightPurposeBadge from '../components/FightPurposeBadge';
 import { STATE_PROGRESS, STATE_LABELS, TERMINAL_STATES, isFightViewable, isLabelingReady, isInvalid, needsRoundReview } from '../types/Fight';
+import { fightLabel } from '../utils/fightLabel';
 
 function invalidReason(fight: Fight): string {
   if (fight.reported_frames == null || fight.decoded_frames == null) return 'The source video failed to decode.';
@@ -16,13 +17,6 @@ function invalidReason(fight: Fight): string {
   const pct = fight.reported_frames > 0 ? Math.round((missing / fight.reported_frames) * 100) : 0;
   return `Container reports ${fight.reported_frames} frames, only ${fight.decoded_frames} decode `
     + `(${pct}% missing) — the file is an incomplete download.`;
-}
-
-function fightLabel(fight: Fight): string {
-  if (fight.red_fighter_name && fight.blue_fighter_name) {
-    return `${fight.red_fighter_name} vs ${fight.blue_fighter_name}`;
-  }
-  return fight.video_path.split('/').pop()?.replace(/\.[^/.]+$/, '') ?? fight.video_path;
 }
 
 export default function FightList() {

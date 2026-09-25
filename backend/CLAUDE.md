@@ -39,7 +39,8 @@ backend/
 │   │   │                           #   auto-seeds `round`-kind label events from `rounds`
 │   │   │                           #   on first label fetch, and rounds_fully_annotated()
 │   │   ├── fight_service.py        # get_all_fights(), create_fight(), finish_labeling(),
-│   │   │                           #   set_fight_pid()/get_fight_pid(), pid reconciliation
+│   │   │                           #   reopen_labeling(), set_fight_pid()/get_fight_pid(),
+│   │   │                           #   pid reconciliation
 │   │   ├── fighter_service.py      # get_fighters(search), create_fighter(), get_events_by_fighter(), set_fight_corners()
 │   │   ├── fighter_frame_service.py # get_fighter_frames(fight_id)
 │   │   ├── round_service.py        # get_rounds(fight_id)
@@ -61,12 +62,14 @@ backend/
 | GET | `/fights/stream` | SSE stream of `{id, state}` on every state change (snapshot on connect, then live via `pg_notify('fight_state', …)`) |
 | POST | `/fights/upload` | Upload a video (`purpose=training_data\|reference\|ai_labeled`, required); creates the fight row (`state='validating'`) and spawns the full-decode validator, which spawns the pipeline itself on success. `purpose` also picks the track — only `ai_labeled` runs the full pipeline; the two labelling purposes get `skip_events` |
 | GET | `/fights/{fight_id}/rounds/` | Rounds for a fight (`RoundResponse[]`) — AI segmentation output |
-| GET | `/fights/{fight_id}/frames/` | Fighter bounding boxes + keypoints per frame (`FighterFrameResponse[]`) |
+| GET | `/fights/{fight_id}/frames/` | Fighter bounding boxes + keypoints per frame (`FighterFrameResponse[]`); optional `start_frame`/`end_frame` (1-based, inclusive) narrow this to a window — a full fight's keypoints run into the tens of MB (see frontend CLAUDE.md's "Fighter-frame payload size"), so ClipPlayer's ~0.6s review clip passes its own window instead of downloading the whole fight just to draw ~30 frames of it. `ix_fighter_frames_fight_frame` covers `(fight_id, frame)`, so a ranged query stays index-only regardless of fight length |
 | GET | `/fights/{fight_id}/events/` | Every event row for a fight (`FightEventResponse[]`); optional `fighter_id` / `action` / `success` / `kind` / `source` query filters. Pass `source=prediction` for the Player (pipeline output, read-only from here — never written through this route) or `source=label` for Annotate (hand-authored, full CRUD below); a `source=label` fetch also auto-seeds `kind='round'` events from the `rounds` table the first time it's called for a fight |
 | POST | `/fights/{fight_id}/events/` | Create a hand-labelled event or span (`FightEventCreate` → `FightEventResponse`) — always written as `source='label'`; the client cannot request `source='prediction'`. `kind='point'` (default) needs `description` only when `action='fight_end'` — every other point event is reconstructed client-side from `action`/`target`/`corner` (see "Description is reconstructed, not stored" below); `kind` in `round`/`corner_swap`/`excluded` is a span (`frame`=start, `end_frame` nullable = still open) |
 | PUT | `/fights/{fight_id}/events/{event_id}` | Update a span's `frame`/`end_frame`/`value` (`FightEventUpdate`) — 404 if the row doesn't exist, isn't `source='label'`, or is `kind='point'` (point labels are create+delete-only, same as before the merge) |
+| PUT | `/fights/{fight_id}/events/{event_id}/verify` | Training Data QA's write path — sets `is_verified` (`FightEventVerify`, tri-state true/false/null) on a hand-labelled point event. 404 if the row doesn't exist, isn't `source='label'`, or isn't `kind='point'` — the exact opposite scope from the plain `PUT` above |
 | DELETE | `/fights/{fight_id}/events/{event_id}` | Delete a hand-labelled event or span — 404 if the row doesn't exist or isn't `source='label'` (this is the guard that makes it impossible to delete a prediction through this route) |
 | POST | `/fights/{fight_id}/finish-labeling` | `labeling_in_progress → labeling_complete`, sets `labeled_at`; 409 if every detected round doesn't yet have a confirmed `round`-kind label event |
+| POST | `/fights/{fight_id}/reopen-labeling` | The reverse: `labeling_complete → labeling_in_progress`, so Annotate will edit an already-labelled fight; `finish-labeling` is the way back. Leaves `labeled_at` set (the eval code keys on it — clearing it would drop a reference fixture off the Accuracy page mid-edit); `finish-labeling` re-stamps it when the edit is finalised. 409 unless the fight is `labeling_complete` — which also excludes every `ai_labeled` fight, since those end at `completed` |
 | GET | `/fights/{fight_id}/video` | Streams the source video file |
 | DELETE | `/fights/{fight_id}/` | Kill any running pipeline/validator for this fight, delete the video file, then the row (child rows cascade) |
 
@@ -102,10 +105,10 @@ backend/
 ### `RoundResponse`
 `id`, `fight_id`, `round_number`, `start_frame` (1-based), `end_frame` (1-based)
 
-### `FightEventResponse` / `FightEventCreate` / `FightEventUpdate`
+### `FightEventResponse` / `FightEventCreate` / `FightEventUpdate` / `FightEventVerify`
 One row shape covers pipeline predictions, hand-labelled point events, and hand-labelled spans:
 
-`id`, `fight_id`, `source` (`prediction`|`label` — who wrote the row), `kind` (`point`|`round`|`corner_swap`|`excluded` — what shape the row is), `frame` (1-based; the start frame for a range kind), `end_frame` (nullable — null for `kind='point'`; for a range kind, null means a start/end toggle is still open), `description` (nullable — required only for `action='fight_end'`; null for every other row, including every other `kind='point'` row and every range kind), `fighter_id` (nullable, FK to `fighters` — **prediction-only** resolved identity), `corner` (nullable int, 0=red/1=blue — **label-only** track-slot, not a resolved person, null for state marks), `action` (nullable), `target` (nullable — head/body/leg), `success` (nullable bool), `state` (nullable — STRIKING/CLINCH/GROUND on a prediction state-change row), `value` (nullable — range-kind-only: round number, or exclusion reason), `labeler` (nullable), `created_at`.
+`id`, `fight_id`, `source` (`prediction`|`label` — who wrote the row), `kind` (`point`|`round`|`corner_swap`|`excluded` — what shape the row is), `frame` (1-based; the start frame for a range kind), `end_frame` (nullable — null for `kind='point'`; for a range kind, null means a start/end toggle is still open), `description` (nullable — required only for `action='fight_end'`; null for every other row, including every other `kind='point'` row and every range kind), `fighter_id` (nullable, FK to `fighters` — **prediction-only** resolved identity), `corner` (nullable int, 0=red/1=blue — **label-only** track-slot, not a resolved person, null for state marks), `action` (nullable), `target` (nullable — head/body/leg), `success` (nullable bool), `state` (nullable — STRIKING/CLINCH/GROUND on a prediction state-change row), `value` (nullable — range-kind-only: round number, or exclusion reason), `labeler` (nullable), `created_at`, `is_verified` (nullable bool — Training Data QA's verdict on a `source='label'` `kind='point'` row: True=confirmed training-worthy, False=declined, NULL=not reviewed; untouched by everything else, including the pipeline and Annotate's own writes). `FightEventVerify` (`{is_verified}`) is the sole payload for `PUT .../verify`.
 
 ### Description is reconstructed, not stored
 

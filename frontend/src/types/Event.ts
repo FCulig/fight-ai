@@ -18,4 +18,5 @@ export interface Event {
   value: string | null; // round number / exclusion reason — range-kind-only
   labeler: string | null;
   created_at: string;
+  is_verified: boolean | null; // Training Data QA verdict — label point events only
 }

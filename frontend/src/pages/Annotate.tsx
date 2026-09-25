@@ -6,11 +6,11 @@ import { useFighterFrames } from '../hooks/useFighterFrames';
 import { useRounds } from '../hooks/useRounds';
 import { useWindowWidth } from '../hooks/useWindowWidth';
 import {
-  createEvent, updateEvent, deleteEvent, finishLabeling, deleteFight,
+  createEvent, updateEvent, deleteEvent, finishLabeling, deleteFight, reopenLabeling,
   type CreateEventPayload,
 } from '../services/api';
 import type { SpanKind } from '../components/annotate/taxonomy';
-import { isFightViewable, isLabelingReady, needsRoundReview, STATE_LABELS } from '../types/Fight';
+import { isEditingLabels, isFightViewable, isLabelEditable, isLabelingReady, needsRoundReview, STATE_LABELS } from '../types/Fight';
 import type { Event } from '../types/Event';
 import { describeEvent } from '../utils/describeEvent';
 import { isFrameSwapped } from '../utils/cornerSwap';
@@ -42,7 +42,7 @@ export default function Annotate() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  const { fights } = useFights();
+  const { fights, setFights } = useFights();
   const selectedFight = fights.find(f => f.id === fightId) ?? null;
   const { events: allEvents, setEvents: setAllEvents } = useEvents(fightId, { source: 'label' });
   const events = useMemo(() => allEvents.filter(e => e.kind === 'point'), [allEvents]);
@@ -143,6 +143,8 @@ export default function Annotate() {
   const [endOpen, setEndOpen] = useState(false);
   const [savingCount, setSavingCount] = useState(0);
   const [finishing, setFinishing] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const [reopenError, setReopenError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletingFight, setDeletingFight] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -371,10 +373,29 @@ export default function Annotate() {
     setFinishing(true);
     try {
       await finishLabeling(fightId);
-      navigate(`/fights/${fightId}`);
+      // replace: Back from the Player must not land on this page again, which
+      // for a now-finished fight is just the "already labeled" screen.
+      navigate(`/fights/${fightId}`, { replace: true });
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to finish labeling', 'var(--f-red)', 'error');
       setFinishing(false);
+    }
+  };
+
+  // Same transition the Player's "Edit labels" button makes, for a direct
+  // visit to /annotate on a finished fight. Patching the one row in place
+  // flips `ready`, so this page re-renders straight into the editor.
+  const handleReopenLabeling = async () => {
+    if (!fightId) return;
+    setReopening(true);
+    setReopenError(null);
+    try {
+      const reopened = await reopenLabeling(fightId);
+      setFights(prev => prev.map(f => (f.id === reopened.id ? reopened : f)));
+    } catch (err) {
+      setReopenError(err instanceof Error ? err.message : 'Failed to open the fight for editing');
+    } finally {
+      setReopening(false);
     }
   };
 
@@ -470,10 +491,21 @@ export default function Annotate() {
           <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--accent)', display: 'block', marginBottom: 16 }}>check_circle</span>
           <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 10px', color: '#f1f5f9' }}>This fight is already labeled</h2>
           <p style={{ fontSize: 14, color: '#475569', margin: '0 0 20px', lineHeight: 1.6 }}>Open it in the Player to review the tagged events.</p>
-          <button onClick={() => navigate(`/fights/${selectedFight.id}`)} className="btn-glass" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>play_circle</span>
-            Open Player
-          </button>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+            <button onClick={() => navigate(`/fights/${selectedFight.id}`)} className="btn-glass" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, whiteSpace: 'nowrap' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>play_circle</span>
+              Open Player
+            </button>
+            {isLabelEditable(selectedFight) && (
+              <button onClick={handleReopenLabeling} disabled={reopening} className="btn-glass" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, whiteSpace: 'nowrap', cursor: reopening ? 'not-allowed' : 'pointer', opacity: reopening ? 0.6 : 1 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{reopening ? 'progress_activity' : 'edit'}</span>
+                Edit labels
+              </button>
+            )}
+          </div>
+          {reopenError && (
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', margin: '14px 0 0' }}>{reopenError}</p>
+          )}
         </div>
       </div>
     );
@@ -509,7 +541,9 @@ export default function Annotate() {
           <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_back</span>
         </button>
         <div>
-          <div className="font-display" style={{ fontSize: 30, letterSpacing: '0.03em', color: '#f1f5f9', lineHeight: 1 }}>SELF-ANNOTATE</div>
+          <div className="font-display" style={{ fontSize: 30, letterSpacing: '0.03em', color: '#f1f5f9', lineHeight: 1 }}>
+            {isEditingLabels(selectedFight) ? 'EDIT LABELS' : 'SELF-ANNOTATE'}
+          </div>
           <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, marginTop: 3 }}>{redName} vs {blueName}</div>
         </div>
         <FightPurposeBadge purpose={selectedFight.purpose} />

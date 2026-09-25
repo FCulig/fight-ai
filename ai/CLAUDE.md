@@ -317,7 +317,11 @@ fighter_frames (id, fight_id → fights, frame, corner, x1, y1, x2, y2, confiden
 fight_events   (id, fight_id → fights, source, kind, frame, end_frame nullable,
                 description nullable, fighter_id → fighters nullable, corner nullable,
                 action nullable, target nullable, success nullable, state nullable,
-                value nullable, labeler nullable, created_at)
+                value nullable, labeler nullable, created_at, is_verified nullable)
+               -- is_verified: Training Data QA's verdict on a source='label'
+               --   kind='point' row (True=confirmed, False=declined, NULL=not
+               --   reviewed). Written only via backend PUT .../events/{id}/verify
+               --   — never by this pipeline or by Annotate's own writes.
                -- ONE table for both pipeline predictions and hand labels — told
                --   apart by two columns, not by which table a row is in:
                -- source: 'prediction' (written only by process_fight()/

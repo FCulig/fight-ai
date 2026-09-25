@@ -204,6 +204,39 @@ def finish_labeling(fight_id: int) -> Fight | None:
     return run_db_query(_query)
 
 
+def reopen_labeling(fight_id: int) -> Fight | None:
+    """`labeling_complete → labeling_in_progress`, so Annotate will edit an
+    already-labelled fight; finish_labeling() is the way back. `labeled_at` is
+    deliberately left set — it's the durable "has finalised ground truth"
+    marker the eval code keys on (see ai/eval/labels_db.py), and clearing it
+    would drop a reference fixture off the Accuracy page for the length of an
+    edit. finish_labeling() re-stamps it when the edit is finalised."""
+    def _query(session):
+        import json
+
+        row = session.execute(
+            text(
+                "UPDATE fights SET state = 'labeling_in_progress' "
+                "WHERE id = :id AND state = 'labeling_complete' "
+                "RETURNING id"
+            ),
+            {"id": fight_id},
+        ).fetchone()
+        if row is None:
+            session.rollback()
+            return None
+        session.execute(
+            text("SELECT pg_notify('fight_state', :payload)"),
+            {"payload": json.dumps({"id": fight_id, "state": "labeling_in_progress"})},
+        )
+        session.commit()
+        fight = session.query(Fight).filter(Fight.id == fight_id).first()
+        _attach_fighter_names(session, [fight])
+        return fight
+
+    return run_db_query(_query)
+
+
 def delete_fight(fight_id: int) -> str | None:
     def _query(session):
         result = session.execute(

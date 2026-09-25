@@ -5,8 +5,8 @@ import { useFights } from '../hooks/useFights';
 import { useFighterFrames } from '../hooks/useFighterFrames';
 import { useRounds } from '../hooks/useRounds';
 import { useWindowWidth } from '../hooks/useWindowWidth';
-import { isFightViewable } from '../types/Fight';
-import { deleteFight } from '../services/api';
+import { isEditingLabels, isFightViewable, isLabelEditable, isLabelingReady } from '../types/Fight';
+import { deleteFight, reopenLabeling } from '../services/api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import VideoPlayer from '../components/VideoPlayer';
 import VideoControls from '../components/VideoControls';
@@ -37,6 +37,8 @@ export default function Player() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [reopening, setReopening] = useState(false);
+  const [reopenError, setReopenError] = useState<string | null>(null);
 
   const { fights } = useFights();
   const selectedFight = fights.find(f => f.id === fightId) ?? null;
@@ -67,6 +69,11 @@ export default function Player() {
   fpsRef.current = fps;
 
   const isProcessing = selectedFight !== null && !isFightViewable(selectedFight.state);
+  // labeling_in_progress isn't "processing" — the pipeline is done and the
+  // fight is waiting in Annotate (e.g. Back was pressed mid-edit). Say so and
+  // offer the way back, rather than a spinner that will never resolve.
+  const isBeingLabeled = selectedFight !== null && isLabelingReady(selectedFight.state);
+  const editingLabels = selectedFight !== null && isEditingLabels(selectedFight);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -149,6 +156,24 @@ export default function Player() {
     }
   };
 
+  // Flip the fight back to labeling_in_progress first — Annotate only opens
+  // on that state — then hand over. Annotate's own Finish Labeling returns it
+  // to labeling_complete.
+  const handleEditLabels = async () => {
+    if (fightId === null) return;
+    setReopening(true);
+    setReopenError(null);
+    try {
+      videoRef.current?.pause();
+      setIsPlaying(false);
+      await reopenLabeling(fightId);
+      navigate(`/fights/${fightId}/annotate`);
+    } catch (err) {
+      setReopenError(err instanceof Error ? err.message : 'Failed to open the fight for editing');
+      setReopening(false);
+    }
+  };
+
   const currentRound =
     rounds.find(r => currentFrame >= r.start_frame && currentFrame <= r.end_frame)
       ?.round_number ?? '-';
@@ -181,26 +206,42 @@ export default function Player() {
         }}>
           <span className="material-symbols-outlined" style={{
             fontSize: 40, color: '#64748b', display: 'block', marginBottom: 16,
-            animation: 'spin 1.5s linear infinite',
-          }}>progress_activity</span>
+            animation: isBeingLabeled ? undefined : 'spin 1.5s linear infinite',
+          }}>{isBeingLabeled ? 'edit_note' : 'progress_activity'}</span>
           <h2 style={{
             fontSize: 20, fontWeight: 800, margin: '0 0 10px',
             background: 'linear-gradient(90deg, #f1f5f9, rgba(255,255,255,0.5))',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
           }}>
-            This fight is still being processed
+            {editingLabels
+              ? 'This fight\'s labels are being edited'
+              : isBeingLabeled ? 'This fight is being labeled' : 'This fight is still being processed'}
           </h2>
           <p style={{ fontSize: 14, color: '#475569', margin: '0 0 20px', lineHeight: 1.6 }}>
-            The AI pipeline is analyzing the video. This usually takes a few minutes.
+            {isBeingLabeled
+              ? 'Press Finish Labeling on the labeling page to bring it back to the Player.'
+              : 'The AI pipeline is analyzing the video. This usually takes a few minutes.'}
           </p>
-          <button
-            onClick={() => navigate('/')}
-            className="btn-glass"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8 }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
-            Back to fights
-          </button>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+            <button
+              onClick={() => navigate('/')}
+              className="btn-glass"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, whiteSpace: 'nowrap' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
+              Back to fights
+            </button>
+            {isBeingLabeled && (
+              <button
+                onClick={() => navigate(`/fights/${fightId}/annotate`)}
+                className="btn-glass"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, whiteSpace: 'nowrap' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
+                {editingLabels ? 'Continue editing' : 'Open labeling'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -230,12 +271,36 @@ export default function Player() {
           </span>
         )}
         {selectedFight && <FightPurposeBadge purpose={selectedFight.purpose} />}
+        <span style={{ flex: 1 }} />
+        {reopenError && (
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {reopenError}
+          </span>
+        )}
+        {selectedFight && isLabelEditable(selectedFight) && (
+          <button
+            onClick={handleEditLabels}
+            disabled={reopening}
+            title="Re-open this fight in the labeling page"
+            aria-label="Edit labels"
+            className="btn-glass"
+            style={{
+              flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: narrow ? '6px 8px' : '6px 12px', borderRadius: 8,
+              fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+              cursor: reopening ? 'not-allowed' : 'pointer', opacity: reopening ? 0.6 : 1,
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{reopening ? 'progress_activity' : 'edit'}</span>
+            {!narrow && 'Edit labels'}
+          </button>
+        )}
         {selectedFight && (
           <button
             onClick={() => { setDeleteError(null); setConfirmDelete(true); }}
             title="Delete this fight"
             style={{
-              marginLeft: 'auto', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
+              flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: narrow ? '6px 8px' : '6px 12px', borderRadius: 8,
               border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)',
               color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',

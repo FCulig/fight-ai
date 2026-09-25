@@ -35,6 +35,14 @@ interface FighterOverlayProps {
   /** Corner (0 = red, 1 = blue) of the fighter the user has selected. No box is drawn until this is set. */
   highlightCorner?: 0 | 1 | null;
   /**
+   * Skip the *other* fighter's skeleton entirely so only `highlightCorner`'s
+   * is drawn (Training Data QA: only the corner that threw the reviewed
+   * strike is relevant). No effect when `highlightCorner` is null. Off by
+   * default so Player/Annotate's existing "who's selected" box-only
+   * treatment is unchanged.
+   */
+  hideUnhighlighted?: boolean;
+  /**
    * Hand-labelled stretches where the tracker's red/blue assignment is known
    * to be flipped (`fighter_frames.corner` is deliberately left uncorrected —
    * see label-events-corner-is-box-not-person). When the current frame falls
@@ -49,7 +57,7 @@ export interface FighterOverlayHandle {
 }
 
 const FighterOverlay = forwardRef<FighterOverlayHandle, FighterOverlayProps>(
-  ({ frameMap, fightWidth, fightHeight, showBoxes, showSkeletons, highlightCorner = null, cornerSwapSpans = [] }, ref) => {
+  ({ frameMap, fightWidth, fightHeight, showBoxes, showSkeletons, highlightCorner = null, hideUnhighlighted = false, cornerSwapSpans = [] }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const frameMapRef = useRef(frameMap);
     const fightWidthRef = useRef(fightWidth);
@@ -57,6 +65,7 @@ const FighterOverlay = forwardRef<FighterOverlayHandle, FighterOverlayProps>(
     const showBoxesRef = useRef(showBoxes);
     const showSkeletonsRef = useRef(showSkeletons);
     const highlightCornerRef = useRef(highlightCorner);
+    const hideUnhighlightedRef = useRef(hideUnhighlighted);
     const cornerSwapSpansRef = useRef(cornerSwapSpans);
     const lastFrameRef = useRef(1);
 
@@ -65,6 +74,7 @@ const FighterOverlay = forwardRef<FighterOverlayHandle, FighterOverlayProps>(
     useEffect(() => { fightHeightRef.current = fightHeight; }, [fightHeight]);
     useEffect(() => { showBoxesRef.current = showBoxes; }, [showBoxes]);
     useEffect(() => { showSkeletonsRef.current = showSkeletons; }, [showSkeletons]);
+    useEffect(() => { hideUnhighlightedRef.current = hideUnhighlighted; }, [hideUnhighlighted]);
     useEffect(() => { cornerSwapSpansRef.current = cornerSwapSpans; }, [cornerSwapSpans]);
 
     const render = () => {
@@ -125,7 +135,9 @@ const FighterOverlay = forwardRef<FighterOverlayHandle, FighterOverlayProps>(
           ctx.restore();
         }
 
-        if (drawSkeletons && d.keypoints && d.keypoints.length === 17) {
+        const hidden = hideUnhighlightedRef.current && highlight !== null && !isSelected;
+        if (drawSkeletons && !hidden && d.keypoints && d.keypoints.length === 17) {
+          ctx.save();
           ctx.strokeStyle = color;
           ctx.fillStyle = color;
           ctx.lineWidth = 1.5;
@@ -152,6 +164,7 @@ const FighterOverlay = forwardRef<FighterOverlayHandle, FighterOverlayProps>(
             ctx.arc(kp[0] * scaleX, kp[1] * scaleY, 3, 0, Math.PI * 2);
             ctx.fill();
           }
+          ctx.restore();
         }
       }
     };

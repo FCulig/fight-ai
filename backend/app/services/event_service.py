@@ -121,6 +121,62 @@ def update_event(fight_id: int, event_id: int, payload: FightEventUpdate) -> Opt
     return run_db_query(_query)
 
 
+def set_verified(fight_id: int, event_id: int, is_verified: Optional[bool]) -> Optional[FightEvent]:
+    """Training Data QA's write path — independent of `update_event` (which
+    is span-only, `kind != 'point'`) since a verdict is exactly the opposite
+    scope: it only ever applies to a hand-labelled point event."""
+    def _query(session):
+        event = (
+            session.query(FightEvent)
+            .filter(
+                FightEvent.id == event_id,
+                FightEvent.fight_id == fight_id,
+                FightEvent.source == "label",
+                FightEvent.kind == "point",
+            )
+            .first()
+        )
+        if event is None:
+            return None
+        event.is_verified = is_verified
+        session.commit()
+        session.refresh(event)
+        return event
+
+    return run_db_query(_query)
+
+
+def reclassify_event(
+    fight_id: int, event_id: int, action: str, target: Optional[str], success: Optional[bool],
+) -> Optional[FightEvent]:
+    """Training Data QA's strike-retyping write path — same source='label'
+    kind='point' scope as set_verified, since only a strike-shaped point
+    event has an action/target worth correcting. Deliberately leaves
+    `corner`/`is_verified` untouched: retyping a strike doesn't change who
+    threw it or reset a verdict already given on the clip."""
+    def _query(session):
+        event = (
+            session.query(FightEvent)
+            .filter(
+                FightEvent.id == event_id,
+                FightEvent.fight_id == fight_id,
+                FightEvent.source == "label",
+                FightEvent.kind == "point",
+            )
+            .first()
+        )
+        if event is None:
+            return None
+        event.action = action
+        event.target = target
+        event.success = success
+        session.commit()
+        session.refresh(event)
+        return event
+
+    return run_db_query(_query)
+
+
 def delete_event(fight_id: int, event_id: int) -> bool:
     def _query(session):
         # source='label' is the single most important guard in this

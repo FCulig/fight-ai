@@ -28,6 +28,7 @@ class FightEvent(Base):
     value = Column(String(200), nullable=True)
     labeler = Column(String(100), nullable=True)
     created_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    is_verified = Column(Boolean, nullable=True)
 
 
 class FightEventResponse(BaseModel):
@@ -49,6 +50,7 @@ class FightEventResponse(BaseModel):
     value: Optional[str]
     labeler: Optional[str]
     created_at: datetime
+    is_verified: Optional[bool]
 
 
 class FightEventCreate(BaseModel):
@@ -93,3 +95,27 @@ class FightEventUpdate(BaseModel):
     frame: Optional[int] = None
     end_frame: Optional[int] = None
     value: Optional[str] = None
+
+
+class FightEventVerify(BaseModel):
+    """Training Data QA's only write shape. `is_verified` is a tri-state:
+    True (confirmed training-worthy), False (declined), or None (back to
+    pending) — always required in the payload so "clear the verdict" is a
+    real, explicit request rather than an omitted field."""
+
+    is_verified: Optional[bool]
+
+
+class FightEventReclassify(BaseModel):
+    """Training Data QA's strike-retyping write path — lets a reviewer fix a
+    mislabelled action (e.g. a jab that's really a cross) without a full
+    create+delete re-label. `target`/`success` are computed client-side from
+    `newAction` (via trainingDataTaxonomy.ts's reclassifyPayload(), mirroring
+    what Annotate's own palette derives for a fresh label of the same
+    action) and sent explicitly rather than re-derived here, same division
+    of labour as the rest of the app: the backend stores columns, taxonomy
+    lives in the frontend."""
+
+    action: str
+    target: Optional[str] = None
+    success: Optional[bool] = None

@@ -10,7 +10,13 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from app.models.fight import FIGHT_PURPOSES, FightResponse
 from app.models.fighter_frame import FighterFrameResponse
-from app.models.fight_event import FightEventCreate, FightEventResponse, FightEventUpdate
+from app.models.fight_event import (
+    FightEventCreate,
+    FightEventReclassify,
+    FightEventResponse,
+    FightEventUpdate,
+    FightEventVerify,
+)
 from app.models.round import RoundResponse
 from app.services import (
     event_service,
@@ -191,8 +197,8 @@ def get_rounds(fight_id: int):
 
 
 @router.get("/{fight_id}/frames/", response_model=List[FighterFrameResponse])
-def get_fighter_frames(fight_id: int):
-    return fighter_frame_service.get_fighter_frames(fight_id)
+def get_fighter_frames(fight_id: int, start_frame: Optional[int] = None, end_frame: Optional[int] = None):
+    return fighter_frame_service.get_fighter_frames(fight_id, start_frame, end_frame)
 
 
 @router.get("/{fight_id}/events/", response_model=List[FightEventResponse])
@@ -223,6 +229,22 @@ def update_fight_event(fight_id: int, event_id: int, payload: FightEventUpdate):
     return event
 
 
+@router.put("/{fight_id}/events/{event_id}/verify", response_model=FightEventResponse)
+def verify_fight_event(fight_id: int, event_id: int, payload: FightEventVerify):
+    event = event_service.set_verified(fight_id, event_id, payload.is_verified)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return event
+
+
+@router.put("/{fight_id}/events/{event_id}/reclassify", response_model=FightEventResponse)
+def reclassify_fight_event(fight_id: int, event_id: int, payload: FightEventReclassify):
+    event = event_service.reclassify_event(fight_id, event_id, payload.action, payload.target, payload.success)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return event
+
+
 @router.delete("/{fight_id}/events/{event_id}", status_code=204)
 def delete_fight_event(fight_id: int, event_id: int):
     deleted = event_service.delete_event(fight_id, event_id)
@@ -241,6 +263,17 @@ def finish_labeling(fight_id: int):
         raise HTTPException(
             status_code=409,
             detail="Fight is not currently in labeling_in_progress state",
+        )
+    return fight
+
+
+@router.post("/{fight_id}/reopen-labeling", response_model=FightResponse)
+def reopen_labeling(fight_id: int):
+    fight = fight_service.reopen_labeling(fight_id)
+    if fight is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Fight is not currently in labeling_complete state",
         )
     return fight
 
