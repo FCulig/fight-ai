@@ -14,8 +14,8 @@ _DEVICE = (
 
 # Raised from 0.1: at 0.1, two overlapping fighter boxes in a clinch could
 # both greedily match the same pose box (both being "close enough"), giving
-# red and blue the same skeleton — torso distance 0, contact gate trivially
-# satisfied, identical velocities. See POSE_IOU_FLOOR below for the other
+# red and blue the same skeleton — torso distance 0, identical motion for
+# both fighters. See POSE_IOU_FLOOR below for the other
 # half of the fix: one-to-one assignment makes that structurally impossible
 # regardless of the floor.
 POSE_IOU_FLOOR   = 0.5

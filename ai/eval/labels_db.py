@@ -22,7 +22,7 @@ from .schema import Excluded, FightLabels, Round, Span, StateSpan, Strike, Taked
 # than derived here; NULL maps to "unknown" per plan 0c(3).
 #
 # jab/cross are lead/rear-relative (boxing terms), matching the pipeline's own
-# classify_punch_type() — so this works correctly for southpaws without any
+# strike model's classes — so this works correctly for southpaws without any
 # stance tracking. Hooks/uppercuts stay absolute left/right in the palette
 # (directly observable, no stance judgment needed) but both hands collapse to
 # the same family here, so handedness never reaches the training label.
@@ -30,7 +30,7 @@ from .schema import Excluded, FightLabels, Round, Span, StateSpan, Strike, Taked
 # clinch_punch/ground_punch/ground_knee map to the same non-specific
 # "punch"/"knee" families the pipeline itself uses for these positions
 # (PIPELINE_ACTION_MAP) — matching real MMA-stats convention, not just the
-# rule cascade's limitation: a scramble genuinely isn't a clean jab/hook, so
+# old rule cascade's limitation: a scramble genuinely isn't a clean jab/hook, so
 # forcing that classification would fabricate precision that isn't there.
 # `target` is always None for these (no hasTarget/fixedTarget in taxonomy.ts)
 # -> "unknown" below, same as the pipeline's grappling predictions, so

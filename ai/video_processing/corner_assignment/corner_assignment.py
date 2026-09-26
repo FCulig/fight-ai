@@ -247,8 +247,8 @@ def _is_clean_frame(
     knees and ankles, which a broadcast camera occludes constantly: it returned
     ZERO clean frames across all 18,518 frames of NAZHANDvsSTAROPOLI, so the
     appearance path never ran and every tracker identity swap went uncorrected.
-    This is the same relaxation `frame_validity` already makes, for the same
-    reason — see ai/CLAUDE.md "Frame validity".
+    This is the same relaxation `frame_usable` makes, for the same reason —
+    see ai/CLAUDE.md "Frame usability".
     """
     if len(dets) != 2 or len(descriptors) != 2:
         return False

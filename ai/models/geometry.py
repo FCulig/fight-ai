@@ -8,8 +8,8 @@ fight_processing in the pipeline, so it cannot import from fight_processing.
 All three functions here return `None` when they don't have enough confident
 signal to compute an answer, rather than silently computing on a hallucinated
 coordinate. Callers must treat `None` as "unusable this frame" — see the
-callers in fight_processing_util.py (`detect_strikes`, `determine_fight_state`,
-`is_fighter_grounded`) for the pattern.
+callers in fight_processing_util.py (`determine_fight_state`,
+`is_fighter_grounded`) and action_model/windows.py for the pattern.
 """
 
 import numpy as np
@@ -28,7 +28,7 @@ def get_torso_rectangle(keypoints):
     confident — a torso rectangle built mostly from hallucinated joints
     corrupts every distance threshold downstream, since it feeds both
     `calculate_distance_between_fighters` (the state-classifier's primary
-    axis) and every contact-gate check in `detect_strikes`."""
+    axis) and the strike model's window origin (action_model/windows.py)."""
     indices = [5, 6, 11, 12]
     valid_points = [keypoints[i][:2] for i in indices if _confident(keypoints, i)]
 

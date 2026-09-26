@@ -2,7 +2,7 @@
 
 One JSON file per video, stored in ``eval/labels/<video_stem>.json``. The format
 serves double duty: it is the evaluation ground truth *and* the training set for
-the skeleton action model that will replace the rule cascade, so strike
+the skeleton action model (action_model/) that detects strikes, so strike
 attributes are stored decomposed (family / target / landed) rather than as the
 pipeline's flat ``jab_head`` strings.
 

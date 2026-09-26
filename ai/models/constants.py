@@ -46,81 +46,42 @@ TAKEDOWN_LOOKBACK_SECS = 0.3   # 15 frames @ 50fps
 # way as DISTANCE_GRAPPLING_RATIO above. See plan Stage 1 step 4.
 MIN_HIP_DROP_RATIO = 0.17
 
-# Strike detection thresholds
-# Velocities are expressed as (fraction of attacker scale) per second — fps-invariant.
-# Contact distances are expressed as fraction of defender scale — zoom-invariant.
-PUNCH_VELOCITY_RATIO = 4.5      # wrist speed (scale/sec) to count as a punch
-KICK_VELOCITY_RATIO = 6.0       # ankle speed (scale/sec) to count as a kick
-ARM_EXTENSION_THRESHOLD = 140   # minimum elbow angle (degrees) for a straight punch (jab/cross)
-# Bent-arm punch (hook/uppercut): elbow angle window — too straight = jab (handled above),
-# too bent = not a punch at all.
-PUNCH_BENT_ANGLE_MIN = 60      # degrees — below this is too folded to be a punch
-PUNCH_BENT_ANGLE_MAX = 139     # degrees — above this falls into the straight path
-LEG_EXTENSION_THRESHOLD = 130   # minimum knee angle (degrees) for a kick
-STRIKE_COOLDOWN_SECS = 0.3      # 15 frames @ 50fps — time to suppress re-detection after a strike
-STRIKE_EXTENSION_SECS = 0.04    # 2 frames @ 50fps — time angle must be held to confirm a strike
-# In clinch/grappling the fighters are already in contact so the open-range contact
-# gate is replaced by a directional gate (below); use a lower velocity threshold to
-# catch short-range strikes (knees, dirty boxing).
-GRAPPLING_PUNCH_VELOCITY_RATIO = 2.0
-GRAPPLING_KICK_VELOCITY_RATIO  = 2.5
+# --- Strike detection (action_model/inference.py) ---
+# The strike model's P(strike) curve, sampled every 1/SAMPLE_HZ s per fighter,
+# becomes events by non-maximum suppression: a peak >= STRIKE_PROB_THRESHOLD
+# is a strike and suppresses weaker peaks by the same fighter within
+# STRIKE_NMS_SECS. Picked from a sweep on reference fight 60 (via its
+# ai_labeled twin, fight 62), scored with eval.score's strike matcher:
+# F1 is flat at ~0.55-0.58 for thresholds 0.9-0.99 x radii 0.3-0.6s, so
+# these sit mid-plateau rather than on the single best cell. The model is
+# confident on most windows (trained with sampled negatives, not dense ones),
+# which is why the useful threshold is this high. Re-sweep after retraining.
+STRIKE_PROB_THRESHOLD = 0.95
+STRIKE_NMS_SECS = 0.4
 
-# --- Grappling strike gate (clinch / ground) ---
-# In a clinch fighters are entangled, so raw proximity no longer discriminates a
-# strike from pummeling / hand-fighting / gripping — the hands are near the
-# opponent's torso either way. The discriminating signal is DIRECTION: a real short
-# strike drives the end-effector toward a target zone (head or torso), whereas
-# swimming for underhooks, framing and gripping move it laterally or pull it back.
-# A grappling strike must satisfy BOTH a relaxed proximity sanity-check and a
-# velocity-alignment-toward-target check.
-GRAPPLING_HEAD_CONTACT_RATIO  = 0.60   # relaxed head proximity (fraction of defender scale)
-GRAPPLING_TORSO_CONTACT_RATIO = 0.70   # relaxed torso proximity (fraction of defender scale)
-# Cosine of the angle between the end-effector velocity and the vector to the target
-# zone. 0.5 ≈ within 60° of driving straight at the target. Pummeling / gripping
-# motions are lateral or pull away and fall below this.
-GRAPPLING_STRIKE_DIRECTION_MIN = 0.5
-
-# Keypoint confidence gating
-# Joints below this confidence are treated as unreliable and their limb is skipped.
-# Landed-vs-attempted: head recoil check after a candidate strike
+# Landed-vs-attempted: head recoil check after a detected open-range strike
 # Check the opponent head velocity over this many seconds after contact.
 RECOIL_LOOKAHEAD_SECS = 0.08   # 4 frames @ 50fps
 # Head must move at least this many (scale/sec) to count as a recoil signal.
 RECOIL_VELOCITY_RATIO   = 1.5
 
-# One-Euro filter parameters for keypoint smoothing
+# One-Euro filter parameters for keypoint smoothing (feeds the recoil head
+# position and the takedown-initiator hip history)
 ONE_EURO_MIN_CUTOFF = 1.5   # Hz — higher = less lag, more noise
 ONE_EURO_BETA       = 0.05  # speed coefficient — higher = less lag on fast motion
 ONE_EURO_D_CUTOFF   = 1.0   # Hz — cutoff for derivative low-pass
 
+# Joints below this confidence are treated as unreliable.
 KEYPOINT_MIN_CONFIDENCE = 0.4
 # Strike-relevant joint indices (COCO): head, shoulders, elbows, wrists, hips, knees, ankles.
-# Frame is valid if both fighters have all of these confident, rather than all 17 keypoints.
+# The strict "whole body visible" bar (is_frame_valid, pose debug video).
 STRIKE_KEYPOINT_INDICES = [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 # Core trunk joints (COCO): nose, shoulders, hips. These alone give the torso
-# centre (velocity baseline), torso rectangle + head centre (contact gate as the
-# defender) and body scale. The relaxed bar for open-range striking requires only
-# these confident — the punching arm is gated per-limb inside detect_strikes, so a
-# blurred wrist no longer discards the whole frame. Legs/ankles, routinely occluded
-# in a standing broadcast view, are not required.
+# centre, torso rectangle, head centre and body scale — the relaxed bar for a
+# standing frame to count (frame_usable, corner_assignment's clean frames).
+# Legs/ankles, routinely occluded in a standing broadcast view, are not required.
 STRIKING_CORE_KEYPOINT_INDICES = [0, 5, 6, 11, 12]
 
-# Contact distance ratios (fraction of defender torso-length scale)
-# These gate ACCEPTANCE — whether a strike landed near the opponent at all.
-HEAD_CONTACT_RATIO = 0.45
-TORSO_CONTACT_RATIO = 0.55
-LEG_CONTACT_RATIO = 0.45
-
-# --- Head zone geometry (head-vs-body classification) ---
-# Once a punch is accepted, head-vs-body is decided by the nearest anatomical
-# REGION: distance outside the head circle vs distance outside the torso
-# rectangle (0 when inside either). The head circle is centred on the confident
-# head keypoints; its radius is derived from the ear-to-ear span when both ears
-# are confident, else from body scale, then clamped to a sane band of the scale.
-HEAD_RADIUS_EAR_FACTOR   = 0.80   # head radius ≈ ear-to-ear span × this
-HEAD_RADIUS_SCALE_RATIO  = 0.25   # fallback head radius as fraction of torso scale
-HEAD_RADIUS_MIN_RATIO    = 0.15   # clamp: min head radius (fraction of scale)
-HEAD_RADIUS_MAX_RATIO    = 0.35   # clamp: max head radius (fraction of scale)
 # When no head keypoint is confident, estimate the head centre this far above the
 # shoulder midpoint (fraction of torso scale).
 HEAD_ABOVE_SHOULDER_RATIO = 0.45
@@ -388,4 +349,4 @@ CORNER_SWAP_CONFIRM_SECS      = 0.08  # 4 frames @ 50fps — a flip must persist
 TORSO_SCALE_MIN_RATIO = 0.5
 
 # --- Grappling frame-validity relaxation ---
-GRAPPLING_MIN_VISIBLE_KEYPOINTS = 6   # min confident strike-relevant joints for PARTIAL validity
+GRAPPLING_MIN_VISIBLE_KEYPOINTS = 6   # min confident joints per fighter for a clinch/ground frame to count (frame_usable)

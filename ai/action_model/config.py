@@ -1,7 +1,8 @@
 """Window/taxonomy constants for the skeleton action model.
 
-Kept separate from models/constants.py: those are the rule cascade's
-thresholds, these define the model's input contract. Changing anything here
+Kept separate from models/constants.py: those are pipeline thresholds
+(including the strike model's peak picking), these define the model's input
+contract. Changing anything here
 invalidates every saved checkpoint — the values are copied into each
 checkpoint's metadata so inference can refuse a mismatch.
 """

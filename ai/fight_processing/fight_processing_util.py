@@ -3,27 +3,7 @@ from collections import deque
 from models.constants import (
     LABEL_ID,
     MIN_HIP_DROP_RATIO,
-    PUNCH_VELOCITY_RATIO,
-    KICK_VELOCITY_RATIO,
-    ARM_EXTENSION_THRESHOLD,
-    PUNCH_BENT_ANGLE_MIN,
-    PUNCH_BENT_ANGLE_MAX,
-    LEG_EXTENSION_THRESHOLD,
-    STRIKE_COOLDOWN_SECS,
-    STRIKE_EXTENSION_SECS,
-    HEAD_CONTACT_RATIO,
-    TORSO_CONTACT_RATIO,
-    LEG_CONTACT_RATIO,
-    HEAD_RADIUS_EAR_FACTOR,
-    HEAD_RADIUS_SCALE_RATIO,
-    HEAD_RADIUS_MIN_RATIO,
-    HEAD_RADIUS_MAX_RATIO,
     HEAD_ABOVE_SHOULDER_RATIO,
-    GRAPPLING_PUNCH_VELOCITY_RATIO,
-    GRAPPLING_KICK_VELOCITY_RATIO,
-    GRAPPLING_HEAD_CONTACT_RATIO,
-    GRAPPLING_TORSO_CONTACT_RATIO,
-    GRAPPLING_STRIKE_DIRECTION_MIN,
     KEYPOINT_MIN_CONFIDENCE,
     STRIKE_KEYPOINT_INDICES,
     STRIKING_CORE_KEYPOINT_INDICES,
@@ -117,15 +97,15 @@ def _fighter_keypoints_valid(kp):
 def is_frame_valid(detections):
     """Thin bool wrapper: True only when both fighters pass the strict FULL bar.
     Kept for backward-compatibility with pose_verification.py which does not
-    have a fight_state context.  Use frame_validity() inside process_fight."""
+    have a fight_state context.  Use frame_usable() inside process_fight."""
     red_kp = next((d["keypoints"] for d in detections if d.get("class_id") == 0), None)
     blue_kp = next((d["keypoints"] for d in detections if d.get("class_id") == 1), None)
     return _fighter_keypoints_valid(red_kp) and _fighter_keypoints_valid(blue_kp)
 
 
 def _fighter_partial_valid(kp):
-    """Returns True when a fighter has at least GRAPPLING_MIN_VISIBLE_KEYPOINTS
-    confident strike-relevant joints (relaxed bar used in PARTIAL grappling frames)."""
+    """At least GRAPPLING_MIN_VISIBLE_KEYPOINTS confident joints — the relaxed
+    bar for tangled clinch/ground frames, where limbs occlude each other."""
     if kp is None or len(kp) < 17:
         return False
     confident = sum(1 for i in STRIKE_KEYPOINT_INDICES if kp[i][2] >= KEYPOINT_MIN_CONFIDENCE)
@@ -133,49 +113,29 @@ def _fighter_partial_valid(kp):
 
 
 def _fighter_core_valid(kp):
-    """Returns True when a fighter's core trunk joints (head + shoulders + hips,
-    STRIKING_CORE_KEYPOINT_INDICES) are confident. This is enough to compute the
-    torso centre, torso rectangle, head centre and body scale — everything the
-    contact gate needs from a defender. The attacking arm is gated per-limb inside
-    detect_strikes, so a blurred wrist no longer disqualifies the whole frame."""
+    """Core trunk joints (head + shoulders + hips, STRIKING_CORE_KEYPOINT_INDICES)
+    confident — enough for torso centre, torso rectangle, head centre and scale,
+    which is everything determine_fight_state and the recoil check read."""
     if kp is None or len(kp) < 17:
         return False
     return all(kp[i][2] >= KEYPOINT_MIN_CONFIDENCE for i in STRIKING_CORE_KEYPOINT_INDICES)
 
 
-def frame_validity(detections, fight_state) -> str:
-    """Graded frame validity.
-
-    Returns:
-        "FULL"    — both fighters pass the strict keypoint bar (all strike-relevant
-                    joints confident).  Open-range striking runs as normal.
-        "PARTIAL" — both fighters present with enough of the right joints to run
-                    strike detection, but below the strict FULL bar:
-                      * GRAPPLING states — at least GRAPPLING_MIN_VISIBLE_KEYPOINTS
-                        confident joints (grappling strike detection).
-                      * STRIKING — both fighters' core trunk joints confident
-                        (open-range strike detection runs; the per-limb confidence
-                        gate inside detect_strikes handles an occluded arm).
-        "INVALID" — fewer than 2 fighter detections, or joint completeness falls
-                    below even the relaxed bar.
-    """
+def frame_usable(detections, fight_state) -> bool:
+    """Whether a frame carries enough pose to advance the fight-state machine:
+    both fighters present, and either their core trunk joints confident
+    (STRIKING) or at least GRAPPLING_MIN_VISIBLE_KEYPOINTS joints each
+    (CLINCH/GROUND, where fighters occlude each other). Demanding every joint
+    instead would drop ~95% of standing frames — broadcast cameras occlude
+    legs constantly."""
     red_kp  = next((d["keypoints"] for d in detections if d.get("class_id") == 0), None)
     blue_kp = next((d["keypoints"] for d in detections if d.get("class_id") == 1), None)
-
     if red_kp is None or blue_kp is None:
-        return "INVALID"
-
+        return False
     if _fighter_keypoints_valid(red_kp) and _fighter_keypoints_valid(blue_kp):
-        return "FULL"
-
-    if fight_state in GRAPPLING_STATES:
-        if _fighter_partial_valid(red_kp) and _fighter_partial_valid(blue_kp):
-            return "PARTIAL"
-    else:
-        if _fighter_core_valid(red_kp) and _fighter_core_valid(blue_kp):
-            return "PARTIAL"
-
-    return "INVALID"
+        return True
+    check = _fighter_partial_valid if fight_state in GRAPPLING_STATES else _fighter_core_valid
+    return check(red_kp) and check(blue_kp)
 
 # get_torso_rectangle, calculate_distance_between_fighters, and get_fighter_scale
 # have been moved to models.geometry and are re-exported here for backward
@@ -326,327 +286,6 @@ def get_head_center(keypoints):
     scale = get_fighter_scale(keypoints) or 10.0
     # Image y increases downward, so the head is above (smaller y) the shoulders.
     return shoulder_mid - np.array([0.0, HEAD_ABOVE_SHOULDER_RATIO * scale])
-
-
-def get_head_radius(keypoints, scale):
-    """Radius (px) of the head zone used for head-vs-body classification.
-
-    Uses the ear-to-ear span when both ears are confident (the full head width
-    tracks that span), otherwise a fraction of body scale. Clamped to a sane band
-    of the scale so a degenerate pose can't make the head zone absurd."""
-    l_ear, r_ear = keypoints[3], keypoints[4]
-    if (len(l_ear) > 2 and len(r_ear) > 2 and
-            l_ear[2] >= KEYPOINT_MIN_CONFIDENCE and r_ear[2] >= KEYPOINT_MIN_CONFIDENCE):
-        ear_span = np.linalg.norm(np.array(l_ear[:2]) - np.array(r_ear[:2]))
-        radius = ear_span * HEAD_RADIUS_EAR_FACTOR
-    else:
-        radius = HEAD_RADIUS_SCALE_RATIO * scale
-    return float(np.clip(radius, HEAD_RADIUS_MIN_RATIO * scale, HEAD_RADIUS_MAX_RATIO * scale))
-
-
-def get_lead_hand_side(kp, opp_kp):
-    """Returns 'left' or 'right' (COCO joint labelling) for the attacker's lead hand.
-    Lead hand = same side as the lead foot (the foot horizontally closer to the opponent)."""
-    opp_x = (opp_kp[5][0] + opp_kp[6][0]) / 2  # opponent shoulder center x
-    left_ankle_x  = kp[15][0]
-    right_ankle_x = kp[16][0]
-    left_dist  = abs(left_ankle_x  - opp_x)
-    right_dist = abs(right_ankle_x - opp_x)
-    return "left" if left_dist < right_dist else "right"
-
-
-def classify_punch_type(limb_key, angle, wrist_rel_vel, kp, opp_kp):
-    """Returns a punch-type prefix string: jab | cross | hook | uppercut.
-    straight path (angle > ARM_EXTENSION_THRESHOLD) → jab (lead) or cross (rear).
-    bent path → uppercut if wrist moves mostly upward, hook otherwise."""
-    is_straight = angle >= ARM_EXTENSION_THRESHOLD
-    hand_side = "left" if "left" in limb_key else "right"
-    lead_side = get_lead_hand_side(kp, opp_kp)
-
-    if is_straight:
-        return "jab" if hand_side == lead_side else "cross"
-    else:
-        # Bent-arm: direction of wrist relative velocity determines sub-type.
-        # Image y increases downward, so negative dy = moving upward.
-        vx, vy = wrist_rel_vel[0], wrist_rel_vel[1]
-        return "uppercut" if (vy < 0 and abs(vy) >= abs(vx)) else "hook"
-
-
-def point_to_segment_distance(p, a, b):
-    """Returns the shortest distance from point p to the line segment a-b."""
-    p, a, b = np.array(p[:2]), np.array(a[:2]), np.array(b[:2])
-    ab = b - a
-    t = np.clip(np.dot(p - a, ab) / (np.dot(ab, ab) + 1e-6), 0.0, 1.0)
-    return np.linalg.norm(p - (a + t * ab))
-
-
-def distance_to_rect(p, rect):
-    """Returns distance from point p to the rectangle. Returns 0 if p is inside."""
-    x, y = p[0], p[1]
-    x1, y1, x2, y2 = rect
-    dx = max(x1 - x, 0, x - x2)
-    dy = max(y1 - y, 0, y - y2)
-    return np.sqrt(dx**2 + dy**2)
-
-
-def compute_angle(a, b, c):
-    """Returns the angle in degrees at point b, formed by the a-b-c triplet."""
-    a, b, c = np.array(a[:2]), np.array(b[:2]), np.array(c[:2])
-    ba = a - b
-    bc = c - b
-    cos_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-6)
-    return np.degrees(np.arccos(np.clip(cos_angle, -1.0, 1.0)))
-
-
-def detect_strikes(red_kp, blue_kp, prev_red_kp, prev_blue_kp, strike_state, fps, frame_idx=0, grappling=False, ground=False, diag=None):
-    """
-    Detects landed strikes by combining three filters:
-      1. Limb extension angle above threshold (strike is being thrown)
-      2. Torso-relative limb velocity above threshold (removes locomotion)
-      3. End-effector proximity to an opponent body zone (confirms contact)
-
-    Contact zones checked per limb type (in priority order):
-      Wrist  → head (punch_head), torso (punch_body)
-      Ankle  → head (head_kick),  torso (middle_kick), thigh segment (low_kick)
-
-    strike_state is updated in place. Structure:
-        {
-            "red":  { "left_punch": {"cooldown": 0, "extension_frames": 0}, ... },
-            "blue": { ... }
-        }
-
-    Args:
-        red_kp / blue_kp:           Current frame keypoints (17-pt COCO, [x, y, conf])
-        prev_red_kp / prev_blue_kp: Previous frame keypoints
-        strike_state:               Per-fighter, per-limb state dict (mutated in place)
-        fps:                        Video frame rate — used to convert velocity to px/sec.
-        grappling:                  When True, use lower velocity ratios and replace the
-                                    open-range contact-proximity gate with a directional
-                                    gate (relaxed proximity + velocity aimed at a target
-                                    zone) that rejects pummeling/gripping false positives.
-                                    Strike types are prefixed "clinch_" (standing clinch)
-                                    or "ground_" when `ground` is also True.
-        ground:                     When True (and grappling), emit ground-and-pound
-                                    labels ("ground_punch" / "ground_knee") instead of
-                                    the standing-clinch labels. Ignored unless grappling.
-
-    Returns:
-        List of dicts: [{"fighter": "fighter_red"|"fighter_blue", "type": <event_type>}, ...]
-    """
-    strikes = []
-
-    red_center  = np.array([(red_kp[5][0]  + red_kp[6][0])  / 2, (red_kp[5][1]  + red_kp[6][1])  / 2])
-    blue_center = np.array([(blue_kp[5][0] + blue_kp[6][0]) / 2, (blue_kp[5][1] + blue_kp[6][1]) / 2])
-
-    red_torso_rect  = get_torso_rectangle(red_kp)
-    blue_torso_rect = get_torso_rectangle(blue_kp)
-    red_head        = get_head_center(red_kp)
-    blue_head       = get_head_center(blue_kp)
-
-    red_scale  = get_fighter_scale(red_kp)
-    blue_scale = get_fighter_scale(blue_kp)
-
-    if red_scale is None or blue_scale is None:
-        # Neither fighter's scale is safe to normalise against this frame —
-        # get_fighter_scale is the denominator of every threshold below, so a
-        # missing one must skip the frame rather than fall back to a
-        # hallucinated value that would silently rescale every check. See
-        # plan Stage 1 step 2.
-        return strikes
-
-    # Max age (frames) of a per-limb velocity baseline before it is considered
-    # stale and reset — keeps velocity meaningful when a limb has been occluded
-    # for a long stretch. ~0.3 s of motion.
-    max_base_gap = max(1, round(fps * 0.3))
-    strike_cooldown_frames = max(1, round(fps * STRIKE_COOLDOWN_SECS))
-    strike_extension_frames = max(1, round(fps * STRIKE_EXTENSION_SECS))
-
-    checks = [
-        # attacker label, attacker kp, attacker torso centre, attacker scale,
-        # opp head, opp torso rect, opp kp, opp scale, limb state
-        ("fighter_red",  red_kp,  red_center,  red_scale,
-         blue_head, blue_torso_rect, blue_kp,  blue_scale, strike_state["red"]),
-        ("fighter_blue", blue_kp, blue_center, blue_scale,
-         red_head,  red_torso_rect,  red_kp,   red_scale,  strike_state["blue"]),
-    ]
-
-    for (fighter_label, kp, atk_center, atk_scale,
-         opp_head, opp_torso_rect, opp_kp, def_scale, limb_state) in checks:
-
-        punch_vel = GRAPPLING_PUNCH_VELOCITY_RATIO if grappling else PUNCH_VELOCITY_RATIO
-        kick_vel  = GRAPPLING_KICK_VELOCITY_RATIO  if grappling else KICK_VELOCITY_RATIO
-
-        # (proximal, mid, distal, limb_key, vel_ratio, angle_thresh, is_kick)
-        limb_checks = [
-            (5,  7,  9,  "left_punch",  punch_vel, ARM_EXTENSION_THRESHOLD, False),
-            (6,  8,  10, "right_punch", punch_vel, ARM_EXTENSION_THRESHOLD, False),
-            (11, 13, 15, "left_kick",   kick_vel,  LEG_EXTENSION_THRESHOLD,  True),
-            (12, 14, 16, "right_kick",  kick_vel,  LEG_EXTENSION_THRESHOLD,  True),
-        ]
-
-        for proximal, mid, distal, limb_key, vel_ratio, angle_thresh, is_kick in limb_checks:
-            state = limb_state[limb_key]
-
-            if state["cooldown"] > 0:
-                state["cooldown"] -= 1
-                state["extension_frames"] = 0
-                continue
-
-            # Skip limb when any joint is unreliable — avoids velocity spikes from
-            # occluded / hallucinated keypoint coordinates.
-            if any(kp[j][2] < KEYPOINT_MIN_CONFIDENCE for j in (proximal, mid, distal)):
-                state["extension_frames"] = 0
-                continue
-
-            cur_distal = np.array(kp[distal][:2])
-
-            # Velocity baseline: the LAST frame in which this specific limb was
-            # confident (not merely the previous processed frame). Because blurred
-            # impact frames are skipped above, this baseline naturally spans the
-            # blur so the displacement still captures the full strike — while never
-            # using an occluded/hallucinated coordinate. Multiplied by fps (not
-            # divided by the gap) to preserve the existing threshold tuning.
-            base = state.get("vel_base")
-            if base is None or (frame_idx - base["frame"]) > max_base_gap:
-                # No usable baseline yet (first sight or stale) — seed it and wait.
-                state["vel_base"] = {"distal": cur_distal, "center": atk_center,
-                                     "frame": frame_idx}
-                state["extension_frames"] = 0
-                continue
-
-            angle = compute_angle(kp[proximal], kp[mid], kp[distal])
-            distal_disp = cur_distal - base["distal"]
-            center_disp = atk_center - base["center"]
-            relative_vel = distal_disp - center_disp        # remove locomotion
-            # Convert px → px/sec, then normalise by attacker scale → scale/sec
-            speed_per_sec = np.linalg.norm(relative_vel) * fps
-            speed_normalised = speed_per_sec / atk_scale
-
-            # Advance the baseline to this confident observation for next frame.
-            state["vel_base"] = {"distal": cur_distal, "center": atk_center,
-                                 "frame": frame_idx}
-
-            # Accept straight strikes (jab/cross) OR bent-arm strikes (hook/uppercut).
-            # Kicks only use the straight/extension path.
-            if is_kick:
-                angle_ok = angle > angle_thresh
-            else:
-                straight = angle > ARM_EXTENSION_THRESHOLD
-                bent     = PUNCH_BENT_ANGLE_MIN <= angle <= PUNCH_BENT_ANGLE_MAX
-                angle_ok = straight or bent
-
-            # Diagnostic: record the speed of every standing arm extension (angle ok,
-            # before the velocity threshold) so the velocity distribution of real
-            # punch motions is visible — used to set PUNCH_VELOCITY_RATIO correctly.
-            if diag is not None and not grappling and not is_kick and angle_ok:
-                diag["extended"].append(float(speed_normalised))
-
-            if angle_ok and speed_normalised > vel_ratio:
-                state["extension_frames"] += 1
-            else:
-                state["extension_frames"] = 0
-                continue
-
-            if state["extension_frames"] < strike_extension_frames:
-                continue
-
-            # Contact check: distances normalised by defender scale.
-            # In grappling mode the open-range proximity gate is replaced by a
-            # directional gate (relaxed proximity + velocity aimed at a target zone).
-            end = np.array(kp[distal][:2])
-            strike_type = None
-
-            if grappling:
-                # Fighters are entangled, so raw proximity no longer discriminates a
-                # strike from pummeling / gripping (the hands are near the torso either
-                # way). The discriminating signal is DIRECTION: a real short strike
-                # drives the end-effector toward a target zone, whereas swimming for
-                # underhooks / framing / gripping moves it laterally or pulls it back.
-                prefix = "ground" if ground else "clinch"
-
-                head_dist_norm  = np.linalg.norm(end - opp_head) / def_scale
-                torso_dist_norm = (distance_to_rect(end, opp_torso_rect) / def_scale
-                                   if opp_torso_rect else float('inf'))
-                near_target = (head_dist_norm < GRAPPLING_HEAD_CONTACT_RATIO or
-                               torso_dist_norm < GRAPPLING_TORSO_CONTACT_RATIO)
-
-                # Aim the alignment check at whichever zone is closer.
-                if opp_torso_rect:
-                    opp_torso_center = np.array([
-                        (opp_torso_rect[0] + opp_torso_rect[2]) / 2,
-                        (opp_torso_rect[1] + opp_torso_rect[3]) / 2,
-                    ])
-                else:
-                    opp_torso_center = opp_head
-                target = opp_head if head_dist_norm <= torso_dist_norm else opp_torso_center
-                to_target = target - end
-                to_target_mag = np.linalg.norm(to_target)
-                vel_mag = np.linalg.norm(relative_vel)
-                alignment = (float(np.dot(relative_vel, to_target) / (vel_mag * to_target_mag))
-                             if vel_mag > 1e-6 and to_target_mag > 1e-6 else -1.0)
-
-                if near_target and alignment > GRAPPLING_STRIKE_DIRECTION_MIN:
-                    strike_type = f"{prefix}_knee" if is_kick else f"{prefix}_punch"
-            else:
-                head_dist_norm  = np.linalg.norm(end - opp_head) / def_scale
-                torso_dist_norm = (distance_to_rect(end, opp_torso_rect) / def_scale
-                                   if opp_torso_rect else float('inf'))
-
-                if is_kick:
-                    left_thigh_dist  = point_to_segment_distance(end, opp_kp[11], opp_kp[13])
-                    right_thigh_dist = point_to_segment_distance(end, opp_kp[12], opp_kp[14])
-                    thigh_dist_norm  = min(left_thigh_dist, right_thigh_dist) / def_scale
-
-                    if head_dist_norm < HEAD_CONTACT_RATIO:
-                        strike_type = "head_kick"
-                    elif torso_dist_norm < TORSO_CONTACT_RATIO:
-                        strike_type = "middle_kick"
-                    elif thigh_dist_norm < LEG_CONTACT_RATIO:
-                        strike_type = "low_kick"
-                else:
-                    punch_label = classify_punch_type(limb_key, angle, relative_vel, kp, opp_kp)
-                    # Acceptance: did the punch land near the opponent at all?
-                    # (unchanged reach — same two ratios as before).
-                    landed = (head_dist_norm < HEAD_CONTACT_RATIO or
-                              torso_dist_norm < TORSO_CONTACT_RATIO)
-                    if landed:
-                        # Head-vs-body by NEAREST REGION, not head-first priority.
-                        # Each distance is "how far outside the region" (0 when the
-                        # wrist is inside it): the head circle vs the torso rectangle.
-                        # A borderline head shot just outside the head circle is no
-                        # longer captured by the torso test merely because the head
-                        # sits above the torso's top edge.
-                        head_radius = get_head_radius(opp_kp, def_scale)
-                        head_region_dist  = max(0.0, np.linalg.norm(end - opp_head) - head_radius)
-                        torso_region_dist = (distance_to_rect(end, opp_torso_rect)
-                                             if opp_torso_rect else float('inf'))
-                        if head_region_dist <= torso_region_dist:
-                            strike_type = f"{punch_label}_head"
-                        else:
-                            strike_type = f"{punch_label}_body"
-
-                # Diagnostic: every standing PUNCH candidate that cleared the angle +
-                # velocity + extension-frame gates is recorded with its normalised
-                # contact distances and whether the contact gate accepted it. Lets us
-                # confirm whether the contact gate is what suppresses standing punches.
-                if diag is not None and not is_kick:
-                    diag["candidates"].append({
-                        "head":  float(head_dist_norm),
-                        "torso": float(torso_dist_norm),
-                        "speed": float(speed_normalised),
-                        "hit":   strike_type is not None,
-                    })
-
-            if strike_type:
-                strikes.append({
-                    "fighter":  fighter_label,
-                    "type":     strike_type,
-                    "defender": "fighter_blue" if fighter_label == "fighter_red" else "fighter_red",
-                })
-                state["cooldown"] = strike_cooldown_frames
-                state["extension_frames"] = 0
-
-    return strikes
 
 
 def determine_fight_state(detections, state, current_fight_state, fps):

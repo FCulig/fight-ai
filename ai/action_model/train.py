@@ -1,6 +1,6 @@
 """Train the skeleton action model.
 
-    python -m action_model.train [--epochs 60] [--no-negatives] [--device cpu]
+    python -m action_model.train [--epochs 60] [--promote] [--no-negatives] [--device cpu]
 
 Training and validation data never share a fight, by construction:
 
@@ -18,6 +18,7 @@ Writes runs/action_model/<timestamp>/{model.pt, report.json, report.md}.
 
 import argparse
 import json
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -31,6 +32,7 @@ from database import SessionLocal
 from . import config
 from .config import CLASSES, IN_CHANNELS, JITTER_STEPS, N_JOINTS, PERSON_CHANNELS, TARGETS, WINDOW_STEPS
 from .dataset import REFERENCE_EVENTS_SQL, TRAINING_EVENTS_SQL, build_dataset
+from .windows import centre_crop
 from .model import ActionNet
 
 RUNS_DIR = Path(__file__).resolve().parent.parent / "runs" / "action_model"
@@ -45,10 +47,6 @@ def _class_weights(y: np.ndarray, n: int) -> torch.Tensor:
     w = np.where(counts > 0, 1.0 / np.sqrt(np.maximum(counts, 1)), 0.0)
     w *= (counts > 0).sum() / w.sum()
     return torch.tensor(w, dtype=torch.float32)
-
-
-def _centre_crop(x: np.ndarray) -> np.ndarray:
-    return x[:, :, JITTER_STEPS:JITTER_STEPS + WINDOW_STEPS]
 
 
 def _augment(x: np.ndarray, rng: np.random.Generator) -> np.ndarray:
@@ -114,7 +112,7 @@ def predict(model: ActionNet, x: np.ndarray, device: str):
     model.eval()
     fams, tgts = [], []
     for s in range(0, len(x), 256):
-        xb = torch.from_numpy(_centre_crop(x[s:s + 256]).copy()).to(device)
+        xb = torch.from_numpy(centre_crop(x[s:s + 256]).copy()).to(device)
         lf, lt = model(xb)
         fams.append(lf.argmax(1).cpu().numpy())
         tgts.append(lt.argmax(1).cpu().numpy())
@@ -199,6 +197,8 @@ def main():
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--device", default="cpu", help="cpu | mps | cuda (the model is tiny; cpu is fine)")
+    ap.add_argument("--promote", action="store_true",
+                    help="copy the checkpoint to action_model/weights/strike_model.pt, the one the pipeline loads")
     ap.add_argument("--no-negatives", action="store_true",
                     help="positives only: a pure strike-type classifier with no `none` class examples")
     args = ap.parse_args()
@@ -271,6 +271,12 @@ def main():
     (out_dir / "report.json").write_text(json.dumps(report, indent=2))
     (out_dir / "report.md").write_text("\n".join(md))
     print(f"\nwrote {out_dir}/model.pt, report.md, report.json  ({time.time() - t0:.0f}s total)")
+    if args.promote:
+        from .inference import WEIGHTS_PATH
+        WEIGHTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(out_dir / "model.pt", WEIGHTS_PATH)
+        print(f"promoted to {WEIGHTS_PATH} — re-sweep STRIKE_PROB_THRESHOLD/STRIKE_NMS_SECS "
+              "and re-score before committing it")
 
 
 if __name__ == "__main__":

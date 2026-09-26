@@ -58,9 +58,8 @@ distinct from an open-range or clinch strike.
 
 The pipeline side already has this distinction — `ai/CLAUDE.md`'s strike
 vocabulary table lists `clinch_punch`/`clinch_knee` (standing clinch) vs.
-`ground_punch`/`ground_knee` (ground-and-pound), detected via
-`detect_strikes(..., grappling=True, ground=True)` in
-`ai/fight_processing/fight_processing_util.py`. The manual taxonomy needs the
+`ground_punch`/`ground_knee` (ground-and-pound), chosen by the fight state
+at the strike frame in `_strike_action` (`ai/fight_processing/fight_processing.py`). The manual taxonomy needs the
 same split so hand-labels can be compared against pipeline predictions.
 
 Needs:

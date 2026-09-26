@@ -7,12 +7,15 @@
 
 ## Stage 2 — Skeleton action model
 
-🚧 **IN PROGRESS (2026-09-26).** Steps 1–2 done in
-[`ai/action_model/`](../ai/action_model/) — `python -m action_model.train`
-trains on QA-verified (`is_verified IS TRUE`) labels from `training_data`
-fights only and validates on `purpose='reference'` fights only (never on
-data taken from a training fight), keeping the best-validation epoch. The fight-state head is not trained: no state labels
-have been QA-verified yet. Step 3 (inference module) not started.
+✅ **DONE (2026-09-26).** [`ai/action_model/`](../ai/action_model/) is the
+pipeline's only strike detector. It trains on QA-verified (`is_verified IS TRUE`)
+labels from `training_data` fights and validates on `reference` fights only.
+Step 3 shipped as a **replacement, not an A/B flag**: the rule cascade
+(`detect_strikes` and its constants) was deleted at the owner's request.
+Reference fight 60, strike F1 went from 44.9% to 56.8% and target accuracy from
+61.4% to 84.4%; family accuracy is flat (53.6% → 53.2%). Not done: the
+fight-state head, because no state labels have been QA-verified, so
+`determine_fight_state` still decides state.
 
 Detection → tracking → pose is the right foundation; keep it. Replace the rule
 cascade on top.

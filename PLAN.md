@@ -59,7 +59,7 @@ before reading any number in it.
 <summary><b>Provenance</b></summary>
 
 From a pipeline run's stdout in `ai/runs/`. Rows 4–5 are printed verbatim by
-`_print_standing_punch_diag` ([fight_processing.py:67](ai/fight_processing/fight_processing.py)).
+`_print_standing_punch_diag` (deleted 2026-09-26 along with the rule cascade it diagnosed).
 Rows 1–3 were derived by parsing the `threw a X at frame N` and `Fight state
 changed to FightState.X at frame N` lines against the detected round bounds,
 then **re-derived independently from `fight_events` in Postgres** by

@@ -6,6 +6,7 @@ Trained only on QA-verified hand labels from `purpose='training_data'` fights:
 
     python -m action_model.train
 
-Nothing here is imported by the pipeline yet — the drop-in replacement for
-`detect_strikes` (plan step 3) is a follow-up.
+`inference.py` is the pipeline's strike detector: process_fight loads
+`weights/strike_model.pt` and scans every round with it. Promote a new
+training run there with `python -m action_model.train --promote`.
 """

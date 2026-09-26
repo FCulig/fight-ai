@@ -7,6 +7,6 @@ class FightState(Enum):
 
 
 # States in which the fighters are entangled (clinch or ground). Used wherever
-# the old binary GRAPPLING bucket was checked — clinch-strike detection,
-# contact-gate skipping, etc.
+# the old binary GRAPPLING bucket was checked — the relaxed frame_usable bar,
+# clinch_/ground_ strike actions, skipping the recoil check.
 GRAPPLING_STATES = frozenset({FightState.CLINCH, FightState.GROUND})

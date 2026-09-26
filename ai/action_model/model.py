@@ -3,7 +3,7 @@
 Deliberately small: a few hundred labelled strikes cannot support an ST-GCN's
 parameter count without memorising the one fight that supplies most of them.
 Input is (B, IN_CHANNELS, T); first differences are appended inside forward()
-so velocity — the signal the rule cascade hand-thresholds — is explicit.
+so velocity — the main signal a strike carries — is explicit.
 """
 
 import torch
