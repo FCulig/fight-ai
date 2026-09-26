@@ -1,0 +1,13 @@
+Okay I now have enough labelled events. Lets train a model for it. For training only use events that are specified as training data, also use only events that have been validated by the QA
+
+---
+
+for validation, use a fight that is of a type  reference, do not take from training data validation data
+
+---
+
+mark all reference fight events as QAed, they cannot be QAed, they have been QAed by a mistake
+
+---
+
+So is this model now part of the AI pipeline?
