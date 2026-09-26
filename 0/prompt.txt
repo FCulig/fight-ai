@@ -1,0 +1,1 @@
+Why is http://localhost:5173/ crashing in brave?

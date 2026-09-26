@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M3EW0P9SZBPMEG6CM46HN080",
+  "strategy": "manual-commit",
+  "branch": "master",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "ai/CLAUDE.md",
+    "backend/CLAUDE.md",
+    "backend/app/api/routes/fights.py",
+    "backend/app/services/event_service.py",
+    "backend/tests/test_event_service.py",
+    "plan/04-stage2-model.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 26,
+    "cache_creation_tokens": 34756,
+    "cache_read_tokens": 826274,
+    "output_tokens": 4728,
+    "api_call_count": 13
+  }
+}
