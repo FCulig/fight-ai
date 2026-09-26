@@ -80,6 +80,16 @@ ai/
 │   ├── cli.py                # python -m eval.cli {export,video,sanity,score,agreement,
 │   │                         #   inject-swap,corner-swap-recall,summary}
 │   └── labels/               # Hand-labelled ground truth — COMMITTED to git
+├── action_model/             # Stage 2 skeleton action model (plan/04). Not wired
+│   │                         #   into the pipeline yet.
+│   ├── config.py             # Window/taxonomy contract (copied into each checkpoint)
+│   ├── dataset.py            # fight_events(F, corner) -> fighter_frames windows.
+│   │                         #   Trains ONLY on purpose='training_data' +
+│   │                         #   is_verified IS TRUE labels; corner_swaps NOT applied.
+│   ├── model.py              # Small temporal CNN: family (+none) and target heads
+│   └── train.py              # python -m action_model.train -> runs/action_model/<ts>/
+│                             #   Validation = purpose='reference' fights ONLY, never a
+│                             #   slice of a training fight; best-val epoch is kept.
 └── database.py               # SQLAlchemy SessionLocal; also set_fight_state,
                                #   set_video_check, set_fight_pid — the only way any
                                #   AI-venv process (pipeline or upload validator) writes
@@ -322,6 +332,9 @@ fight_events   (id, fight_id → fights, source, kind, frame, end_frame nullable
                --   kind='point' row (True=confirmed, False=declined, NULL=not
                --   reviewed). Written only via backend PUT .../events/{id}/verify
                --   — never by this pipeline or by Annotate's own writes.
+               --   training_data fights only: the backend returns 409 for a
+               --   verdict on any other purpose. `reference` labels are held-out
+               --   ground truth and are never QA'd (is_verified stays NULL).
                -- ONE table for both pipeline predictions and hand labels — told
                --   apart by two columns, not by which table a row is in:
                -- source: 'prediction' (written only by process_fight()/

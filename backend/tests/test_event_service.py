@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -192,3 +194,34 @@ class TestFightEventCreateValidation:
     def test_rejects_corner_on_state_action(self):
         with pytest.raises(ValueError):
             FightEventCreate(frame=1, description="x", action="state_ground", corner=0)
+
+
+def _fight(session, fight_id, purpose):
+    session.add(Fight(id=fight_id, video_path=f"v{fight_id}.mp4", fps=50, width=1280, height=720,
+                      state="labeling_complete", purpose=purpose,
+                      created_at=datetime(2026, 1, 1)))  # server default is Postgres now(), absent in SQLite
+
+
+def test_set_verified_rejects_reference_fight(session_factory):
+    SessionLocal = session_factory
+    with SessionLocal() as session:
+        _fight(session, 1, "reference")
+        session.add(FightEvent(id=5, frame=10, fight_id=1, source="label", kind="point", action="jab"))
+        session.commit()
+
+    with pytest.raises(event_service.NotTrainingData):
+        event_service.set_verified(1, 5, True)
+    with pytest.raises(event_service.NotTrainingData):
+        event_service.set_verified(1, 5, False)
+    # clearing a stray verdict is still allowed
+    assert event_service.set_verified(1, 5, None).is_verified is None
+
+
+def test_set_verified_allows_training_data_fight(session_factory):
+    SessionLocal = session_factory
+    with SessionLocal() as session:
+        _fight(session, 2, "training_data")
+        session.add(FightEvent(id=6, frame=10, fight_id=2, source="label", kind="point", action="jab"))
+        session.commit()
+
+    assert event_service.set_verified(2, 6, True).is_verified is True

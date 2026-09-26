@@ -231,7 +231,10 @@ def update_fight_event(fight_id: int, event_id: int, payload: FightEventUpdate):
 
 @router.put("/{fight_id}/events/{event_id}/verify", response_model=FightEventResponse)
 def verify_fight_event(fight_id: int, event_id: int, payload: FightEventVerify):
-    event = event_service.set_verified(fight_id, event_id, payload.is_verified)
+    try:
+        event = event_service.set_verified(fight_id, event_id, payload.is_verified)
+    except event_service.NotTrainingData as e:
+        raise HTTPException(status_code=409, detail=str(e))
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
     return event

@@ -2,7 +2,14 @@ from typing import List, Optional
 
 from app.utils.db import run_db_query
 from app.models.fight_event import FightEvent, FightEventCreate, FightEventUpdate
+from app.models.fight import Fight
 from app.models.round import Round
+
+
+class NotTrainingData(Exception):
+    """A QA verdict was sent for an event on a fight that isn't
+    `purpose='training_data'`. `reference` fights are held-out ground truth
+    and never go through QA — see useTrainingDataEvents.ts."""
 
 
 def get_events_by_fight(
@@ -138,6 +145,12 @@ def set_verified(fight_id: int, event_id: int, is_verified: Optional[bool]) -> O
         )
         if event is None:
             return None
+        # Clearing (None) is always allowed so a stray verdict can be undone;
+        # setting one is training_data-only.
+        if is_verified is not None:
+            purpose = session.query(Fight.purpose).filter(Fight.id == fight_id).scalar()
+            if purpose != "training_data":
+                raise NotTrainingData(f"fight {fight_id} is '{purpose}', only training_data fights are QA'd")
         event.is_verified = is_verified
         session.commit()
         session.refresh(event)

@@ -7,13 +7,12 @@
 
 ## Stage 2 — Skeleton action model
 
-⏳ **NOT STARTED — blocked on labelled training data.** Stage 0's labelling
-framework (including the `label_events`/`label_spans` → `eval.cli export`
-pipeline this stage's `export.py` builds on — see
-[`ai/eval/labels_db.py`](../ai/eval/labels_db.py)) is ready, but no fight has
-actually been labelled yet, and the plan's own target is ~300 real strikes
-across 2-3 fights before this is worth training. That's real human work in
-the Annotate UI, not something to fabricate.
+🚧 **IN PROGRESS (2026-09-26).** Steps 1–2 done in
+[`ai/action_model/`](../ai/action_model/) — `python -m action_model.train`
+trains on QA-verified (`is_verified IS TRUE`) labels from `training_data`
+fights only and validates on `purpose='reference'` fights only (never on
+data taken from a training fight), keeping the best-validation epoch. The fight-state head is not trained: no state labels
+have been QA-verified yet. Step 3 (inference module) not started.
 
 Detection → tracking → pose is the right foundation; keep it. Replace the rule
 cascade on top.
