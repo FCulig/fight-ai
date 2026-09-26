@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M3F77S07W07NEHS07ENDPBXA",
+  "strategy": "manual-commit",
+  "branch": "master",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "PLAN.md",
+    "TODO.md",
+    "ai/CLAUDE.md",
+    "ai/action_model/__init__.py",
+    "ai/action_model/config.py",
+    "ai/action_model/dataset.py",
+    "ai/action_model/inference.py",
+    "ai/action_model/model.py",
+    "ai/action_model/train.py",
+    "ai/action_model/weights/strike_model.pt",
+    "ai/action_model/windows.py",
+    "ai/eval/labels_db.py",
+    "ai/eval/schema.py",
+    "ai/fight_processing/fight_processing.py",
+    "ai/fight_processing/fight_processing_util.py",
+    "ai/models/FightState.py",
+    "ai/models/constants.py",
+    "ai/models/geometry.py",
+    "ai/video_processing/corner_assignment/corner_assignment.py",
+    "ai/video_processing/pose_tracking/pose_tracking.py",
+    "plan/04-stage2-model.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 102,
+    "cache_creation_tokens": 353897,
+    "cache_read_tokens": 12170694,
+    "output_tokens": 50850,
+    "api_call_count": 51
+  }
+}
