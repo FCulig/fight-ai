@@ -1,0 +1,37 @@
+Use the claude_design MCP (https://api.anthropic.com/v1/design/mcp, auth via /design-login) to import this project:
+https://claude.ai/design/p/6d9db97f-58af-4b0e-8201-5cbe422425e1?file=Fightlytics+Landing+v2.html
+
+Focus on these files (the whole project is readable):
+- `Fightlytics Landing v2.html`
+
+Also read these files the selection imports:
+- `app/logo.jsx`
+- `app/mockup.jsx`
+- `app/sections.css`
+- `app/styles.css`
+- `app/v2.css`
+- `app/v2.jsx`
+
+Implement: `Fightlytics Landing v2.html`
+
+---
+
+Implement the following design for the landing/ project:  Use the claude_design MCP (https://api.anthropic.com/v1/design/mcp, auth via /design-login) to import this project:
+  https://claude.ai/design/p/6d9db97f-58af-4b0e-8201-5cbe422425e1?file=Fightlytics+Landing+v2.html
+
+  Focus on these files (the whole project is readable):
+  - `Fightlytics Landing v2.html`
+
+  Also read these files the selection imports:
+  - `app/logo.jsx`
+  - `app/mockup.jsx`
+  - `app/sections.css`
+  - `app/styles.css`
+  - `app/v2.css`
+  - `app/v2.jsx`
+
+  Implement: `Fightlytics Landing v2.html`
+
+---
+
+when i open index.html I get the following error: Access to XMLHttpRequest at 'file:///Users/filip.culig/Developer/fight-ai/landing/app/logo.jsx' from origin 'null' has been blocked by CORS policy: Cross origin requests are only supported for protocol schemes: brave, chrome, chrome-experimental-site-token-provider, chrome-extension, chrome-untrusted, data, http, https, isolated-app.

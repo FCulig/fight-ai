@@ -1,0 +1,106 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M3KC3WBXFP3JK5A760747ZYS",
+  "session_id": "60cb9317-01de-41e4-b341-6d41783607f0",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-28T06:44:25.631212Z",
+  "branch": "master",
+  "checkpoints_count": 2,
+  "save_step_count": 2,
+  "files_touched": [
+    "landing/app/logo.jsx",
+    "landing/app/mockup.jsx",
+    "landing/app/sections.css",
+    "landing/app/styles.css",
+    "landing/app/v2.css",
+    "landing/app/v2.jsx",
+    "landing/index.html"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-sonnet-5",
+  "turn_id": "1214cd44c3b7",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 24,
+    "cache_creation_tokens": 108682,
+    "cache_read_tokens": 1190095,
+    "output_tokens": 41730,
+    "api_call_count": 12
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-28T06:44:25.600658Z",
+    "agent_lines": 1435,
+    "agent_removed": 0,
+    "human_added": 17,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1452,
+    "total_lines_changed": 1452,
+    "agent_percentage": 98.82920110192838,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 1600,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/launch.json": 17,
+        ".claude/settings.json": 90,
+        ".claude/settings.local.json": 29,
+        "db/.env.example": 3,
+        "db/.envrc": 1,
+        "db/.gitignore": 16,
+        "db/alembic.ini": 149,
+        "db/alembic/README": 1,
+        "db/alembic/env.py": 79,
+        "db/alembic/script.py.mako": 28,
+        "db/alembic/versions/92f72188aec1_create_fight_events_table.py": 33,
+        "db/alembic/versions/a1b2c3d4e5f6_add_fights_fighter_frames_rounds.py": 72,
+        "db/alembic/versions/a2b3c4d5e6f7_add_validation_and_labeled_at.py": 39,
+        "db/alembic/versions/a3b4c5d6e7f8_add_source_kind_to_fight_events.py": 82,
+        "db/alembic/versions/a4b5c6d7e8f9_add_is_verified_to_fight_events.py": 31,
+        "db/alembic/versions/b2c3d4e5f6a7_fight_events_fight_id_not_null.py": 29,
+        "db/alembic/versions/b3c4d5e6f7a8_create_label_spans_table.py": 41,
+        "db/alembic/versions/b4c5d6e7f8a9_migrate_label_events_into_fight_events.py": 49,
+        "db/alembic/versions/b4ea83f7c87b_create_eval_runs_table.py": 75,
+        "db/alembic/versions/b7e91f2d3a08_add_keypoints_to_fighter_frames.py": 28,
+        "db/alembic/versions/c1d2e3f4a5b6_create_fighters_table.py": 33,
+        "db/alembic/versions/c2d3e4f5a6b7_add_fight_corner_fighters.py": 37,
+        "db/alembic/versions/c3d4e5f6a7b8_restructure_fight_events.py": 45,
+        "db/alembic/versions/c4d5e6f7a8b9_rename_fighter_frames_fighter_id_to_corner.py": 28,
+        "db/alembic/versions/c5d6e7f8a9b0_add_state_to_fight_events.py": 31,
+        "db/alembic/versions/c6d7e8f9a0b1_migrate_label_spans_into_fight_events.py": 48,
+        "db/alembic/versions/d1e2f3a4b5c6_replace_processed_with_state.py": 29,
+        "db/alembic/versions/d6e7f8a9b0c1_add_segmentation_review_to_fights.py": 50,
+        "db/alembic/versions/d7e8f9a0b1c2_add_fight_events_constraints.py": 102,
+        "db/alembic/versions/e5f6a7b8c9d0_add_pid_to_fights.py": 30,
+        "db/alembic/versions/e6f7a8b9c0d1_add_purpose_to_fights.py": 61,
+        "db/alembic/versions/e8f9a0b1c2d3_drop_label_events_and_label_spans.py": 63,
+        "db/alembic/versions/f0a1b2c3d4e5_relax_fight_events_description_requirement.py": 67,
+        "db/alembic/versions/f1a2b3c4d5e6_create_label_events_table.py": 53,
+        "db/init/01_grant_public_schema.sql": 3,
+        "db/requirements.txt": 8,
+        "landing/index.html": 12,
+        "landing/style.css": 8
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 136,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2891,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/launch.json": 17,
+        ".claude/settings.json": 90,
+        ".claude/settings.local.json": 29
+      }
+    }
+  ]
+}
