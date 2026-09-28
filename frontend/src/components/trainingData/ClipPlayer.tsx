@@ -158,7 +158,7 @@ export default function ClipPlayer({ fight, frame, corner }: ClipPlayerProps) {
         <button type="button" className={'pill' + (showBoxes ? ' active' : '')} onClick={() => setShowBoxes((v) => !v)} style={{ padding: '4px 10px', fontSize: 11 }}>Box</button>
       </div>
 
-      <div style={{ position: 'relative', width: '100%', maxWidth: 720, margin: '0 auto', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.07)', background: '#000' }}>
+      <div style={{ position: 'relative', width: '100%', maxWidth: 720, margin: '0 auto', borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border-glass)', background: '#000' }}>
         <video
           ref={videoRef}
           src={`/fights/${fight.id}/video`}
@@ -182,13 +182,13 @@ export default function ClipPlayer({ fight, frame, corner }: ClipPlayerProps) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', marginTop: 11 }}>
-        <button type="button" onClick={() => stepFrame(-1)} title="Previous frame" style={{ width: 28, height: 28, borderRadius: 8, display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}>
+        <button type="button" className="icon-btn" onClick={() => stepFrame(-1)} title="Previous frame" style={{ width: 28, height: 28 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 15 }}>skip_previous</span>
         </button>
-        <button type="button" className="lab-ibtn" onClick={togglePlay} title="Play / pause" style={{ width: 32, height: 32, borderRadius: 8, display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}>
+        <button type="button" className="icon-btn" onClick={togglePlay} title="Play / pause" style={{ width: 32, height: 32 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{isPlaying ? 'pause' : 'play_arrow'}</span>
         </button>
-        <button type="button" onClick={() => stepFrame(1)} title="Next frame" style={{ width: 28, height: 28, borderRadius: 8, display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}>
+        <button type="button" className="icon-btn" onClick={() => stepFrame(1)} title="Next frame" style={{ width: 28, height: 28 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 15 }}>skip_next</span>
         </button>
         <input
@@ -198,10 +198,10 @@ export default function ClipPlayer({ fight, frame, corner }: ClipPlayerProps) {
           step={1 / fps}
           value={currentTime}
           onChange={(e) => handleScrub(Number(e.target.value))}
-          style={{ flex: 1, minWidth: 140, accentColor: 'var(--cyan-400)', height: 4 }}
+          style={{ flex: 1, minWidth: 140, accentColor: 'var(--accent)', height: 4 }}
           aria-label="Frame"
         />
-        <span style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>
           {String(Math.min(clipFrame, clipFrames)).padStart(2, '0')} / {clipFrames}
         </span>
         <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 9, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border-subtle)' }}>

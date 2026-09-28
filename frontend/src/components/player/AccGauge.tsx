@@ -18,7 +18,7 @@ export default function AccGauge({ pct, color, label }: AccGaugeProps) {
           <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>{pct}%</span>
         </div>
       </div>
-      <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const }}>{label}</span>
+      <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 700 }}>{label}</span>
     </div>
   );
 }

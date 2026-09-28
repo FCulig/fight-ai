@@ -44,7 +44,7 @@ export default function VersionTrendChart({ versions: runs, selectedId, onSelect
               stroke="rgba(250,178,25,0.5)" strokeWidth="1" strokeDasharray="3 3" />
           )
         ))}
-        <path d={line('precision')} fill="none" stroke="rgba(0,218,243,0.3)" strokeWidth="1.5" strokeDasharray="3 3" />
+        <path d={line('precision')} fill="none" stroke="color-mix(in srgb, var(--accent) 30%, transparent)" strokeWidth="1.5" strokeDasharray="3 3" />
         <path d={line('recall')} fill="none" stroke="rgba(179,157,251,0.5)" strokeWidth="1.5" strokeDasharray="3 3" />
         <path d={line('f1')} fill="none" stroke="var(--cyan-400)" strokeWidth="2" />
         {runs.map((r, i) => {
@@ -79,7 +79,7 @@ export default function VersionTrendChart({ versions: runs, selectedId, onSelect
               padding: '2px 4px', cursor: 'pointer',
             }}
           >
-            <div style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 10, fontWeight: 700, color: r.id === selectedId ? '#9fe8f4' : 'var(--text-muted)' }}>
+            <div style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 10, fontWeight: 700, color: r.id === selectedId ? 'var(--accent-hover)' : 'var(--text-muted)' }}>
               v{r.pipeline_version}
             </div>
             <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-disabled)' }}>fight #{r.scored_fight_id}</div>
@@ -88,7 +88,7 @@ export default function VersionTrendChart({ versions: runs, selectedId, onSelect
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 10 }}>
         <Legend c="var(--cyan-400)" name="F1" />
-        <Legend c="rgba(0,218,243,0.3)" name="Precision" />
+        <Legend c="color-mix(in srgb, var(--accent) 30%, transparent)" name="Precision" />
         <Legend c="rgba(179,157,251,0.5)" name="Recall" />
         <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>
           Hollow point = matching constants changed at that version. Click a point to view its report below.

@@ -12,6 +12,8 @@ export interface TrainingClass {
   action: string;
   name: string;
   group: string;
+  /** The Annotate palette's keyboard shortcut for this class (ToolItem.key/.num). */
+  key: string;
 }
 
 const NOT_A_CLASS = new Set([
@@ -24,7 +26,7 @@ const NOT_A_CLASS = new Set([
 export const TRAINING_CLASSES: TrainingClass[] = TOOL_GROUPS.flatMap((g) =>
   g.items
     .filter((it) => it.needsFighter && !NOT_A_CLASS.has(it.action))
-    .map((it) => ({ action: it.action, name: it.name, group: g.group })),
+    .map((it) => ({ action: it.action, name: it.name, group: g.group, key: (it.num ?? it.key).toUpperCase() })),
 );
 
 export const TRAINING_ACTIONS = new Set(TRAINING_CLASSES.map((c) => c.action));
@@ -43,6 +45,35 @@ export const CLASS_BY_ACTION: Record<string, TrainingClass> =
  * this is what keeps e.g. a retyped `takedown_landed` from silently ending
  * up with `success=null`, which nothing else in the app ever produces.
  */
+/**
+ * Groups the hand-strike/kick/ground actions into the eight families the
+ * Training Lab overview reports on (jab/cross/hook/uppercut/elbow/knee/kick/
+ * punch) — a left/right or stand/ground/clinch variant of the same strike
+ * collapses to one family, matching what the model will actually learn to
+ * tell apart first. Grappling (takedowns/submission), outcome (knockdown)
+ * and fight-state marks have no family — they're not a strike a fighter aims
+ * at a zone, so they return `null`.
+ */
+export const FAMILY_BY_ACTION: Record<string, string> = {
+  jab: 'jab',
+  cross: 'cross',
+  left_hook: 'hook',
+  right_hook: 'hook',
+  left_uppercut: 'uppercut',
+  right_uppercut: 'uppercut',
+  elbow: 'elbow',
+  clinch_knee: 'knee',
+  ground_knee: 'knee',
+  calf_kick: 'kick',
+  low_kick: 'kick',
+  middle_kick: 'kick',
+  high_kick: 'kick',
+  clinch_punch: 'punch',
+  ground_punch: 'punch',
+};
+
+export const STRIKE_FAMILIES = ['jab', 'cross', 'hook', 'uppercut', 'elbow', 'knee', 'kick', 'punch'] as const;
+
 export function reclassifyPayload(
   newAction: string,
   currentTarget: string | null,

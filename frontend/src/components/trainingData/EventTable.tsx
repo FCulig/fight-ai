@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { QAEvent } from '../../hooks/useTrainingDataEvents';
 import type { TrainingClass } from '../../utils/trainingDataTaxonomy';
 import { formatFrameClock } from '../annotate/taxonomy';
@@ -8,6 +8,7 @@ import { classStats, verdictKey } from '../../utils/trainingDataStats';
 
 const CORNER_C: Record<number, string> = { 0: 'var(--f-red)', 1: 'var(--f-blue)' };
 const FILTERS = ['All', 'Pending', 'Confirmed', 'Declined'] as const;
+const ALL_FIGHTS = 'All fights';
 
 interface EventTableProps {
   cls: TrainingClass;
@@ -18,8 +19,15 @@ interface EventTableProps {
 
 export default function EventTable({ cls, events, onBack, onOpen }: EventTableProps) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All');
+  const [fightId, setFightId] = useState<number | typeof ALL_FIGHTS>(ALL_FIGHTS);
 
   const s = classStats(events);
+
+  const fightOptions = useMemo(() => {
+    const seen = new Map<number, string>();
+    events.forEach((e) => { if (!seen.has(e.fight.id)) seen.set(e.fight.id, fightLabel(e.fight)); });
+    return [...seen.entries()];
+  }, [events]);
 
   const rows = events
     .filter((e) => {
@@ -27,6 +35,7 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
       if (filter === 'Pending' && v !== 'pending') return false;
       if (filter === 'Confirmed' && v !== 'confirmed') return false;
       if (filter === 'Declined' && v !== 'declined') return false;
+      if (fightId !== ALL_FIGHTS && e.fight.id !== fightId) return false;
       return true;
     })
     .sort((a, b) => (a.fight.id === b.fight.id ? a.frame - b.frame : a.fight.id - b.fight.id));
@@ -36,7 +45,7 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button type="button" className="btn-glass" onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 8 }}>
+        <button type="button" className="btn-glass" onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', fontSize: 11.5, fontWeight: 700 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 15 }}>arrow_back</span>All classes
         </button>
         <span style={{ color: 'var(--text-disabled)', fontSize: 12 }}>/</span>
@@ -47,7 +56,7 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
         <div style={{ minWidth: 0 }}>
           <h1 className="font-display" style={{ fontSize: 32, lineHeight: 0.94, margin: 0, color: 'var(--text-primary)' }}>{cls.name}</h1>
           <p style={{ margin: '5px 0 0', fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)' }}>
-            {s.total} labelled events · exports as <code style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 11.5, color: '#9fe8f4' }}>{cls.action}</code>
+            {s.total} labelled events · exports as <code style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--accent-hover)' }}>{cls.action}</code>
           </p>
         </div>
         <button
@@ -56,11 +65,11 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
           disabled={!firstPending}
           onClick={() => firstPending && onOpen(firstPending.id)}
           style={{
-            marginLeft: 'auto', background: 'linear-gradient(135deg, #00daf3 0%, #0099b0 100%)', color: '#001f24',
-            fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 10, padding: '9px 16px',
+            marginLeft: 'auto', background: 'linear-gradient(135deg, var(--accent), var(--accent-deep))', color: 'var(--accent-on)',
+            fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 999, padding: '9px 16px',
             display: 'inline-flex', alignItems: 'center', gap: 6,
-            boxShadow: firstPending ? '0 0 16px rgba(0,218,243,0.2)' : 'none', opacity: firstPending ? 1 : 0.45,
-            cursor: firstPending ? 'pointer' : 'default',
+            opacity: firstPending ? 1 : 0.45,
+            cursor: firstPending ? 'pointer' : 'default', fontFamily: 'inherit',
           }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>play_arrow</span>
@@ -68,12 +77,23 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
         </button>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', padding: '9px 12px', marginBottom: 14, borderRadius: 12, background: 'rgba(255,255,255,0.028)', border: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 9, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', padding: '9px 12px', marginBottom: 14, borderRadius: 22, background: 'var(--surface-glass)', border: '1px solid var(--border-glass)' }}>
+        <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 999, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border-subtle)' }}>
           {FILTERS.map((f) => (
             <button key={f} type="button" className={'pill' + (filter === f ? ' active' : '')} onClick={() => setFilter(f)} style={{ padding: '4px 9px', fontSize: 11 }}>{f}</button>
           ))}
         </div>
+        {fightOptions.length > 1 && (
+          <>
+            <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)' }} />
+            <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 999, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+              <button type="button" className={'pill' + (fightId === ALL_FIGHTS ? ' active' : '')} onClick={() => setFightId(ALL_FIGHTS)} style={{ padding: '4px 9px', fontSize: 11 }}>{ALL_FIGHTS}</button>
+              {fightOptions.map(([id, label]) => (
+                <button key={id} type="button" className={'pill' + (fightId === id ? ' active' : '')} onClick={() => setFightId(id)} style={{ padding: '4px 9px', fontSize: 11 }}>{label}</button>
+              ))}
+            </div>
+          </>
+        )}
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{rows.length} shown</span>
       </div>
@@ -83,14 +103,16 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
           <button
             key={e.id}
             type="button"
+            className="td-row"
             onClick={() => onOpen(e.id)}
             style={{
               display: 'grid', gridTemplateColumns: '74px minmax(0,1fr) auto 18px', gap: 13, alignItems: 'center',
-              padding: '10px 12px', borderRadius: 11, background: 'rgba(255,255,255,0.022)', border: '1px solid var(--border-subtle)',
-              cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+              padding: '10px 16px 10px 12px', borderRadius: 18, background: 'var(--surface-glass)',
+              border: '1px solid var(--border-subtle)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+              transition: 'border-color .12s, background .12s',
             }}
           >
-            <span style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
               {formatFrameClock(e.frame, e.fight.fps)}
             </span>
             <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>

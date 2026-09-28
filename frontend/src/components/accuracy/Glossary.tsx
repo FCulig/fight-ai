@@ -26,7 +26,7 @@ export default function Glossary() {
     }}>
       {TERMS.map(({ term, def }) => (
         <span key={term}>
-          <code style={{ color: '#9fe8f4', fontWeight: 700 }}>{term}</code> {def}
+          <code style={{ color: 'var(--accent-hover)', fontWeight: 700 }}>{term}</code> {def}
         </span>
       ))}
     </div>

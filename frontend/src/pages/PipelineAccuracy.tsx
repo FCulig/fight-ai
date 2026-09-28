@@ -4,6 +4,8 @@ import { latestPerVersion } from '../types/EvalRun';
 import type { EvalReport, EvalRunSummary, FixtureSummary } from '../types/EvalRun';
 import type { Fight } from '../types/Fight';
 import { useWindowWidth } from '../hooks/useWindowWidth';
+import { useLabelledEvents } from '../hooks/useLabelledEvents';
+import { useFightLedger } from '../hooks/useFightLedger';
 import ClassificationBreakdown from '../components/accuracy/ClassificationBreakdown';
 import ConfusionHeatmap from '../components/accuracy/ConfusionHeatmap';
 import FixtureTable from '../components/accuracy/FixtureTable';
@@ -16,18 +18,24 @@ import RoundsCheck from '../components/accuracy/RoundsCheck';
 import StateDumbbell from '../components/accuracy/StateDumbbell';
 import VersionTrendChart from '../components/accuracy/VersionTrendChart';
 import WorstList from '../components/accuracy/WorstList';
+import LabOverview from '../components/accuracy/LabOverview';
+import AnnotatedEvents from '../components/accuracy/AnnotatedEvents';
+import FightLedger from '../components/accuracy/FightLedger';
+import PipelineHealthTodo from '../components/accuracy/PipelineHealthTodo';
+import SectionIndex from '../components/accuracy/SectionIndex';
 
 /**
- * Training Lab, Section E only ("Pipeline accuracy") — see
- * ~/.claude/plans/i-have-now-reference-radiant-salamander.md. Sections
- * A-D/F/G of the full design need labelled-data volume/infrastructure this
- * app doesn't have yet; this page covers only what the current fixtures
- * (a labelled reference fight scored against a re-uploaded, AI-processed
- * copy of itself) can honestly show — E0/E1/E2/E8.
+ * Training Lab — as much of the full design (Overview / Annotated events /
+ * Fights / Pipeline accuracy / Pipeline health) as the app's real data can
+ * honestly show, built entirely from endpoints Player/Annotate/Training
+ * Data QA already use (no new backend surface beyond the existing
+ * `/eval-runs/*`). Section F stays a literal TODO — the design itself never
+ * finished specifying it.
  */
 export default function PipelineAccuracy() {
   const width = useWindowWidth();
   const isMobile = width < 640;
+  const narrow = width < 1100;
 
   const [fixtures, setFixtures] = useState<FixtureSummary[]>([]);
   const [fights, setFights] = useState<Fight[]>([]);
@@ -40,6 +48,9 @@ export default function PipelineAccuracy() {
   const [report, setReport] = useState<EvalReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const { events: labelledEvents, fights: labelledFights, roundMinutes, loading: labelledLoading } = useLabelledEvents();
+  const { ledger, loading: ledgerLoading } = useFightLedger();
 
   const loadFixtures = useCallback(() => {
     setLoading(true);
@@ -96,95 +107,135 @@ export default function PipelineAccuracy() {
   const candidates = fights.filter((f) => f.purpose === 'ai_labeled' && f.state === 'completed');
 
   return (
-    <div style={{ maxWidth: 1440, margin: '0 auto', padding: isMobile ? '14px 13px 60px' : '22px 30px 80px', width: '100%' }}>
-      <div style={{ marginBottom: 16 }}>
-        <h1 className="font-display" style={{ fontSize: isMobile ? 30 : 40, lineHeight: 0.94, margin: 0, color: 'var(--text-primary)' }}>
-          PIPELINE ACCURACY
-        </h1>
-        <p style={{ margin: '5px 0 0', fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)' }}>
-          Reference fixtures scored against pipeline predictions, across versions
-        </p>
+    <div style={{ position: 'relative', zIndex: 1, maxWidth: 1440, margin: '0 auto', padding: isMobile ? '18px 16px 70px' : '22px 30px 90px', width: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, marginBottom: 22, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <span className="eyebrow">Lab</span>
+          <h1 className="font-display" style={{ fontSize: isMobile ? 32 : 'clamp(36px, 4.6vw, 60px)', lineHeight: 0.94, margin: '10px 0 0', color: 'var(--text-primary)' }}>
+            Training lab.
+          </h1>
+          <p style={{ margin: '10px 0 0', fontSize: 13.5, fontWeight: 600, color: 'var(--text-muted)' }}>
+            What the model learns from, and how well it scores.
+          </p>
+        </div>
       </div>
 
-      {loading && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>}
       {error && <div style={{ fontSize: 13, color: 'var(--red-500)', marginBottom: 14 }}>{error}</div>}
 
-      {!loading && fixtures.length === 0 && (
-        <div className="glass" style={{ padding: '20px 22px', fontSize: 13, color: 'var(--text-muted)' }}>
-          No labelled reference fixture exists yet. Upload a fight as "Self-annotate → Reference" and
-          finish labelling it to create one.
-        </div>
-      )}
+      <div style={{ display: 'grid', gridTemplateColumns: narrow ? 'minmax(0,1fr)' : '172px minmax(0,1fr)', gap: 22, alignItems: 'start' }}>
+        <SectionIndex narrow={narrow} />
 
-      {fixtures.length > 0 && (
-        <div className="glass" style={{ padding: '20px 22px 22px', marginBottom: 16 }}>
-          <div className="label" style={{ marginBottom: 12 }}>Fixtures</div>
-          <FixtureTable fixtures={fixtures} selectedId={selectedId} onSelect={setSelectedId} />
-          <Glossary />
-        </div>
-      )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+          {labelledLoading ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading labelled data…</div>
+          ) : (
+            <LabOverview
+              events={labelledEvents}
+              fights={labelledFights}
+              roundMinutes={roundMinutes}
+              allFights={ledger.map((r) => r.fight)}
+              fixtures={fixtures}
+              onNavigate={(id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            />
+          )}
 
-      {selected && (
-        <div className="glass" style={{ padding: '20px 22px 22px' }}>
-          {!selected.is_measurable ? (
-            <NotMeasurable fixture={selected} candidates={candidates} onScored={loadFixtures} />
-          ) : current ? (
-            <>
-              <div style={{ marginBottom: 16 }}>
-                <ProvenanceLine run={current} />
-              </div>
-              <div style={{ marginBottom: 20 }}>
-                <HeadlineF1 current={current} previous={previous} />
-              </div>
-              <div style={{ marginBottom: 20 }}>
-                <div className="label" style={{ marginBottom: 11 }}>Accuracy history — this fixture, every pipeline version</div>
-                <VersionTrendChart versions={versions} selectedId={current.id} onSelect={setSelectedRunId} />
-              </div>
+          {!labelledLoading && <AnnotatedEvents events={labelledEvents} fights={labelledFights} />}
 
-              {report && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingTop: 18, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div>
-                    <div className="label" style={{ marginBottom: 11 }}>Classification — matched strikes only</div>
-                    <ClassificationBreakdown strikes={report.strikes} />
-                  </div>
+          {ledgerLoading ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading fights…</div>
+          ) : (
+            <FightLedger ledger={ledger} fixtures={fixtures} />
+          )}
 
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
-                    <div>
-                      <div className="label" style={{ marginBottom: 11 }}>Strike family confusion</div>
-                      <ConfusionHeatmap confusion={report.strikes.family_confusion} emptyLabel="No specific-family matches yet." />
-                    </div>
-                    <div>
-                      <div className="label" style={{ marginBottom: 11 }}>Timing</div>
-                      <OffsetDotStrip offsets={report.strikes.matched_offsets} />
-                    </div>
-                  </div>
+          <section id="sec-e" style={{ animation: 'fade-up .5s ease-out .32s both' }}>
+            <div className="glass" style={{ padding: '20px 22px 22px' }}>
+              <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>Pipeline accuracy</h2>
+              <p style={{ margin: '0 0 16px', fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)' }}>
+                Reference fixtures scored against pipeline predictions, across versions
+              </p>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
-                    <div>
-                      <div className="label" style={{ marginBottom: 11 }}>Fight state</div>
-                      <StateDumbbell state={report.state} />
-                      <div style={{ marginTop: 12 }}>
-                        <ConfusionHeatmap confusion={report.state.confusion} emptyLabel="No state frames scored yet." />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="label" style={{ marginBottom: 11 }}>Rounds</div>
-                      <RoundsCheck rounds={report.rounds} />
-                    </div>
-                  </div>
+              {loading && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>}
 
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
-                    <WorstList title="Worst misses" fps={report.fps} items={report.strikes.missed} emptyLabel="No missed strikes." />
-                    <WorstList title="Worst false positives" fps={report.fps} items={report.strikes.spurious} emptyLabel="No false positives." />
-                  </div>
+              {!loading && fixtures.length === 0 && (
+                <div className="inner-tile" style={{ padding: '20px 22px', fontSize: 13, color: 'var(--text-muted)' }}>
+                  No labelled reference fixture exists yet. Upload a fight as "Self-annotate → Reference" and
+                  finish labelling it to create one.
                 </div>
               )}
-            </>
-          ) : (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading runs…</div>
-          )}
+
+              {fixtures.length > 0 && (
+                <div className="inner-tile" style={{ padding: '16px 18px 18px', marginBottom: 16 }}>
+                  <div className="label" style={{ marginBottom: 12 }}>Fixtures</div>
+                  <FixtureTable fixtures={fixtures} selectedId={selectedId} onSelect={setSelectedId} />
+                  <Glossary />
+                </div>
+              )}
+
+              {selected && (
+                !selected.is_measurable ? (
+                  <NotMeasurable fixture={selected} candidates={candidates} onScored={loadFixtures} />
+                ) : current ? (
+                  <>
+                    <div style={{ marginBottom: 16 }}>
+                      <ProvenanceLine run={current} />
+                    </div>
+                    <div style={{ marginBottom: 20 }}>
+                      <HeadlineF1 current={current} previous={previous} />
+                    </div>
+                    <div style={{ marginBottom: 20 }}>
+                      <div className="label" style={{ marginBottom: 11 }}>Accuracy history — this fixture, every pipeline version</div>
+                      <VersionTrendChart versions={versions} selectedId={current.id} onSelect={setSelectedRunId} />
+                    </div>
+
+                    {report && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingTop: 18, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div>
+                          <div className="label" style={{ marginBottom: 11 }}>Classification — matched strikes only</div>
+                          <ClassificationBreakdown strikes={report.strikes} />
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
+                          <div>
+                            <div className="label" style={{ marginBottom: 11 }}>Strike family confusion</div>
+                            <ConfusionHeatmap confusion={report.strikes.family_confusion} emptyLabel="No specific-family matches yet." />
+                          </div>
+                          <div>
+                            <div className="label" style={{ marginBottom: 11 }}>Timing</div>
+                            <OffsetDotStrip offsets={report.strikes.matched_offsets} />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
+                          <div>
+                            <div className="label" style={{ marginBottom: 11 }}>Fight state</div>
+                            <StateDumbbell state={report.state} />
+                            <div style={{ marginTop: 12 }}>
+                              <ConfusionHeatmap confusion={report.state.confusion} emptyLabel="No state frames scored yet." />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="label" style={{ marginBottom: 11 }}>Rounds</div>
+                            <RoundsCheck rounds={report.rounds} />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
+                          <WorstList title="Worst misses" fps={report.fps} items={report.strikes.missed} emptyLabel="No missed strikes." />
+                          <WorstList title="Worst false positives" fps={report.fps} items={report.strikes.spurious} emptyLabel="No false positives." />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading runs…</div>
+                )
+              )}
+            </div>
+          </section>
+
+          <PipelineHealthTodo />
         </div>
-      )}
+      </div>
     </div>
   );
 }

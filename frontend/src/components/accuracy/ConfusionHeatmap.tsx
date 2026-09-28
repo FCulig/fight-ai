@@ -6,7 +6,7 @@ interface ConfusionHeatmapProps {
   emptyLabel?: string;
 }
 
-const ramp = (t: number) => `color-mix(in srgb, #00daf3 ${8 + Math.max(0, Math.min(1, t)) * 84}%, #0b1417)`;
+const ramp = (t: number) => `color-mix(in srgb, var(--accent) ${8 + Math.max(0, Math.min(1, t)) * 84}%, #0b1417)`;
 const rampInk = (t: number) => (t > 0.55 ? '#04181c' : '#f1f5f9');
 
 /**
@@ -42,7 +42,7 @@ export default function ConfusionHeatmap({ confusion, emptyLabel = 'No matched p
       <div style={{ display: 'grid', gridTemplateColumns: `84px repeat(${cols.length}, minmax(48px, 1fr))`, gap: 5, minWidth: 84 + cols.length * 52 }}>
         <span />
         {cols.map((c) => (
-          <span key={c} style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'rgba(255,255,255,0.28)', textAlign: 'center' }}>{c}</span>
+          <span key={c} style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textAlign: 'center' }}>{c}</span>
         ))}
         {rows.map((r) => (
           <Fragment key={r}>

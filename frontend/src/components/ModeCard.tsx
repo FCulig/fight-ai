@@ -26,9 +26,9 @@ export default function ModeCard({ active, onClick, icon, badge, badgeColor, tit
         cursor: comingSoon ? 'not-allowed' : 'pointer',
         padding: '20px 18px 18px',
         borderRadius: 14,
-        background: active ? 'rgba(0,218,243,0.09)' : 'rgba(0,0,0,0.30)',
-        border: `1.5px solid ${active ? 'rgba(0,218,243,0.6)' : 'rgba(255,255,255,0.07)'}`,
-        boxShadow: active ? '0 0 0 3px rgba(0,218,243,0.15), 0 12px 34px -16px rgba(0,218,243,0.6)' : 'none',
+        background: active ? 'color-mix(in srgb, var(--accent) 9%, transparent)' : 'var(--surface-inner)',
+        border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border-glass)'}`,
+        boxShadow: 'none',
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
@@ -51,17 +51,17 @@ export default function ModeCard({ active, onClick, icon, badge, badgeColor, tit
       <span style={{
         position: 'absolute', top: 14, right: 14, width: 20, height: 20, borderRadius: '50%',
         display: 'grid', placeItems: 'center',
-        border: `1.5px solid ${active ? '#00daf3' : 'rgba(255,255,255,0.07)'}`,
-        background: active ? '#00daf3' : 'transparent',
+        border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border-glass)'}`,
+        background: active ? 'var(--accent)' : 'transparent',
       }}>
-        {active && <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#001f24' }}>check</span>}
+        {active && <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent-on)' }}>check</span>}
       </span>
 
       <span style={{
         width: 42, height: 42, borderRadius: 11, display: 'grid', placeItems: 'center',
-        background: active ? '#00daf3' : 'rgba(255,255,255,0.06)',
-        color: active ? '#001f24' : '#94a3b8',
-        boxShadow: active ? '0 0 18px rgba(0,218,243,0.45)' : 'none',
+        background: active ? 'var(--accent)' : 'rgba(255,255,255,0.06)',
+        color: active ? 'var(--accent-on)' : 'var(--text-tertiary)',
+        boxShadow: 'none',
         transition: 'transform .14s',
       }}>
         <span className="material-symbols-outlined" style={{ fontSize: 24 }}>{icon}</span>
@@ -69,7 +69,7 @@ export default function ModeCard({ active, onClick, icon, badge, badgeColor, tit
 
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.01em' }}>{title}</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>{title}</span>
           {badge && badgeColor && (
             <span style={{
               fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
@@ -79,13 +79,13 @@ export default function ModeCard({ active, onClick, icon, badge, badgeColor, tit
             }}>{badge}</span>
           )}
         </div>
-        <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.45, color: '#94a3b8' }}>{desc}</p>
+        <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-tertiary)' }}>{desc}</p>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
         {points.map((p, i) => (
-          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontWeight: 600, color: '#64748b' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 14, color: active ? '#00daf3' : '#475569' }}>{p.icon}</span>
+          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 14, color: active ? 'var(--accent)' : 'var(--text-disabled)' }}>{p.icon}</span>
             {p.text}
           </span>
         ))}

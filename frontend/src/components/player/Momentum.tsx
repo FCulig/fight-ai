@@ -12,12 +12,17 @@ interface MomentumProps {
   fps: number;
   fighters: { red: FighterProfile; blue: FighterProfile };
   redFighterId?: number | null;
+  /** Skip the card chrome + header — used when a parent (FightReport) already
+   * renders its own header above the chart. */
+  bare?: boolean;
 }
 
-export default function Momentum({ time, duration, r1EndSeconds, events, fps, fighters, redFighterId }: MomentumProps) {
+export default function Momentum({ time, duration, r1EndSeconds, events, fps, fighters, redFighterId, bare }: MomentumProps) {
   const d = duration > 0 ? duration : DURATION;
   const r1 = r1EndSeconds > 0 ? r1EndSeconds : R1_END;
   const pace = derivePaceBuckets(events, fps, d, redFighterId);
+  const chart = <PaceChart time={time} duration={d} r1End={r1} height={150} redPace={pace.red} bluePace={pace.blue} />;
+  if (bare) return chart;
   return (
     <div className="glass" style={{ marginTop: 16, padding: '22px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
@@ -28,7 +33,7 @@ export default function Momentum({ time, duration, r1EndSeconds, events, fps, fi
           <span style={{ color: 'var(--f-blue)' }}>{fighters.blue.name}</span>
         </div>
       </div>
-      <PaceChart time={time} duration={d} r1End={r1} height={150} redPace={pace.red} bluePace={pace.blue} />
+      {chart}
     </div>
   );
 }

@@ -20,13 +20,13 @@ export default function Header() {
     <header style={{
       display: 'flex',
       alignItems: 'center',
-      gap: isMobile ? 10 : 24,
+      gap: isMobile ? 10 : 6,
       padding: isMobile ? '0 14px' : '0 28px',
-      height: 58,
-      background: 'rgba(5, 7, 9, 0.72)',
-      backdropFilter: 'blur(24px) saturate(160%)',
-      WebkitBackdropFilter: 'blur(24px) saturate(160%)',
-      borderBottom: '1px solid rgba(255,255,255,0.06)',
+      height: 64,
+      background: 'var(--header-bg)',
+      backdropFilter: 'blur(18px) saturate(1.6)',
+      WebkitBackdropFilter: 'blur(18px) saturate(1.6)',
+      borderBottom: '1px solid var(--border-glass)',
       width: '100%',
       flexShrink: 0,
       position: 'sticky',
@@ -34,17 +34,8 @@ export default function Header() {
       zIndex: 100,
     }}>
       {/* Logo */}
-      <span style={{
-        fontSize: isMobile ? 15 : 17,
-        fontWeight: 800,
-        background: 'linear-gradient(90deg, #00daf3, #7c3aed)',
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-        backgroundClip: 'text',
-        letterSpacing: '-0.03em',
-        flexShrink: 0,
-      }}>
-        Fight.AI
+      <span className="logo" style={{ fontSize: isMobile ? 20 : 26, marginRight: isMobile ? 10 : 22 }}>
+        Fightlytics
       </span>
 
       {/* Nav */}
@@ -54,19 +45,12 @@ export default function Header() {
             key={label}
             to={to}
             end={to === '/'}
-            className="nav-link"
-            style={({ isActive }) => ({
-              padding: isMobile ? '5px 10px' : '5px 14px',
-              borderRadius: 8,
+            className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}
+            style={{
+              padding: isMobile ? '5px 10px' : '8px 16px',
               fontSize: isMobile ? 12 : 13,
-              fontWeight: 600,
-              color: isActive ? '#00daf3' : '#64748b',
-              background: isActive ? 'rgba(0,218,243,0.1)' : 'transparent',
-              border: isActive ? '1px solid rgba(0,218,243,0.18)' : '1px solid transparent',
-              transition: 'all 0.2s',
-              textDecoration: 'none',
               whiteSpace: 'nowrap',
-            })}
+            }}
           >
             {label}
           </NavLink>
@@ -76,19 +60,16 @@ export default function Header() {
       {/* Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <button
-          className="btn-primary"
+          className="btn-upload"
           onClick={() => setUploadOpen(true)}
           style={{
-            background: 'linear-gradient(135deg, #00daf3 0%, #0099b0 100%)',
-            color: '#001f24',
             fontWeight: 700,
             fontSize: 12,
-            padding: isMobile ? '6px 10px' : '6px 16px',
-            borderRadius: 8,
+            height: 36,
+            padding: isMobile ? '0 10px' : '0 16px',
             display: 'flex',
             alignItems: 'center',
             gap: 5,
-            boxShadow: '0 0 16px rgba(0,218,243,0.2)',
           }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>upload</span>
@@ -98,8 +79,8 @@ export default function Header() {
         {!isMobile && ['notifications', 'account_circle'].map(icon => (
           <button
             key={icon}
-            className="btn-glass"
-            style={{ padding: 7, borderRadius: 8, minWidth: 34, minHeight: 34 }}
+            className="icon-btn"
+            style={{ width: 36, height: 36 }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{icon}</span>
           </button>

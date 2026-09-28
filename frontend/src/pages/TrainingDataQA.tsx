@@ -122,23 +122,24 @@ export default function TrainingDataQA() {
       <>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 24, flexWrap: 'wrap', marginBottom: 14 }}>
           <div style={{ minWidth: 0 }}>
-            <h1 className="font-display" style={{ fontSize: isMobile ? 30 : 40, lineHeight: 0.94, margin: 0, color: 'var(--text-primary)' }}>
-              TRAINING DATA
+            <span className="eyebrow">Data QA</span>
+            <h1 className="font-display" style={{ fontSize: isMobile ? 32 : 'clamp(36px, 4.6vw, 60px)', lineHeight: 0.94, margin: '10px 0 0', color: 'var(--text-primary)' }}>
+              Every label. Checked.
             </h1>
-            <p style={{ margin: '6px 0 0', fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)' }}>
-              Every hand-labelled event as the trainer sees it — replay the clip, keep it or drop it
+            <p style={{ margin: '10px 0 0', fontSize: 13.5, fontWeight: 600, color: 'var(--text-muted)' }}>
+              Replay each event exactly as the trainer sees it. Keep it or drop it.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap', marginLeft: 'auto' }}>
             <Stat label="events" value={totals.total} />
-            <Stat label="confirmed" value={totals.confirmed} color="#0ca30c" />
-            <Stat label="declined" value={totals.declined} color="#ef4444" />
+            <Stat label="confirmed" value={totals.confirmed} color="var(--green-500)" />
+            <Stat label="declined" value={totals.declined} color="var(--red-500)" />
           </div>
         </div>
         {totals.total > 0 && (
           <div style={{ display: 'flex', gap: 2, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.05)', overflow: 'hidden', marginBottom: 7 }}>
-            <div style={{ width: `${(totals.confirmed / totals.total) * 100}%`, background: '#0ca30c' }} />
-            <div style={{ width: `${(totals.declined / totals.total) * 100}%`, background: '#ef4444' }} />
+            <div style={{ width: `${(totals.confirmed / totals.total) * 100}%`, background: 'var(--green-500)' }} />
+            <div style={{ width: `${(totals.declined / totals.total) * 100}%`, background: 'var(--red-500)' }} />
           </div>
         )}
         <div style={{ margin: '0 0 22px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
@@ -156,21 +157,21 @@ export default function TrainingDataQA() {
   } else if (id == null) {
     body = justFinished ? (
       <div className="glass" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 11, padding: '46px 30px', textAlign: 'center' }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 40, color: '#0ca30c' }}>task_alt</span>
+        <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--accent)' }}>task_alt</span>
         <div className="font-display" style={{ fontSize: 28, lineHeight: 1, color: 'var(--text-primary)' }}>{cls.name} reviewed</div>
         <p style={{ margin: 0, maxWidth: '46ch', fontSize: 12.5, fontWeight: 500, lineHeight: 1.6, color: 'var(--text-muted)' }}>
           Every {cls.name.toLowerCase()} event has a verdict. Pick another class or re-open the list.
         </p>
         <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', justifyContent: 'center' }}>
-          <button type="button" className="btn-glass" onClick={() => navigate(eventsPath(cls.action))} style={{ padding: '9px 16px', fontSize: 12.5, fontWeight: 600, borderRadius: 8 }}>
+          <button type="button" className="btn-glass" onClick={() => navigate(eventsPath(cls.action))} style={{ padding: '9px 16px', fontSize: 12.5, fontWeight: 600 }}>
             Back to events
           </button>
           <button
             type="button"
             onClick={() => navigate(classesPath())}
             style={{
-              background: 'linear-gradient(135deg, #00daf3 0%, #0099b0 100%)', color: '#001f24', fontWeight: 700, fontSize: 13,
-              border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer',
+              background: 'linear-gradient(135deg, var(--accent), var(--accent-deep))', color: 'var(--accent-on)', fontWeight: 700, fontSize: 13,
+              border: 'none', borderRadius: 999, padding: '9px 16px', cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
             All classes
@@ -184,11 +185,11 @@ export default function TrainingDataQA() {
     body = (
       <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
-          <button type="button" className="btn-glass" onClick={() => navigate(classesPath())} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 8 }}>
+          <button type="button" className="btn-glass" onClick={() => navigate(classesPath())} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', fontSize: 11.5, fontWeight: 700 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 15 }}>arrow_back</span>All classes
           </button>
           <span style={{ color: 'var(--text-disabled)', fontSize: 12 }}>/</span>
-          <button type="button" className="btn-glass" onClick={() => navigate(eventsPath(cls.action))} style={{ padding: '5px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 8, background: 'none', border: '1px solid transparent' }}>
+          <button type="button" className="btn-glass" onClick={() => navigate(eventsPath(cls.action))} style={{ padding: '7px 14px', fontSize: 11.5, fontWeight: 700, background: 'none', border: '1px solid transparent' }}>
             {cls.name}
           </button>
           <span style={{ color: 'var(--text-disabled)', fontSize: 12 }}>/</span>
@@ -226,7 +227,10 @@ export default function TrainingDataQA() {
 function Stat({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span className="font-display" style={{ fontSize: 30, lineHeight: 1, color: color ?? 'var(--text-primary)' }}>{value}</span>
+      <span style={{
+        fontFamily: 'Manrope, sans-serif', fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 0.9,
+        fontVariantNumeric: 'tabular-nums', fontSize: 40, color: color ?? 'var(--text-primary)',
+      }}>{value}</span>
       <span className="label">{label}</span>
     </div>
   );

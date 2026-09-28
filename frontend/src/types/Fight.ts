@@ -32,15 +32,15 @@ export const PURPOSE_LABELS: Record<FightPurpose, string> = {
 };
 
 /**
- * Deliberately avoids #ff4d4d/#3aa0ff (corner colours — a badge in either would
- * read as "red corner"), #ef4444 (error) and #f59e0b (the rounds-unverified
- * warning). Violet is new to the palette. Colour is a redundant channel here
- * anyway: every badge carries its text label.
+ * Deliberately avoids --f-red/--f-blue (corner colours — a badge in either
+ * would read as "red corner"), --red-500 (error) and #f59e0b (the
+ * rounds-unverified warning). Violet is new to the palette. Colour is a
+ * redundant channel here anyway: every badge carries its text label.
  */
 export const PURPOSE_COLORS: Record<FightPurpose, string> = {
-  training_data: '#a3c900', // --green-500
+  training_data: 'var(--green-500)',
   reference: '#a78bfa', // violet — no existing semantic
-  ai_labeled: '#00daf3', // --cyan-400, the AI accent
+  ai_labeled: 'var(--accent)', // the AI accent
 };
 
 export const PURPOSE_ICONS: Record<FightPurpose, string> = {

@@ -50,8 +50,8 @@ export default function MatchupCard({ fighters }: MatchupCardProps) {
       {/* Recent form divider */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px auto 16px', maxWidth: 560 }}>
         <hr className="divider" style={{ flex: 1 }} />
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-disabled)', whiteSpace: 'nowrap' }}>
-          Recent Form · Last 5
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-disabled)', whiteSpace: 'nowrap' }}>
+          Recent form · last 5
         </span>
         <hr className="divider" style={{ flex: 1 }} />
       </div>

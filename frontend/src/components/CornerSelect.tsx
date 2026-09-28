@@ -18,7 +18,7 @@ const fighterInitials = (f: Fighter) =>
 const fieldStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: 'rgba(0,0,0,0.35)',
   border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8,
-  padding: '9px 11px', color: '#f1f5f9', fontSize: 13, fontWeight: 600, outline: 'none',
+  padding: '9px 11px', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, outline: 'none',
   fontFamily: 'inherit',
 };
 
@@ -104,7 +104,7 @@ export default function CornerSelect({ corner, dotColor, value, exclude, onChang
     <div ref={wrapRef} style={{ position: 'relative' }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8,
-        fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.28)',
+        fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)',
       }}>
         <span style={{ width: 9, height: 9, borderRadius: '50%', background: dotColor, boxShadow: `0 0 8px ${dotColor}` }} />
         {corner}
@@ -117,8 +117,8 @@ export default function CornerSelect({ corner, dotColor, value, exclude, onChang
           width: '100%', textAlign: 'left', cursor: disabled ? 'not-allowed' : 'pointer',
           display: 'flex', alignItems: 'center', gap: 11, padding: '11px 12px',
           borderRadius: 11, background: 'rgba(0,0,0,0.30)',
-          border: `1.5px solid ${open ? 'rgba(0,218,243,0.6)' : 'rgba(255,255,255,0.07)'}`,
-          boxShadow: open ? '0 0 0 3px rgba(0,218,243,0.15)' : 'none',
+          border: `1.5px solid ${open ? 'rgba(255,77,28,0.6)' : 'rgba(255,255,255,0.07)'}`,
+          boxShadow: open ? '0 0 0 3px rgba(255,77,28,0.15)' : 'none',
           transition: 'border-color .14s',
           opacity: disabled ? 0.5 : 1,
           fontFamily: 'inherit',
@@ -128,7 +128,7 @@ export default function CornerSelect({ corner, dotColor, value, exclude, onChang
           width: 34, height: 34, flexShrink: 0, borderRadius: 9, display: 'grid', placeItems: 'center',
           fontSize: 12, fontWeight: 800,
           background: value ? `color-mix(in srgb, ${dotColor} 22%, transparent)` : 'rgba(255,255,255,0.05)',
-          color: value ? dotColor : '#475569',
+          color: value ? dotColor : 'var(--text-disabled)',
           border: `1px solid ${value ? `color-mix(in srgb, ${dotColor} 40%, transparent)` : 'rgba(255,255,255,0.07)'}`,
         }}>
           {value ? fighterInitials(value) : (
@@ -139,17 +139,17 @@ export default function CornerSelect({ corner, dotColor, value, exclude, onChang
         <span style={{ minWidth: 0, flex: 1 }}>
           {value ? (
             <>
-              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {fighterFull(value)}
               </span>
               {value.nickname && (
-                <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginTop: 1 }}>
+                <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginTop: 1 }}>
                   "{value.nickname}"
                 </span>
               )}
             </>
           ) : (
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#64748b' }}>Select fighter</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>Select fighter</span>
           )}
         </span>
 
@@ -158,11 +158,11 @@ export default function CornerSelect({ corner, dotColor, value, exclude, onChang
             className="material-symbols-outlined"
             onClick={e => { e.stopPropagation(); onChange(null); }}
             title="Clear"
-            style={{ fontSize: 18, color: '#64748b', cursor: 'pointer' }}
+            style={{ fontSize: 18, color: 'var(--text-muted)', cursor: 'pointer' }}
           >close</span>
         ) : (
           <span className="material-symbols-outlined" style={{
-            fontSize: 20, color: '#64748b',
+            fontSize: 20, color: 'var(--text-muted)',
             transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .14s',
           }}>expand_more</span>
         )}
@@ -178,19 +178,19 @@ export default function CornerSelect({ corner, dotColor, value, exclude, onChang
           {!creating ? (
             <>
               <div style={{ padding: 10, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#64748b' }}>search</span>
+                <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-muted)' }}>search</span>
                 <input
                   ref={searchRef}
                   value={q}
                   onChange={e => onSearchChange(e.target.value)}
                   placeholder="Search fighters…"
-                  style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: '#f1f5f9', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
+                  style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
                 />
               </div>
 
               <div style={{ maxHeight: 196, overflowY: 'auto' }}>
                 {loadingFighters && filtered.length === 0 && (
-                  <div style={{ padding: '16px 12px', fontSize: 12.5, color: '#64748b', fontWeight: 600, textAlign: 'center' }}>
+                  <div style={{ padding: '16px 12px', fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 600, textAlign: 'center' }}>
                     Loading…
                   </div>
                 )}
@@ -202,26 +202,26 @@ export default function CornerSelect({ corner, dotColor, value, exclude, onChang
                     style={{
                       width: '100%', textAlign: 'left', cursor: 'pointer',
                       display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
-                      background: value?.id === f.id ? 'rgba(0,218,243,0.08)' : 'transparent',
+                      background: value?.id === f.id ? 'rgba(255,77,28,0.08)' : 'transparent',
                       border: 'none', borderBottom: '1px solid rgba(255,255,255,0.05)',
                       fontFamily: 'inherit',
                     }}
                   >
                     <span style={{
                       width: 30, height: 30, flexShrink: 0, borderRadius: 8, display: 'grid', placeItems: 'center',
-                      fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.05)', color: '#94a3b8',
+                      fontSize: 11, fontWeight: 800, background: 'rgba(255,255,255,0.05)', color: 'var(--text-tertiary)',
                       border: '1px solid rgba(255,255,255,0.07)',
                     }}>{fighterInitials(f)}</span>
                     <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#cbd5e1' }}>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>
                         {fighterFull(f)}
-                        {f.nickname && <span style={{ color: '#64748b', fontWeight: 600 }}> · "{f.nickname}"</span>}
+                        {f.nickname && <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}> · "{f.nickname}"</span>}
                       </span>
                     </span>
                   </button>
                 ))}
                 {!loadingFighters && filtered.length === 0 && (
-                  <div style={{ padding: '16px 12px', fontSize: 12.5, color: '#64748b', fontWeight: 600, textAlign: 'center' }}>
+                  <div style={{ padding: '16px 12px', fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 600, textAlign: 'center' }}>
                     No fighters match "{q.trim()}"
                   </div>
                 )}
@@ -232,8 +232,8 @@ export default function CornerSelect({ corner, dotColor, value, exclude, onChang
                 onClick={beginCreate}
                 style={{
                   width: '100%', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '11px 12px', background: 'rgba(0,218,243,0.06)', border: 'none',
-                  borderTop: '1px solid rgba(255,255,255,0.05)', color: '#00daf3',
+                  padding: '11px 12px', background: 'rgba(255,77,28,0.06)', border: 'none',
+                  borderTop: '1px solid rgba(255,255,255,0.05)', color: 'var(--accent)',
                   fontSize: 12.5, fontWeight: 700, fontFamily: 'inherit',
                 }}
               >
@@ -250,28 +250,28 @@ export default function CornerSelect({ corner, dotColor, value, exclude, onChang
                   style={{
                     width: 28, height: 28, borderRadius: 10, display: 'grid', placeItems: 'center',
                     background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
-                    color: '#94a3b8', cursor: 'pointer',
+                    color: 'var(--text-tertiary)', cursor: 'pointer',
                   }}
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
                 </button>
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#f1f5f9' }}>New fighter</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)' }}>New fighter</span>
               </div>
 
               <div style={{ display: 'grid', gap: 9 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 }}>
                   <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.28)', marginBottom: 5 }}>First name</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 5 }}>First name</div>
                     <input value={nf.first} onChange={e => setNf(s => ({ ...s, first: e.target.value }))} placeholder="First" style={fieldStyle} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.28)', marginBottom: 5 }}>Last name</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 5 }}>Last name</div>
                     <input value={nf.last} onChange={e => setNf(s => ({ ...s, last: e.target.value }))} placeholder="Last" style={fieldStyle} />
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.28)', marginBottom: 5 }}>
-                    Nickname <span style={{ textTransform: 'none', letterSpacing: 0, color: '#475569' }}>· optional</span>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 5 }}>
+                    Nickname <span style={{ textTransform: 'none', letterSpacing: 0, color: 'var(--text-disabled)' }}>· optional</span>
                   </div>
                   <input value={nf.nick} onChange={e => setNf(s => ({ ...s, nick: e.target.value }))} placeholder="e.g. The Hammer" style={fieldStyle} />
                 </div>
@@ -281,10 +281,10 @@ export default function CornerSelect({ corner, dotColor, value, exclude, onChang
                   disabled={!nf.first.trim() || !nf.last.trim()}
                   style={{
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    background: 'linear-gradient(135deg, #00daf3, #0099b0)', color: '#001f24',
+                    background: 'linear-gradient(135deg, var(--accent), var(--accent-deep))', color: 'var(--accent-on)',
                     fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 10,
                     padding: '9px 16px', cursor: !nf.first.trim() || !nf.last.trim() ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 0 20px rgba(0,218,243,0.25)', marginTop: 3,
+                    boxShadow: '0 0 20px rgba(255,77,28,0.25)', marginTop: 3,
                     opacity: !nf.first.trim() || !nf.last.trim() ? 0.4 : 1,
                     fontFamily: 'inherit',
                   }}

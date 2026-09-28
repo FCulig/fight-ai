@@ -16,7 +16,7 @@ const SKELETON_EDGES: [number, number][] = [
 ];
 
 const COLOR_RED  = '#ef4444';
-const COLOR_BLUE = '#3b82f6';
+const COLOR_BLUE = '#60a5fa';
 
 // Matches the fighter-corner-btn selected-state fill (`color-mix(in srgb, ${color} 12%, transparent)`).
 function withAlpha(hex: string, alpha: number): string {

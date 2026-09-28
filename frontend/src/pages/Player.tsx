@@ -13,11 +13,16 @@ import VideoControls from '../components/VideoControls';
 import FrameInfo from '../components/FrameInfo';
 import FighterOverlay, { type FighterOverlayHandle } from '../components/FighterOverlay';
 import LiveFeed from '../components/player/LiveFeed';
-import FightStatistics from '../components/player/FightStatistics';
-import Momentum from '../components/player/Momentum';
+import FightReport from '../components/player/FightReport';
 import MatchupCard from '../components/player/MatchupCard';
 import FightPurposeBadge from '../components/FightPurposeBadge';
 import { fighters as mockFighters, withRealName } from '../mocks/fightMock';
+
+const formatDuration = (seconds: number) => {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
 
 export default function Player() {
   const { id } = useParams<{ id: string }>();
@@ -193,31 +198,22 @@ export default function Player() {
         display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center',
         minHeight: 'calc(100vh - 58px)', padding: 24,
       }}>
-        <div style={{
+        <div className="glass" style={{
           textAlign: 'center',
-          background: 'rgba(255,255,255,0.04)',
-          backdropFilter: 'blur(24px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(160%)',
-          border: '1px solid rgba(255,255,255,0.07)',
           borderRadius: 20,
           padding: '48px 56px',
-          boxShadow: '0 8px 40px rgba(0,0,0,0.35)',
           maxWidth: 420,
         }}>
           <span className="material-symbols-outlined" style={{
-            fontSize: 40, color: '#64748b', display: 'block', marginBottom: 16,
+            fontSize: 40, color: 'var(--text-muted)', display: 'block', marginBottom: 16,
             animation: isBeingLabeled ? undefined : 'spin 1.5s linear infinite',
           }}>{isBeingLabeled ? 'edit_note' : 'progress_activity'}</span>
-          <h2 style={{
-            fontSize: 20, fontWeight: 800, margin: '0 0 10px',
-            background: 'linear-gradient(90deg, #f1f5f9, rgba(255,255,255,0.5))',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-          }}>
+          <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 10px', color: 'var(--text-primary)' }}>
             {editingLabels
               ? 'This fight\'s labels are being edited'
               : isBeingLabeled ? 'This fight is being labeled' : 'This fight is still being processed'}
           </h2>
-          <p style={{ fontSize: 14, color: '#475569', margin: '0 0 20px', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 14, color: 'var(--text-disabled)', margin: '0 0 20px', lineHeight: 1.6 }}>
             {isBeingLabeled
               ? 'Press Finish Labeling on the labeling page to bring it back to the Player.'
               : 'The AI pipeline is analyzing the video. This usually takes a few minutes.'}
@@ -256,24 +252,29 @@ export default function Player() {
       padding: narrow ? '16px 14px 48px' : '22px 30px 70px',
     }}>
       {/* Back nav */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <button
           onClick={() => navigate('/')}
-          className="btn-glass"
-          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 8 }}
+          className="icon-btn"
+          title="All fights"
+          style={{ width: 38, height: 38 }}
         >
-          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
-          All Fights
+          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_back</span>
         </button>
         {selectedFight && (
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {fightName}
-          </span>
+          <div style={{ minWidth: 0 }}>
+            <div className="font-display" style={{ fontSize: narrow ? 22 : 30, letterSpacing: '0.02em', color: 'var(--text-primary)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {displayFighters.red.name} vs {displayFighters.blue.name}
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 600, marginTop: 3 }}>
+              {rounds.length || '—'} round{rounds.length === 1 ? '' : 's'} · {duration ? formatDuration(duration) : fightName} · {fps} fps
+            </div>
+          </div>
         )}
         {selectedFight && <FightPurposeBadge purpose={selectedFight.purpose} />}
         <span style={{ flex: 1 }} />
         {reopenError && (
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--red-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {reopenError}
           </span>
         )}
@@ -286,7 +287,7 @@ export default function Player() {
             className="btn-glass"
             style={{
               flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: narrow ? '6px 8px' : '6px 12px', borderRadius: 8,
+              padding: narrow ? '7px 10px' : '7px 14px',
               fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
               cursor: reopening ? 'not-allowed' : 'pointer', opacity: reopening ? 0.6 : 1,
             }}
@@ -301,9 +302,9 @@ export default function Player() {
             title="Delete this fight"
             style={{
               flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: narrow ? '6px 8px' : '6px 12px', borderRadius: 8,
-              border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)',
-              color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+              padding: narrow ? '6px 8px' : '6px 12px', borderRadius: 999,
+              border: '1px solid var(--f-red-dim)', background: 'rgba(239,68,68,0.08)',
+              color: 'var(--red-500)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
@@ -441,31 +442,29 @@ export default function Player() {
         )}
       </div>
 
-      {/* FIGHT STATISTICS */}
+      {/* REPORT — summary tiles, head-to-head, per-fighter breakdown, momentum */}
       {!eventsLoading && (
-        <FightStatistics
+        <FightReport
           currentFrame={currentFrame}
           events={events}
           fps={fps}
           rounds={rounds}
           fighters={displayFighters}
           redFighterId={selectedFight?.red_fighter_id}
+          time={currentTime}
+          duration={duration}
+          r1EndSeconds={r1EndSeconds}
         />
       )}
 
-      {/* MOMENTUM */}
-      <Momentum
-        time={currentTime}
-        duration={duration}
-        r1EndSeconds={r1EndSeconds}
-        events={events}
-        fps={fps}
-        fighters={displayFighters}
-        redFighterId={selectedFight?.red_fighter_id}
-      />
-
       {/* MATCHUP */}
-      <MatchupCard fighters={displayFighters} />
+      <section style={{ marginTop: 56 }}>
+        <span className="eyebrow">Matchup</span>
+        <h2 className="font-display" style={{ fontSize: 'clamp(28px, 3.4vw, 40px)', lineHeight: 1, margin: '10px 0 22px', color: 'var(--text-primary)' }}>
+          Tale of the tape.
+        </h2>
+        <MatchupCard fighters={displayFighters} />
+      </section>
     </div>
   );
 }

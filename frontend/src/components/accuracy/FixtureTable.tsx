@@ -23,8 +23,8 @@ export default function FixtureTable({ fixtures, selectedId, onSelect }: Fixture
           <tr>
             {HEADERS.map((h, i) => (
               <th key={h} style={{
-                textAlign: i === 0 ? 'left' : 'right', padding: '7px 10px', fontSize: 9.5, fontWeight: 800,
-                textTransform: 'uppercase', letterSpacing: '0.09em', color: 'rgba(255,255,255,0.3)',
+                textAlign: i === 0 ? 'left' : 'right', padding: '7px 10px', fontSize: 11, fontWeight: 800,
+                color: 'var(--text-muted)',
                 borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap',
               }}>{h}</th>
             ))}
@@ -41,7 +41,7 @@ export default function FixtureTable({ fixtures, selectedId, onSelect }: Fixture
                 onClick={() => onSelect(fx.reference_fight_id)}
                 style={{
                   cursor: 'pointer',
-                  background: selectedId === fx.reference_fight_id ? 'rgba(0,218,243,0.045)' : 'transparent',
+                  background: selectedId === fx.reference_fight_id ? 'color-mix(in srgb, var(--accent) 5%, transparent)' : 'transparent',
                 }}
               >
                 <td style={{ padding: '9px 10px', fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>

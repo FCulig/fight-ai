@@ -68,8 +68,8 @@ function TypeSelect({ action, onChange }: { action: string; onChange: (newAction
 function Meta({ k, v, mono, tone }: { k: string; v: React.ReactNode; mono?: boolean; tone?: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.045)' }}>
-      <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.28)' }}>{k}</span>
-      <span style={{ fontSize: 11.5, fontWeight: 700, color: tone ?? 'var(--text-secondary)', textAlign: 'right', fontFamily: mono ? 'ui-monospace,Menlo,monospace' : 'inherit', fontVariantNumeric: 'tabular-nums' }}>{v}</span>
+      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>{k}</span>
+      <span style={{ fontSize: 11.5, fontWeight: 700, color: tone ?? 'var(--text-secondary)', textAlign: 'right', fontFamily: mono ? 'var(--mono)' : 'inherit', fontVariantNumeric: 'tabular-nums' }}>{v}</span>
     </div>
   );
 }
@@ -138,29 +138,29 @@ export default function EventReview({ event, cls, onVerdict, onReclassify, onBac
               type="button"
               onClick={() => act(false)}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: 11,
-                fontFamily: 'inherit', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', border: '1px solid',
-                background: v === false ? '#ef4444' : 'rgba(239,68,68,0.12)',
-                borderColor: v === false ? '#ef4444' : 'rgba(239,68,68,0.34)',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, padding: '0 24px', borderRadius: 999,
+                fontFamily: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer', border: '1px solid',
+                background: v === false ? 'var(--red-500)' : 'rgba(239,68,68,0.12)',
+                borderColor: v === false ? 'var(--red-500)' : 'rgba(239,68,68,0.34)',
                 color: v === false ? '#2a0606' : '#f87171',
               }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>Decline
-              <kbd style={{ display: 'inline-grid', placeItems: 'center', minWidth: 17, height: 17, borderRadius: 4, background: 'rgba(0,0,0,0.28)', fontSize: 9.5, fontWeight: 800, fontFamily: 'ui-monospace,Menlo,monospace', opacity: 0.75 }}>X</kbd>
+              <kbd style={{ display: 'inline-grid', placeItems: 'center', minWidth: 17, height: 17, borderRadius: 4, background: 'rgba(0,0,0,0.28)', fontSize: 11, fontWeight: 800, fontFamily: 'var(--mono)', opacity: 0.75 }}>X</kbd>
             </button>
             <button
               type="button"
               onClick={() => act(true)}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: 11,
-                fontFamily: 'inherit', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', border: '1px solid',
-                background: v === true ? '#0ca30c' : 'rgba(12,163,12,0.14)',
-                borderColor: v === true ? '#0ca30c' : 'rgba(12,163,12,0.38)',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, padding: '0 24px', borderRadius: 999,
+                fontFamily: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer', border: '1px solid',
+                background: v === true ? 'var(--green-500)' : 'rgba(12,163,12,0.14)',
+                borderColor: v === true ? 'var(--green-500)' : 'rgba(12,163,12,0.38)',
                 color: v === true ? '#04180a' : '#4ade5e',
               }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check</span>Confirm
-              <kbd style={{ display: 'inline-grid', placeItems: 'center', minWidth: 17, height: 17, borderRadius: 4, background: 'rgba(0,0,0,0.28)', fontSize: 9.5, fontWeight: 800, fontFamily: 'ui-monospace,Menlo,monospace', opacity: 0.75 }}>C</kbd>
+              <kbd style={{ display: 'inline-grid', placeItems: 'center', minWidth: 17, height: 17, borderRadius: 4, background: 'rgba(0,0,0,0.28)', fontSize: 11, fontWeight: 800, fontFamily: 'var(--mono)', opacity: 0.75 }}>C</kbd>
             </button>
           </div>
         </div>
@@ -176,6 +176,7 @@ export default function EventReview({ event, cls, onVerdict, onReclassify, onBac
           <Meta k="Frame" v={`f${event.frame}`} mono />
           <Meta k="Timecode" v={formatFrameClock(event.frame, event.fight.fps)} mono />
           <Meta k="Fight" v={fightLabel(event.fight)} />
+          <Meta k="Labeller" v={event.labeler ?? 'Not recorded'} />
         </div>
 
         <div className="glass" style={{ padding: '16px 18px 18px' }}>
@@ -185,14 +186,14 @@ export default function EventReview({ event, cls, onVerdict, onReclassify, onBac
           </div>
           <div style={{ marginTop: 6, fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>{pos.reviewed} of {pos.total} reviewed · {pos.pending} pending</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 11, flexWrap: 'wrap' }}>
-            <button type="button" className="btn-glass" onClick={() => onJumpRelative(-1)} style={{ padding: '6px 11px', fontSize: 11.5, borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <button type="button" className="btn-glass" onClick={() => onJumpRelative(-1)} style={{ padding: '6px 12px', fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>chevron_left</span>Prev
             </button>
-            <button type="button" className="btn-glass" onClick={() => onJumpRelative(1)} style={{ padding: '6px 11px', fontSize: 11.5, borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <button type="button" className="btn-glass" onClick={() => onJumpRelative(1)} style={{ padding: '6px 12px', fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               Next<span className="material-symbols-outlined" style={{ fontSize: 14 }}>chevron_right</span>
             </button>
             <span style={{ flex: 1 }} />
-            <button type="button" className="btn-glass" onClick={onBack} style={{ padding: '6px 11px', fontSize: 11.5, borderRadius: 8 }}>All events</button>
+            <button type="button" className="btn-glass" onClick={onBack} style={{ padding: '6px 12px', fontSize: 11.5 }}>All events</button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 11, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
             {queue.slice(0, 4).map((q) => (
@@ -200,10 +201,10 @@ export default function EventReview({ event, cls, onVerdict, onReclassify, onBac
                 key={q.id}
                 type="button"
                 onClick={() => onJumpTo(q.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 9px', borderRadius: 8, background: 'rgba(0,0,0,0.22)', border: '1px solid var(--border-subtle)', cursor: 'pointer', fontFamily: 'inherit' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.22)', border: '1px solid var(--border-subtle)', cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 <span style={{ width: 7, height: 7, borderRadius: 2, background: q.displayCorner != null ? CORNER_C[q.displayCorner] : 'var(--text-disabled)', flexShrink: 0 }} />
-                <span style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{formatFrameClock(q.frame, q.fight.fps)}</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{formatFrameClock(q.frame, q.fight.fps)}</span>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fightLabel(q.fight).split(' vs ')[0]}</span>
               </button>
             ))}

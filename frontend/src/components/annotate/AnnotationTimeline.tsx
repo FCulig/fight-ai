@@ -376,7 +376,7 @@ export default function AnnotationTimeline({
           ))}
 
           {segs.map(s => {
-            const c = s.state === 'GROUND' ? 'var(--f-red)' : s.state === 'CLINCH' ? 'var(--orange-400)' : 'var(--accent)';
+            const c = s.state === 'GROUND' ? 'var(--state-ground)' : s.state === 'CLINCH' ? 'var(--state-clinch)' : 'var(--state-striking)';
             const w = Math.max(2, s.t1 * pxPerSec - s.t0 * pxPerSec);
             return (
               <div

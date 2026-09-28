@@ -1,9 +1,9 @@
 import { verdictKey, type Verdict } from '../../utils/trainingDataStats';
 
 const VERDICT: Record<Verdict, { c: string; icon: string; t: string }> = {
-  confirmed: { c: '#0ca30c', icon: 'check_circle', t: 'Confirmed' },
-  declined: { c: '#ef4444', icon: 'cancel', t: 'Declined' },
-  pending: { c: '#64748b', icon: 'schedule', t: 'Pending' },
+  confirmed: { c: 'var(--green-500)', icon: 'check_circle', t: 'Confirmed' },
+  declined: { c: 'var(--red-500)', icon: 'cancel', t: 'Declined' },
+  pending: { c: 'var(--text-muted)', icon: 'schedule', t: 'Pending' },
 };
 
 interface VerdictBadgeProps {

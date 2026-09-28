@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fightlytics — App Redesign Brief</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Bebas+Neue&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+doc-page:not(:defined){visibility:hidden}
+:root{--ink:#16161a;--mute:#5d5b57;--line:#e3e1dc;--ember:#ff4d1c;--ember-deep:#c1300a;--dark:#0e0f12}
+doc-page{font-family:'Manrope',sans-serif;color:var(--ink);font-size:10.5pt;line-height:1.55}
+a{color:var(--ember-deep)}a:hover{color:var(--ember)}
+h1,h2,h3{font-family:'Manrope',sans-serif;letter-spacing:-.03em;margin:0}
+h1{font-size:34pt;font-weight:800;line-height:1;letter-spacing:-.045em}
+h2{font-size:17pt;font-weight:800;margin:30pt 0 8pt;padding-top:12pt;border-top:1px solid var(--line);display:flex;gap:10pt;align-items:baseline;break-after:avoid}
+h2 .n{font-family:'JetBrains Mono',monospace;font-size:9pt;font-weight:500;color:var(--ember-deep);letter-spacing:0}
+h3{font-size:11.5pt;font-weight:800;margin:14pt 0 4pt;break-after:avoid}
+p{margin:0 0 7pt}
+ul{margin:0 0 8pt;padding-left:15pt}li{margin:0 0 3pt}
+code,.mono{font-family:'JetBrains Mono',monospace;font-size:9pt}
+.cover{display:flex;flex-direction:column;gap:14pt;padding-bottom:18pt}
+.brandrow{display:flex;align-items:center;gap:10pt}
+.word{font-family:'Bebas Neue',sans-serif;font-size:22pt;letter-spacing:.055em;line-height:1}
+.kicker{font-size:10pt;font-weight:700;color:var(--ember-deep)}
+.lede{font-size:13pt;color:var(--mute);max-width:36em;font-weight:500}
+.meta{display:flex;gap:22pt;flex-wrap:wrap;font-size:9pt;color:var(--mute)}
+.meta b{display:block;color:var(--ink);font-size:10pt}
+table{width:100%;border-collapse:collapse;margin:6pt 0 10pt;font-size:9.5pt}
+th{text-align:left;font-weight:700;color:var(--mute);font-size:8.5pt;padding:5pt 8pt 5pt 0;border-bottom:1px solid var(--ink)}
+td{padding:6pt 8pt 6pt 0;border-bottom:1px solid var(--line);vertical-align:top}
+tr{break-inside:avoid}
+.sw{display:inline-block;width:14pt;height:14pt;border-radius:4pt;vertical-align:middle;margin-right:6pt;border:1px solid rgba(0,0,0,.12)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16pt}
+.card{border:1px solid var(--line);border-radius:8pt;padding:10pt 12pt;break-inside:avoid}
+.card h3{margin-top:0}
+.do h3{color:#3d6b00}.dont h3{color:var(--ember-deep)}
+.typespec{background:var(--dark);color:#f5f5f4;border-radius:10pt;padding:16pt 18pt;display:flex;flex-direction:column;gap:10pt;break-inside:avoid;margin:6pt 0 10pt}
+.typespec .d{font-weight:800;letter-spacing:-.045em;font-size:30pt;line-height:.95}
+.typespec .d span{color:var(--ember)}
+.typespec .s{font-weight:800;font-size:44pt;letter-spacing:-.065em;line-height:.9}
+.typespec .s small{font-size:.34em;color:var(--ember);letter-spacing:-.03em}
+.typespec .b{color:#9a9892;font-weight:600;font-size:11pt}
+.typespec .w{font-family:'Bebas Neue';letter-spacing:.055em;font-size:18pt}
+.note{font-size:9pt;color:var(--mute)}
+</style>
+</head>
+<body>
+<doc-page margin="0.75in">
+<div class="cover">
+<div class="brandrow">
+<svg width="34" height="34" viewBox="0 0 100 100" aria-hidden="true"><g stroke="#ff4d1c" stroke-linejoin="round" stroke-linecap="round"><path d="M26 70h56v10c0 4-4 8-8 8H34c-4 0-8-4-8-8z" fill="rgba(255,77,28,.06)" stroke-width="6.5"></path><path d="M24 34h-8c-6 0-11 5-11 11 0 6 5 10 11 10h8z" fill="rgba(255,77,28,.12)" stroke-width="6.5"></path><path d="M38 18h32c8 0 14 6 14 14v24c0 8-6 14-14 14H38c-8 0-14-6-14-14V32c0-8 6-14 14-14z" fill="rgba(255,77,28,.12)" stroke-width="6.5"></path><path d="M40 24v18M54 24v18M68 24v18" fill="none" stroke-width="5.5"></path><path d="M38 76h32M38 83h32" fill="none" stroke-width="4.5"></path></g></svg>
+<span class="word">fightlytics</span>
+</div>
+<div class="kicker">Design brief · App redesign</div>
+<h1>Bring the app up to the new brand.</h1>
+<p class="lede">The marketing site now has a clear visual language: black ground, one ember accent, heavy Manrope display type, huge numbers and motion driven by scrolling. This brief sets out how to carry that language into the product: Studio, the analysis player, reports, and later Broadcast.</p>
+<div class="meta"><div><b>Source of truth</b>Fightlytics Landing v2.html</div><div><b>Tokens</b>app/v2.css, app/styles.css</div><div><b>Logo</b>app/logo.jsx</div><div><b>Date</b>Sept 2026</div></div>
+</div>
+
+<h2><span class="n">01</span>Goals</h2>
+<ul>
+<li><b>One product, one voice.</b> Going from the site to the app should feel seamless. The same palette, type and components continue from the marketing pages into the app.</li>
+<li><b>Data before decoration.</b> The app is a working tool for coaches and analysts. Numbers, events and footage are the heroes, and the interface around them stays quiet.</li>
+<li><b>Instant, legible answers.</b> Any fight stat should be readable in under a second, from across a gym.</li>
+<li><b>Nothing that reads as generic "AI".</b> No gradient text, glow halos, drifting background orbs, glassmorphism on every surface or rainbow palettes.</li>
+</ul>
+
+<h2><span class="n">02</span>Scope</h2>
+<table>
+<thead><tr><th>Area</th><th>Screens</th><th>Priority</th></tr></thead>
+<tbody>
+<tr><td><b>Studio shell</b></td><td>Nav, fight library, upload, processing state, empty states</td><td>P0</td></tr>
+<tr><td><b>Analysis player</b></td><td>Video with fighter tracking boxes, live event feed, round timeline, scrubber</td><td>P0</td></tr>
+<tr><td><b>Lab report</b></td><td>Round-by-round and fighter-vs-fighter breakdown, export and share</td><td>P0</td></tr>
+<tr><td><b>Account</b></td><td>Sign-in, onboarding, team/gym, billing, settings</td><td>P1</td></tr>
+<tr><td><b>Broadcast console</b></td><td>Feed setup, graphics preview, latency monitor (product marked "coming soon")</td><td>P2</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">03</span>Color</h2>
+<p>Dark only. One accent, used sparingly for actions, live state and the single most important number on screen. If everything is ember, nothing is.</p>
+<table>
+<thead><tr><th>Token</th><th>Value</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td><span class="sw" style="background:#000"></span><code>--x-bg</code></td><td><code>#000000</code></td><td>Page ground</td></tr>
+<tr><td><span class="sw" style="background:#0e0f12"></span><code>--x-panel</code></td><td><code>#0e0f12</code></td><td>Cards, panels, player chrome</td></tr>
+<tr><td><span class="sw" style="background:#15171b"></span><code>--x-panel-2</code></td><td><code>#15171b</code></td><td>Raised or active panel, hover</td></tr>
+<tr><td><span class="sw" style="background:#0e0f12;box-shadow:inset 0 0 0 3pt rgba(255,255,255,.1)"></span><code>--x-line</code></td><td><code>rgba(255,255,255,.10)</code></td><td>Hairline borders and dividers</td></tr>
+<tr><td><span class="sw" style="background:#f5f5f4"></span><code>--x-ink</code></td><td><code>#f5f5f4</code></td><td>Primary text, numbers</td></tr>
+<tr><td><span class="sw" style="background:#9a9892"></span><code>--x-mute</code></td><td><code>#9a9892</code></td><td>Secondary text, labels</td></tr>
+<tr><td><span class="sw" style="background:#5c5a56"></span><code>--x-dim</code></td><td><code>#5c5a56</code></td><td>Tertiary text and disabled only; not for body text (fails contrast)</td></tr>
+<tr><td><span class="sw" style="background:#ff4d1c"></span><code>--accent</code></td><td><code>#ff4d1c</code> · hover <code>#ff6a40</code></td><td>Primary action, live state, key stat, links</td></tr>
+<tr><td><span class="sw" style="background:#190500"></span><code>--accent-on</code></td><td><code>#190500</code></td><td>Text on ember buttons</td></tr>
+</tbody>
+</table>
+<h3>Fighter colors (data only)</h3>
+<p>Red corner <code>#ef4444</code> and blue corner <code>rgba(96,165,250)</code>. Use them only for tracking boxes, per-fighter bars and legends, never for interface controls. Strikes are ember, kicks <code>#ffb199</code>, grappling <code>rgba(255,112,67,.35)</code>.</p>
+
+<h2><span class="n">04</span>Typography</h2>
+<div class="typespec">
+<div class="d">Every strike.<br><span>Counted.</span></div>
+<div class="s">82<small>ms</small></div>
+<div class="b">Secondary copy in Manrope 600 muted — calm, short, specific.</div>
+<div class="w">fightlytics</div>
+</div>
+<table>
+<thead><tr><th>Role</th><th>Spec</th></tr></thead>
+<tbody>
+<tr><td>Display / page title</td><td>Manrope 800, tracking −0.045em, line-height 0.92–0.98, <code>text-wrap: balance</code></td></tr>
+<tr><td>Stat numeral</td><td>Manrope 800, tracking −0.065em, tabular figures; unit at 0.34em in ember</td></tr>
+<tr><td>Section / card title</td><td>Manrope 800, 24–32px, tracking −0.03em</td></tr>
+<tr><td>Body / UI</td><td>Manrope 500–600, 14–16px; labels 12.5–13px 600 muted</td></tr>
+<tr><td>Eyebrow</td><td>Manrope 700, 13px, ember, with glove glyph at 15px</td></tr>
+<tr><td>Data / timestamps</td><td>Monospace at 11–12px for frame numbers and timecodes only</td></tr>
+<tr><td>Wordmark</td><td>Bebas Neue, uppercase, +0.055em. <b>Only in the logo</b>, never for headings</td></tr>
+</tbody>
+</table>
+<p class="note">Minimum sizes: 11px for any label, 14px for body text. All text must hit 4.5:1 contrast against its background.</p>
+
+<h2><span class="n">05</span>Logo &amp; brand mark</h2>
+<ul>
+<li>Use <code>LogoLockup</code> (horizontal) in the app nav at 26px, and <code>LogoStack</code> on sign-in and empty states.</li>
+<li><code>GloveGlyph</code> (single ink, inherits the text color) is punctuation for eyebrows, section labels and the "processing" state. Use no more than one per view region.</li>
+<li><code>GloveWatermark</code> is an outline at 4–5% opacity, for large empty states only. It never sits behind data.</li>
+<li>The wordmark stays solid ink. No gradient fills, and don't recolor the glove outside the ember/ink options.</li>
+</ul>
+
+<h2><span class="n">06</span>Shape, surface &amp; components</h2>
+<div class="cols">
+<div class="card"><h3>Surfaces</h3><ul><li>Opaque panels on black. Blur only on the sticky nav (<code>blur(18px) saturate(1.6)</code>, 72% black).</li><li>1px <code>--x-line</code> border; active state raises to <code>--x-panel-2</code> with an 18% white border.</li><li>Radius: cards 28px, inner vis wells 18px, inputs and buttons pill (999px), chips 999px, video 12–16px.</li><li>Shadow only on floating media: <code>0 40px 120px rgba(0,0,0,.8)</code>.</li></ul></div>
+<div class="card"><h3>Buttons &amp; controls</h3><ul><li><b>Primary:</b> ember pill, 44px tall (30px compact), 700 weight. One per view.</li><li><b>Secondary:</b> ghost pill, 28% white outline.</li><li><b>Text link:</b> ember, with an arrow that nudges 3px on hover.</li><li>Press state: scale 0.97. No glow on hover, just a lighter fill.</li><li>Hit targets at least 44px on touch.</li></ul></div>
+<div class="card"><h3>Stat tiles</h3><ul><li>A huge number, a unit in ember, then a label, then a one-line note. Nothing else.</li><li>Left-aligned. Numbers tick in when they appear (ease-out cubic, around 600ms).</li><li>Fighter comparison: <code>value · label · value</code>, with a single split bar under it (ember vs blue).</li></ul></div>
+<div class="card"><h3>Data views</h3><ul><li><b>Timeline:</b> round-divided track, tick per event, grappling as a soft band, white playhead.</li><li><b>Event feed:</b> newest at bottom, row = type · frame · sentence with fighter bolded.</li><li><b>Tracking boxes:</b> 1.5px corner color, tag + confidence in mono.</li></ul></div>
+</div>
+
+<h2><span class="n">07</span>Motion</h2>
+<p>The site tells its story through scrolling; the app should respond quickly. Keep the same easing and restraint, but tie motion to user actions rather than scroll position.</p>
+<table>
+<thead><tr><th>Pattern</th><th>Site</th><th>App equivalent</th></tr></thead>
+<tbody>
+<tr><td>Hand-off</td><td>Hero copy fades as the player rises</td><td>Upload card shrinks into the new library row</td></tr>
+<tr><td>Counting stats</td><td>Numbers count with scroll</td><td>Report numbers count up once when first shown; never on re-render</td></tr>
+<tr><td>Progress rail</td><td>Stat reel rail</td><td>Processing steps: Ingest → Track → Classify → Report</td></tr>
+<tr><td>Horizontal gallery</td><td>Capabilities cards</td><td>Round switcher and clip carousel, with dots showing the active item</td></tr>
+<tr><td>Word reveal</td><td>Statement paragraph</td><td>Not used in the app</td></tr>
+</tbody>
+</table>
+<ul>
+<li>Easing: <code>cubic-bezier(.2,.8,.2,1)</code>. Durations: 150ms (hover), 300ms (state), 600ms (entrance).</li>
+<li>Only animate <code>transform</code> and <code>opacity</code>. Respect <code>prefers-reduced-motion</code>.</li>
+<li>Video and data never wait on an animation to finish.</li>
+</ul>
+
+<h2><span class="n">08</span>Voice</h2>
+<ul>
+<li>Short, declarative, fight-literate: "Every strike. Counted." / "The whole fight, broken down."</li>
+<li>Name the move, fighter and round. Write "Blue landed 3 low kicks in R2", not "Insights detected".</li>
+<li>Periods give headlines their punch. No exclamation marks, and no "AI-powered", "revolutionary" or "unlock".</li>
+<li>Button labels are verbs: "Upload a fight", "Try Studio", "Export report".</li>
+</ul>
+
+<h2><span class="n">09</span>Do / Don't</h2>
+<div class="cols">
+<div class="card do"><h3>Do</h3><ul><li>Black ground, one ember accent</li><li>Large solid numerals</li><li>Hairline borders, big radii</li><li>Generous negative space around a single focal element</li><li>Real footage and real data in mockups</li></ul></div>
+<div class="card dont"><h3>Don't</h3><ul><li>Gradient text or gradient buttons</li><li>Glow shadows and neon bloom</li><li>Blurred orbs, film grain, glass on every card</li><li>Cyan and purple, or other off-brand accents</li><li>Icon grids padded with filler stats</li></ul></div>
+</div>
+
+<h2><span class="n">10</span>Deliverables</h2>
+<ul>
+<li>Hi-fi screens for all P0 areas at 1440 and 390 widths.</li>
+<li>Clickable prototype: upload → processing → player → report.</li>
+<li>Component sheet (buttons, inputs, stat tile, event row, timeline, tracking box, nav) with every state.</li>
+<li>A token file that extends <code>app/v2.css</code>. No new colors without sign-off.</li>
+</ul>
+<p class="note">Open questions: the production app URL (the site currently links to a placeholder), whether a light theme is needed for printed reports, and the Broadcast launch timing.</p>
+</doc-page>
+<script src="doc-page.js"></script>
+</body>
+</html>

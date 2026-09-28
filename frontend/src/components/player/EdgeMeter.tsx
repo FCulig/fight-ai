@@ -32,7 +32,7 @@ export function EdgeRow({ t }: { t: EdgeTape }) {
       <div style={{ display: 'grid', gridTemplateColumns: '58px 1fr 58px', alignItems: 'center', gap: 16 }}>
         <span className="font-display" style={{ fontSize: 23, textAlign: 'right', color: rWin ? 'var(--f-red)' : 'var(--text-tertiary)' }}>{t.r}</span>
         <div>
-          <div style={{ textAlign: 'center', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', marginBottom: 7 }}>
+          <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 7 }}>
             {t.label}
           </div>
           <div style={{ position: 'relative', height: 12 }}>

@@ -3,41 +3,58 @@
   line-height: 1.5;
   font-weight: 400;
   color-scheme: dark;
-  color: #f1f5f9;
-  background-color: #050709;
+  color: #f5f5f4;
+  background-color: #000;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* ── Brand design tokens ─────────────────────────── */
-  --bg-base: #050709;
-  --surface-glass: rgba(255,255,255,0.04);
-  --surface-inner: rgba(0,0,0,0.30);
-  --header-bg: rgba(5,7,9,0.72);
-  --text-primary: #f1f5f9;
-  --text-secondary: #cbd5e1;
-  --text-tertiary: #94a3b8;
-  --text-muted: #64748b;
-  --text-disabled: #475569;
-  --cyan-400: #00daf3;
-  --cyan-600: #0099b0;
-  --cyan-on: #001f24;
+  /* ── Brand design tokens (Fightlytics ember palette, Sept 2026) ──── */
+  --bg-base: #000;
+  --surface-glass: #0e0f12;
+  --surface-glass-2: #15171b;
+  --surface-inner: rgba(255,255,255,0.03);
+  --header-bg: rgba(0,0,0,0.72);
+  --text-primary: #f5f5f4;
+  --text-secondary: #dcdad5;
+  --text-tertiary: #9a9892;
+  --text-muted: #9a9892;
+  --text-disabled: #5c5a56;
+  --accent: #ff4d1c;
+  --accent-hover: #ff6a40;
+  --accent-deep: #c1300a;
+  --accent-on: #190500;
+  --cyan-400: var(--accent);
+  --cyan-600: var(--accent-deep);
+  --cyan-on: var(--accent-on);
+  --accent-2: var(--accent);
+  /* Kept as true distinct hues rather than brand.css's literal collapse onto
+     orange/ink — several components (StateDumbbell truth-vs-predicted dots,
+     FighterColumn's Clinch vs Distance bars, SaveStatus, round markers) rely
+     on these reading as their own colour, not a shade of the accent. See
+     frontend-palette-collisions memory. */
   --purple-600: #7c3aed;
-  --orange-400: #ff7043;
+  --green-500: #0ca30c;
+  --orange-400: #c98500;
   --orange-600: #e64a19;
-  --green-500: #a3c900;
   --red-500: #ef4444;
-  --slate-400: #94a3b8;
-  --f-red: #ff4d4d;
-  --f-red-dim: rgba(255,77,77,0.16);
-  --f-blue: #3aa0ff;
-  --f-blue-dim: rgba(58,160,255,0.16);
-  --border-glass: rgba(255,255,255,0.07);
-  --border-subtle: rgba(255,255,255,0.05);
-  --border-cyan: rgba(0,218,243,0.18);
-  --accent: #00daf3;
-  --accent-2: #0099b0;
+  --slate-400: #9a9892;
+  --f-red: #ef4444;
+  --f-red-dim: rgba(239,68,68,0.16);
+  --f-blue: rgb(96,165,250);
+  --f-blue-dim: rgba(96,165,250,0.16);
+  --border-glass: rgba(255,255,255,0.10);
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-cyan: rgba(255,77,28,0.35);
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  /* Annotate's STATE lane (STRIKING/CLINCH/GROUND) — validated with the
+     dataviz skill's validate_palette.js against surface #0e0f12 and against
+     --f-red/--f-blue (dark mode, all-pairs): all checks pass. Do not swap
+     GROUND back to --f-red — that was the exact collision this fixes. */
+  --state-striking: #199e70;
+  --state-clinch: #c98500;
+  --state-ground: #9085e9;
 }
 
 * {
@@ -65,8 +82,11 @@ h1, h2, h3, h4, h5, h6 {
 
 a {
   font-weight: 500;
-  color: #00daf3;
+  color: var(--accent);
   text-decoration: none;
+}
+a:hover {
+  color: var(--accent-hover);
 }
 
 button {
@@ -89,7 +109,7 @@ button:active {
 }
 
 button:focus-visible {
-  outline: 2px solid rgba(0, 218, 243, 0.6);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -138,71 +158,102 @@ button:focus-visible {
   to   { opacity: 0;    transform: translate(-50%, -50%) scale(1.35); }
 }
 
-/* ── Background orb animations ─────────────────────── */
-
-@keyframes orb-drift-a {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50%       { transform: translate(40px, 60px) scale(1.08); }
-}
-
-@keyframes orb-drift-b {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50%       { transform: translate(-50px, -40px) scale(1.05); }
-}
-
-@keyframes orb-drift-c {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50%       { transform: translate(30px, -50px) scale(1.06); }
-}
-
-/* ── Grain texture ──────────────────────────────────── */
-
-@keyframes grain-shift {
-  0%, 100% { transform: translate(0, 0); }
-  10%       { transform: translate(-2%, -3%); }
-  30%       { transform: translate(3%, 2%); }
-  50%       { transform: translate(-1%, 3%); }
-  70%       { transform: translate(2%, -2%); }
-  90%       { transform: translate(-3%, 1%); }
-}
-
-.grain-overlay {
-  position: fixed;
-  inset: -50%;
-  width: 200%;
-  height: 200%;
-  opacity: 0.032;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  background-size: 200px 200px;
-  animation: grain-shift 0.5s steps(1) infinite;
-  z-index: 2;
-}
-
 /* ── Hover states ───────────────────────────────────── */
 
 .btn-glass {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 8px;
-  color: #94a3b8;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.28);
+  border-radius: 999px;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .btn-glass:hover {
-  background: rgba(255,255,255,0.1);
-  color: #e2e8f0;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-primary);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 0 24px rgba(0,218,243,0.4);
+  background: var(--accent-hover);
+}
+
+.btn-upload,
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-on);
+  border: none;
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+.btn-upload:hover {
+  background: var(--accent-hover);
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-decoration: none;
+}
+.logo:hover {
+  color: var(--text-primary);
+}
+.logo::before {
+  content: '';
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg stroke='%23ff4d1c' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M26 70h56v10c0 4-4 8-8 8H34c-4 0-8-4-8-8z' fill='rgba(255,77,28,.06)' stroke-width='6.5'/%3E%3Cpath d='M24 34h-8c-6 0-11 5-11 11 0 6 5 10 11 10h8z' fill='rgba(255,77,28,.12)' stroke-width='6.5'/%3E%3Cpath d='M38 18h32c8 0 14 6 14 14v24c0 8-6 14-14 14H38c-8 0-14-6-14-14V32c0-8 6-14 14-14z' fill='rgba(255,77,28,.12)' stroke-width='6.5'/%3E%3Cpath d='M40 24v18M54 24v18M68 24v18' fill='none' stroke-width='5.5'/%3E%3Cpath d='M38 76h32M38 83h32' fill='none' stroke-width='4.5'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.eyebrow::before {
+  content: '';
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg stroke='%23000' fill='none' stroke-linejoin='round' stroke-linecap='round' stroke-width='8'%3E%3Cpath d='M26 70h56v10c0 4-4 8-8 8H34c-4 0-8-4-8-8z'/%3E%3Cpath d='M24 34h-8c-6 0-11 5-11 11 0 6 5 10 11 10h8z'/%3E%3Cpath d='M38 18h32c8 0 14 6 14 14v24c0 8-6 14-14 14H38c-8 0-14-6-14-14V32c0-8 6-14 14-14z'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg stroke='%23000' fill='none' stroke-linejoin='round' stroke-linecap='round' stroke-width='8'%3E%3Cpath d='M26 70h56v10c0 4-4 8-8 8H34c-4 0-8-4-8-8z'/%3E%3Cpath d='M24 34h-8c-6 0-11 5-11 11 0 6 5 10 11 10h8z'/%3E%3Cpath d='M38 18h32c8 0 14 6 14 14v24c0 8-6 14-14 14H38c-8 0-14-6-14-14V32c0-8 6-14 14-14z'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;
+}
+
+.nav-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
 }
 
 .nav-link:hover {
-  color: #94a3b8 !important;
-  background: rgba(255,255,255,0.04) !important;
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+.nav-link.active {
+  color: var(--text-primary) !important;
+  background: var(--surface-glass-2) !important;
+  border-color: var(--border-glass) !important;
 }
 
 .event-item:hover {
@@ -213,8 +264,6 @@ button:focus-visible {
 
 .glass {
   background: var(--surface-glass);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 1px solid var(--border-glass);
   border-radius: 16px;
 }
@@ -227,35 +276,35 @@ button:focus-visible {
 
 .divider {
   height: 1px;
-  background: rgba(255,255,255,0.05);
+  background: var(--border-glass);
   border: none;
   margin: 0;
 }
 
 .label {
   font-size: 10.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: rgba(255,255,255,0.28);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
 }
 
 .pill {
   font-size: 11.5px;
   font-weight: 700;
   padding: 6px 13px;
-  border-radius: 7px;
+  border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-disabled);
+  color: var(--text-muted);
   cursor: pointer;
 }
 
 .pill.active {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 12%, transparent);
+  background: var(--surface-glass-2);
+  color: var(--text-primary);
+  border-color: var(--border-glass);
+  box-shadow: none;
 }
 
 /* ── Feed animations ────────────────────────────────── */
@@ -340,14 +389,36 @@ button:focus-visible {
 .tl-clip:hover { transform: translateY(-1px) scale(1.08); }
 .tl-ruler:hover { background: rgba(255,255,255,0.025); }
 
+/* ── Training Data QA ──────────────────────────────── */
+
+.td-class:hover, .td-row:hover {
+  border-color: var(--border-glass);
+  background: var(--surface-glass-2);
+}
+
+/* ── Fight list ─────────────────────────────────────── */
+
+.fight-card {
+  transition: border-color .15s, background .15s;
+}
+.fight-card.is-ready:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
 .icon-btn {
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 999px;
   display: grid;
   place-items: center;
-  background: rgba(255,255,255,0.04);
+  background: transparent;
   border: 1px solid var(--border-glass);
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   cursor: pointer;
+}
+
+.icon-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface-glass-2);
 }

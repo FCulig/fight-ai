@@ -42,10 +42,8 @@ export default function VideoControls({
 
   return (
     <div style={{
-      background: 'rgba(255,255,255,0.04)',
-      backdropFilter: 'blur(20px) saturate(160%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-      border: '1px solid rgba(255,255,255,0.07)',
+      background: 'var(--surface-glass)',
+      border: '1px solid var(--border-glass)',
       borderRadius: 14,
       padding: isMobile ? '12px' : '12px 16px',
     }}>
@@ -62,7 +60,7 @@ export default function VideoControls({
             width: '100%',
             height: isMobile ? 5 : 3,
             appearance: 'none',
-            background: `linear-gradient(to right, #00daf3 ${progress}%, rgba(255,255,255,0.1) ${progress}%)`,
+            background: `linear-gradient(to right, var(--accent) ${progress}%, rgba(255,255,255,0.1) ${progress}%)`,
             borderRadius: 3,
             outline: 'none',
             cursor: 'pointer',
@@ -91,16 +89,15 @@ export default function VideoControls({
           className="btn-primary"
           onClick={onTogglePlay}
           style={{
-            background: 'linear-gradient(135deg, #00daf3 0%, #0099b0 100%)',
-            borderRadius: 10,
-            color: '#001f24',
+            background: 'linear-gradient(135deg, var(--accent), var(--accent-deep))',
+            borderRadius: 999,
+            color: 'var(--accent-on)',
             fontWeight: 700,
             fontSize: isMobile ? 13 : 13,
             padding: isMobile ? '10px 20px' : '7px 20px',
             display: 'flex',
             alignItems: 'center',
             gap: 5,
-            boxShadow: '0 0 16px rgba(0,218,243,0.25)',
             minHeight: isMobile ? 44 : 'auto',
           }}
         >
@@ -127,15 +124,16 @@ export default function VideoControls({
 
         <span style={{
           fontSize: isMobile ? 13 : 13,
-          color: '#e2e8f0',
+          color: 'var(--text-secondary)',
+          fontFamily: 'var(--mono)',
           fontVariantNumeric: 'tabular-nums',
           fontWeight: 600,
           marginLeft: 4,
         }}>
           {formatTime(currentTime)}
         </span>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>/</span>
-        <span style={{ fontSize: isMobile ? 12 : 13, color: '#475569', fontVariantNumeric: 'tabular-nums' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-disabled)' }}>/</span>
+        <span style={{ fontSize: isMobile ? 12 : 13, color: 'var(--text-disabled)', fontFamily: 'var(--mono)', fontVariantNumeric: 'tabular-nums' }}>
           {formatTime(duration)}
         </span>
       </div>
