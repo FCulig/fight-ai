@@ -1,0 +1,103 @@
+I want you to implement the redesign of the frontend/ application. First start off with the labeling page. Design is not really 1 to 1 with the current implementation. If you find discrepencies, use the implemented app as the source of truth. If there are any questions ask. 
+
+<pasted_content id="25ef">
+Use the claude_design MCP (https://api.anthropic.com/v1/design/mcp, auth via /design-login) to import this project:
+https://claude.ai/design/p/f026815c-9df4-4f33-afd8-2546cd99c220?file=Annotate.html
+
+Focus on these files (the whole project is readable):
+- `Annotate.html`
+
+Also read these files the selection imports:
+- `assets/annotate.jsx`
+- `assets/brand.css`
+- `assets/components.jsx`
+- `assets/fight-data.js`
+- `assets/tweaks.js`
+</pasted_content id="25ef">
+
+---
+
+okay now lets do the same for the training data QA page: 
+
+<pasted_content id="25ef">
+Use the claude_design MCP (https://api.anthropic.com/v1/design/mcp, auth via /design-login) to import this project:
+https://claude.ai/design/p/f026815c-9df4-4f33-afd8-2546cd99c220?file=Training+Data.html
+
+Focus on these files (the whole project is readable):
+- `Training Data.html`
+
+Also read these files the selection imports:
+- `assets/brand.css`
+- `assets/lab-data.js`
+- `assets/lab-parts.jsx`
+- `assets/td-app.jsx`
+- `assets/td-data.js`
+- `assets/td-player.jsx`
+</pasted_content id="25ef">
+
+---
+
+Now do the same for the quality dashboard. But actual implementation has almost nothing compared to the design. So just try to adjust the current implementation as close as possible to the design 
+
+<pasted_content id="25ef">
+Use the claude_design MCP (https://api.anthropic.com/v1/design/mcp, auth via /design-login) to import this project:
+https://claude.ai/design/p/f026815c-9df4-4f33-afd8-2546cd99c220?file=Training+Lab.html
+
+Focus on these files (the whole project is readable):
+- `Training Lab.html`
+
+Also read these files the selection imports:
+- `assets/brand.css`
+- `assets/lab-accuracy.jsx`
+- `assets/lab-app.jsx`
+- `assets/lab-data.js`
+- `assets/lab-parts.jsx`
+- `assets/lab-sections.jsx`
+</pasted_content id="25ef">
+
+---
+
+Now do the same thing for the player 
+
+<pasted_content id="25ef">
+Use the claude_design MCP (https://api.anthropic.com/v1/design/mcp, auth via /design-login) to import this project:
+https://claude.ai/design/p/f026815c-9df4-4f33-afd8-2546cd99c220?file=Analysis+Player.html
+
+Focus on these files (the whole project is readable):
+- `Analysis Player.html`
+
+Also read these files the selection imports:
+- `assets/brand.css`
+- `assets/charts.jsx`
+- `assets/components.jsx`
+- `assets/fight-data.js`
+- `assets/tweaks.js`
+</pasted_content id="25ef">
+
+---
+
+Now update the fight list as well, but for this one I don't have a design.
+
+---
+
+Can you also add an icon that is shown on the tab on the browser (favicon?)
+
+---
+
+can you make it transparent? It has a black backround now
+
+---
+
+and make a title fightlytics
+
+---
+
+and make a title Fightlytics, also update it in the navigation bar
+
+---
+
+How much tokens is current https://entire.io/ integration saving when promting?
+
+---
+
+I have it integrated already

@@ -1,0 +1,234 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M3M53N2MG2NMSCK6XF9B5VH5",
+  "session_id": "a35e57e2-4d31-4d81-b6c7-a33148511371",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-28T14:01:13.629722Z",
+  "branch": "master",
+  "checkpoints_count": 11,
+  "save_step_count": 11,
+  "files_touched": [
+    "frontend/DESIGN_SYSTEM.md",
+    "frontend/index.html",
+    "frontend/public/favicon.svg",
+    "frontend/src/App.tsx",
+    "frontend/src/components/CornerSelect.tsx",
+    "frontend/src/components/FighterOverlay.tsx",
+    "frontend/src/components/FrameInfo.tsx",
+    "frontend/src/components/Header.tsx",
+    "frontend/src/components/ModeCard.tsx",
+    "frontend/src/components/UploadDialog.tsx",
+    "frontend/src/components/VideoControls.tsx",
+    "frontend/src/components/accuracy/AnnotatedEvents.tsx",
+    "frontend/src/components/accuracy/ConfusionHeatmap.tsx",
+    "frontend/src/components/accuracy/CoverageStrip.tsx",
+    "frontend/src/components/accuracy/FightLedger.tsx",
+    "frontend/src/components/accuracy/FixtureTable.tsx",
+    "frontend/src/components/accuracy/Glossary.tsx",
+    "frontend/src/components/accuracy/LabOverview.tsx",
+    "frontend/src/components/accuracy/NotMeasurable.tsx",
+    "frontend/src/components/accuracy/PipelineHealthTodo.tsx",
+    "frontend/src/components/accuracy/ProvenanceLine.tsx",
+    "frontend/src/components/accuracy/SectionIndex.tsx",
+    "frontend/src/components/accuracy/VersionTrendChart.tsx",
+    "frontend/src/components/annotate/AnnotationTimeline.tsx",
+    "frontend/src/components/player/AccGauge.tsx",
+    "frontend/src/components/player/EdgeMeter.tsx",
+    "frontend/src/components/player/FightReport.tsx",
+    "frontend/src/components/player/HeadToHead.tsx",
+    "frontend/src/components/player/MatchupCard.tsx",
+    "frontend/src/components/player/Momentum.tsx",
+    "frontend/src/components/player/SummaryTiles.tsx",
+    "frontend/src/components/trainingData/ClassGrid.tsx",
+    "frontend/src/components/trainingData/ClipPlayer.tsx",
+    "frontend/src/components/trainingData/EventReview.tsx",
+    "frontend/src/components/trainingData/EventTable.tsx",
+    "frontend/src/components/trainingData/VerdictBadge.tsx",
+    "frontend/src/hooks/useFightLedger.ts",
+    "frontend/src/hooks/useLabelledEvents.ts",
+    "frontend/src/index.css",
+    "frontend/src/pages/Annotate.tsx",
+    "frontend/src/pages/FightList.tsx",
+    "frontend/src/pages/PipelineAccuracy.tsx",
+    "frontend/src/pages/Player.tsx",
+    "frontend/src/pages/TrainingDataQA.tsx",
+    "frontend/src/types/Fight.ts",
+    "frontend/src/utils/trainingDataTaxonomy.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-sonnet-5",
+  "turn_id": "9d025602ca39",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 592,
+    "cache_creation_tokens": 1069688,
+    "cache_read_tokens": 151542409,
+    "output_tokens": 252411,
+    "api_call_count": 296
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_017j2dGn1kTV6PaBUBmAAbKi",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "dataviz"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "9d025602ca39",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 193,
+        "end": 194,
+        "entry_ids": [
+          "cf9d15c6-a677-4ba1-bd44-887f74b46b29"
+        ],
+        "tool_use_id": "toolu_017j2dGn1kTV6PaBUBmAAbKi"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_017j2dGn1kTV6PaBUBmAAbKi"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: dataviz",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 11
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-28T14:01:13.466747Z",
+    "agent_lines": 1397,
+    "agent_removed": 535,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 576,
+    "total_committed": 1397,
+    "total_lines_changed": 2508,
+    "agent_percentage": 77.03349282296651,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 209,
+      "user_lines_removed": 576,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29,
+        "frontend/Design-Brief.html": 180
+      },
+      "user_removed_per_file": {
+        "frontend/DESIGN_SYSTEM.md": 576
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 29,
+      "user_lines_removed": 0,
+      "agent_lines_added": 436,
+      "agent_lines_removed": 853,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 29,
+      "user_lines_removed": 0,
+      "agent_lines_added": 536,
+      "agent_lines_removed": 916,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 29,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1789,
+      "agent_lines_removed": 1013,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 29,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2105,
+      "agent_lines_removed": 1060,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29
+      }
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 29,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2140,
+      "agent_lines_removed": 1108,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29
+      }
+    },
+    {
+      "checkpoint_number": 7,
+      "user_lines_added": 29,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2152,
+      "agent_lines_removed": 1109,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29
+      }
+    },
+    {
+      "checkpoint_number": 8,
+      "user_lines_added": 29,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2151,
+      "agent_lines_removed": 1109,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29
+      }
+    },
+    {
+      "checkpoint_number": 9,
+      "user_lines_added": 29,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2152,
+      "agent_lines_removed": 1110,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29
+      }
+    },
+    {
+      "checkpoint_number": 10,
+      "user_lines_added": 29,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2153,
+      "agent_lines_removed": 1111,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29
+      }
+    },
+    {
+      "checkpoint_number": 11,
+      "user_lines_added": 29,
+      "user_lines_removed": 0,
+      "agent_lines_added": 2153,
+      "agent_lines_removed": 1111,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29
+      }
+    }
+  ]
+}
