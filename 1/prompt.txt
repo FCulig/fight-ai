@@ -1,0 +1,31 @@
+I now want to add a FE landing page, this page would be a marketing material for the app promotion. It is mostly static web page. It will only fetch current DB analytics from precision page. What technologies should be used?
+
+---
+
+more info about desired architecture, i want the marketing page to be fightlytics.com and the current frontend/ on the app.fightlytics.com
+
+---
+
+yes, please scaffold the marketing app/page, make it say hello world  for now. it should live int the landing/
+
+---
+
+<pasted_content id="66e3">
+➜  landing git:(master) ✗ npm run dev --prefix landing
+npm error code ENOENT
+npm error syscall open
+npm error path /Users/filip.culig/Developer/fight-ai/landing/landing/package.json
+npm error errno -2
+npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open '/Users/filip.culig/Developer/fight-ai/landing/landing/package.json'
+npm error enoent This is related to npm not being able to find a file.
+npm error enoent
+npm error A complete log of this run can be found in: /Users/filip.culig/.npm/_logs/2026-09-28T06_19_15_983Z-debug-0.log
+</pasted_content id="66e3">
+
+---
+
+are you sure that astro is right coice for this?
+
+---
+
+For a really long time it will be a single page. Down the line there might be in total 2 or 3 pages max
