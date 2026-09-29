@@ -1,0 +1,5 @@
+Lets explore the architecture for implementing the authentication to the app. Currently nothing is protected, everything is public. What I would like is some light weight authentication/authroziation system. Preferably SSO only to make it easier. What are the best options for me, also please consider that this is an MVP which I want to host as cheap as possible (even free if possible).
+
+---
+
+Okay lets go with the google auth built into the FAST API. Write me a plan for implementing it.
