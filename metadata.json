@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M3Q019VC74RHX89R31218ERK",
+  "strategy": "manual-commit",
+  "branch": "master",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "PLAN.md",
+    "TODO.md",
+    "plan/00-checklist.md",
+    "plan/01-prerequisite.md",
+    "plan/02-stage0-labelling.md",
+    "plan/02a-upload-tracks.md",
+    "plan/02b-label-schema.md",
+    "plan/02c-labelling-ui.md",
+    "plan/02d-label-quality.md",
+    "plan/03-stage1-artifacts.md",
+    "plan/04-stage2-model.md",
+    "plan/05-also-worth-doing.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 86,
+    "cache_creation_tokens": 41152,
+    "cache_read_tokens": 3442836,
+    "output_tokens": 10310,
+    "api_call_count": 43
+  }
+}
