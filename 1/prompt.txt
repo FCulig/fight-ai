@@ -1,0 +1,5 @@
+currently you are saving everything you learn into claude markdown files, each folder has its own md file. I would like you to analyze them and check if they can be improved in some way, or made shorter. Also please consider splitting them into smaller files as well.
+
+---
+
+Can we turn some of these into their own separate skills?
