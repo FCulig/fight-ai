@@ -1,309 +1,43 @@
-# Fight AI — Frontend
+# frontend/ — React + TypeScript + Vite
 
-## Workflow
-- Always apply changes directly to the local working directory
-- Never open PRs or suggest creating pull requests
+**Pages** (`src/pages/`):
+- `FightList`: library and upload, updated live via the SSE stream.
+- `Player`: fight review.
+- `Annotate`: hand labelling.
+- `TrainingDataQA` (`/training-data`).
+- `PipelineAccuracy` (`/accuracy`).
+- `Library`: legacy.
+- `Users` (`/users`, admin): roles and access.
+- `SignIn`: rendered by `AuthProvider` in place of the app while signed out.
 
-## What it does
-React + TypeScript + Vite app for reviewing processed MMA fight videos. Displays fight events in a live feed, shows DB-backed round information, and renders toggleable fighter bounding-box overlays on the video.
+Data access goes through `services/api.ts` plus one hook per resource in `hooks/`. Every call uses `apiFetch`, which adds the `/api` prefix and reloads the page on a 401. `<video src>` and `EventSource` must use `videoUrl()` and `FIGHT_STREAM_URL`, and they authenticate through the same-origin session cookie.
 
-## Project Structure
-```
-frontend/src/
-├── types/
-│   ├── Event.ts          # ONE shape for both pipeline predictions and hand labels,
-│   │                      #   told apart by `source`/`kind`: { id, fight_id, source
-│   │                      #   ('prediction'|'label'), kind ('point'|'round'|
-│   │                      #   'corner_swap'|'excluded'), frame, end_frame (null
-│   │                      #   for kind='point'), description (null except for
-│   │                      #   action='fight_end' — see utils/describeEvent.ts),
-│   │                      #   fighter_id (prediction-only), corner
-│   │                      #   (label-only, 0=red/1=blue — a track-slot, not a
-│   │                      #   resolved person), action, target, success, state
-│   │                      #   (prediction-only), value (range-kind-only),
-│   │                      #   labeler, created_at, is_verified (nullable — Training
-│   │                      #   Data QA verdict on a source='label' kind='point' row;
-│   │                      #   true/false/null, never touched by anything else) }
-│   ├── Fight.ts           # { id, video_path, fps, width, height, created_at, state,
-│   │                      #   labeled_at, purpose, reported_frames, decoded_frames,
-│   │                      #   segmentation_needs_review/_reason, red/blue_fighter_id }
-│   │                      #   + STATE_LABELS/STATE_PROGRESS/TERMINAL_STATES maps,
-│   │                      #   FightPurpose + PURPOSE_LABELS/_COLORS/_ICONS, and
-│   │                      #   isFightViewable/isLabelingReady/isInvalid/needsRoundReview/
-│   │                      #   isLabelEditable/isEditingLabels predicates
-│   ├── FighterFrame.ts   # { fight_id, frame, corner, x1, y1, x2, y2, confidence }
-│   └── Round.ts          # { id, fight_id, round_number, start_frame, end_frame }
-├── services/
-│   └── api.ts            # fetchEvents(fightId, params) (source/kind/fighter_id/action/
-│                          #   success filters), createEvent/updateEvent/deleteEvent
-│                          #   (Annotate's write path — always source='label' server-side),
-│                          #   verifyEvent(fightId, eventId, isVerified) (Training Data QA's
-│                          #   write path — PUT .../events/{id}/verify, label point events only),
-│                          #   fetchFights, fetchFighterFrames, fetchRounds, uploadFight,
-│                          #   deleteFight, finishLabeling, reopenLabeling
-├── hooks/
-│   ├── useEvents.ts       # fetches events for a fightId with optional {source, kind,
-│   │                      #   fighter_id, action, success} params, exposes a setter for
-│   │                      #   optimistic updates — Player passes {source:'prediction'},
-│   │                      #   Annotate passes {source:'label'} and derives its own
-│   │                      #   point-event/span slices from the one result via useMemo
-│   ├── useFights.ts       # fetches all fights, exposes selectedFightId state (defaults to latest)
-│   ├── useFightStream.ts  # subscribes to /fights/stream SSE, patches `state` into the fights list live
-│   ├── useFighterFrames.ts # fetches frames for selectedFightId → Map<frame, FighterFrame[]>;
-│   │                      #   optional {start_frame, end_frame} narrows the fetch to a window
-│   │                      #   — see "Fighter-frame payload size" below
-│   ├── useRounds.ts      # fetches rounds for selectedFightId
-│   ├── useTrainingDataEvents.ts # cross-fight (unlike every other hook here): fetches every
-│   │                      #   `purpose='training_data'` fight that has reached Annotate, then
-│   │                      #   every source='label' kind='point' event for each, tagged with
-│   │                      #   its own `fight` and filtered to utils/trainingDataTaxonomy.ts's
-│   │                      #   TRAINING_ACTIONS — the corpus Training Data QA reviews. Also
-│   │                      #   fetches each fight's kind='corner_swap' spans and tags every
-│   │                      #   `QAEvent` with `displayCorner` (`corner` flipped via
-│   │                      #   utils/cornerSwap.ts's isFrameSwapped if its frame falls in one —
-│   │                      #   display-only, `corner` itself is untouched); EventReview/
-│   │                      #   EventTable read `displayCorner` for their Red/Blue text+dot,
-│   │                      #   while ClipPlayer still gets raw `corner` for `highlightCorner`,
-│   │                      #   since that matches fighter_frames.corner's own unswapped slot
-│   │                      #   space. Exposes setVerdict(eventId, fightId, isVerified) —
-│   │                      #   optimistic update + verifyEvent, rolling back via refetch on failure
-│   └── useWindowWidth.ts # responsive breakpoint helper
-├── mocks/
-│   └── fightMock.ts      # hardcoded mock data (fighters, stats, pace, form) — see TODO_BACKEND_DATA.md
-├── utils/
-│   ├── describeEvent.ts  # Reconstructs an Event's display text on demand (description is
-│   │                     #   only ever stored for action='fight_end') from action/target/
-│   │                     #   corner (labels, via annotate/taxonomy.ts's ToolItem.text()
-│   │                     #   templates) or action/fighter_id/success/state + `rounds`
-│   │                     #   (predictions) — used by both LiveFeed and AnnotationList/Timeline
-│   ├── eventTaxonomy.ts  # categoryForAction/colorForAction/iconForAction — action-driven,
-│   │                     #   shared by LiveFeed (Player) and annotate/taxonomy.ts (re-exports
-│   │                     #   these for its existing importers)
-│   ├── cornerSwap.ts     # isFrameSwapped(frame, spans) — shared by FighterOverlay (box/
-│   │                     #   skeleton colour) and describeEvent (fighter-name resolution)
-│   ├── liveStats.ts      # deriveStatsForRange/derivePaceBuckets — FIGHT STATISTICS/MOMENTUM,
-│   │                     #   attributes strikes via fighter_id (predictions, vs. fights.
-│   │                     #   red_fighter_id) or corner (labels), never via description text
-│   ├── fightLabel.ts     # fightLabel(fight) — "RED vs BLUE" or the video filename stem;
-│   │                     #   shared by FightList and Training Data QA
-│   ├── trainingDataTaxonomy.ts # TRAINING_CLASSES/TRAINING_ACTIONS/CLASS_BY_ACTION — the
-│   │                     #   subset of annotate/taxonomy.ts's TOOL_GROUPS that is an actual
-│   │                     #   reviewable training class (needsFighter point events, minus
-│   │                     #   takedown_attempt/_defended, submission_attempt, knockdown, and
-│   │                     #   every state_* mark)
-│   └── trainingDataStats.ts # ClassStats/classStats(events) and verdictKey(isVerified) —
-│                         #   shared by ClassGrid, EventTable, EventReview, TrainingDataQA
-├── components/
-│   ├── FighterOverlay.tsx  # canvas overlay for fighter bounding boxes
-│   ├── VideoPlayer.tsx     # <video> wrapper with play/seek gestures; accepts children for overlays
-│   ├── VideoControls.tsx   # playback controls + scrubber
-│   ├── FrameInfo.tsx       # frame / ms / fps display
-│   ├── Header.tsx          # top nav
-│   ├── CornerSelect.tsx    # fighter search/create combobox, used by the upload dialog
-│   ├── FightPurposeBadge.tsx # training_data/reference/ai_labeled chip — fight list
-│   │                       #   subtitle + Player and Annotate headers
-│   ├── ConfirmDialog.tsx   # reusable confirm modal (title/message/danger/busy/error);
-│   │                       #   backs fight deletion from both Player and FightList
-│   ├── annotate/           # Annotate page sub-components — see "Labelling (Annotate page)" below
-│   │   ├── taxonomy.ts         # ToolItem palette definitions, KEYMAP, colour/icon/category
-│   │   │                       #   helpers, successForAction, SPAN_KEYS/EDIT_KEYS/PLAYBACK_KEYS
-│   │   ├── AnnotateStage.tsx   # video + FighterOverlay + toast, wraps VideoPlayer for Annotate
-│   │   ├── FighterSelectCard.tsx # red/blue corner picker (drives `selected` in Annotate.tsx)
-│   │   ├── EventPalette.tsx    # click-to-log buttons for every ToolItem + End-of-fight button
-│   │   ├── FightEndModal.tsx   # winner/method modal for the `fight_end` label event
-│   │   ├── KeyboardLegend.tsx  # renders PLAYBACK_KEYS/EDIT_KEYS/SPAN_KEYS/TOOL_GROUPS
-│   │   ├── AnnotationPanel.tsx # timeline/list view toggle + filter pills, wraps the two below
-│   │   ├── AnnotationTimeline.tsx # multi-lane timeline: rounds, state segs, corner_swap/
-│   │   │                       #   excluded spans (draggable edges), red/blue strike clips
-│   │   ├── AnnotationList.tsx  # flat chronological list view of label events
-│   │   └── SaveStatus.tsx      # small "saving…" indicator (savingCount > 0)
-│   └── player/             # Analysis Player sub-components
-│       ├── LiveFeed.tsx    # real-event chat feed with filter pills + click-to-seek —
-│       │                   #   text via utils/describeEvent.ts, category/colour/icon via
-│       │                   #   utils/eventTaxonomy.ts (no more regex-over-description)
-│       ├── ScopeToggle.tsx # Whole Fight / Round 1 / Round 2 pill group
-│       ├── AccGauge.tsx    # SVG accuracy ring gauge
-│       ├── SegBar.tsx      # horizontal segmented bar (strikes by target / position)
-│       ├── PaceChart.tsx   # SVG area/line pace chart with live playhead
-│       ├── MiniStat.tsx    # small inner-tile stat (Takedowns, Control, KD, Sub Att)
-│       ├── EdgeMeter.tsx   # tale-of-the-tape needle (Height / Reach / Age)
-│       ├── RecentForm.tsx  # W/L chip list (Recent Form · Last 5)
-│       ├── FighterColumn.tsx  # per-fighter stats card (AccGauge + MiniStat + SegBar)
-│       ├── FightStatistics.tsx # scope bar + ScopeToggle + two FighterColumn
-│       ├── Momentum.tsx    # MOMENTUM card wrapping PaceChart
-│       └── MatchupCard.tsx # tale-of-the-tape + EdgeMeter rows + RecentForm
-│   └── trainingData/       # Training Data QA sub-components — see "Training Data QA" below
-│       ├── ClassGrid.tsx       # level 1: one card per training class (from TRAINING_CLASSES),
-│       │                       #   grouped like the Annotate palette, with a confirmed/declined bar
-│       ├── EventTable.tsx      # level 2: filterable (All/Pending/Confirmed/Declined) row list
-│       │                       #   for one class
-│       ├── EventReview.tsx     # level 3: ClipPlayer + verdict buttons (C/X keys) + queue nav
-│       │                       #   (←/→, Esc) — the actual review surface
-│       ├── ClipPlayer.tsx      # real <video> + FighterOverlay windowed (~2.4s) around the
-│       │                       #   event's frame, looping during playback — no synthesised
-│       │                       #   pose/clip data, see "Training Data QA" below
-│       └── VerdictBadge.tsx    # Confirmed/Declined/Pending chip
-└── pages/
-    ├── Player.tsx          # main fight-review page (Analysis Player redesign) — reads predictions
-    ├── Annotate.tsx        # manual-labelling page — reads/writes fight_events rows with source='label'
-    ├── FightList.tsx       # fight library / upload entry point, live via useFightStream
-    ├── Library.tsx         # legacy fight library listing
-    ├── PipelineAccuracy.tsx # /accuracy — pipeline P/R/F1 etc. against labelled reference fixtures
-    └── TrainingDataQA.tsx  # /training-data — see "Training Data QA" below
-```
+**Auth:** `AuthProvider` renders the app only after `/api/auth/me` answers. Use `useAuth().can(role)` to hide controls and `RequireRole` to guard routes. Both are cosmetic, because the backend enforces roles.
 
-## Analysis Player Layout
+**Page-specific rules load when you open matching files:**
+- `.claude/rules/frontend-player.md`
+- `.claude/rules/frontend-annotate.md`
+- `.claude/rules/frontend-training-data-qa.md`
 
-`Player.tsx` implements a cinematic, full-page layout with five stacked sections (top → bottom):
+## Dev server
+`vite.config.ts` proxies `/api` to `127.0.0.1:8000`. Every backend route lives under `/api`, so client routes never collide with it. Never add a client route under `/api`.
 
-1. **Top grid** (`1fr 410px`, collapses single-column below 1100px) — `<VideoPlayer>` + `FighterOverlay` + ROUND chip on the left; `LiveFeed` filling the right column via absolute positioning so it always matches the video column height.
-2. **FIGHT STATISTICS** — `FightStatistics.tsx`: glass bar with `monitoring` icon + `ScopeToggle` (Whole Fight / Round 1 / Round 2); two `FighterColumn` cards below (real scope state selects the mock stat set from `fightMock.ts`).
-3. **MOMENTUM** — `Momentum.tsx`: `PaceChart` (SVG area/line, mock pace data, real time-axis from `currentTime`/`duration`; real `r1EndSeconds` from `useRounds` or fallback mock).
-4. **MATCHUP** — `MatchupCard.tsx`: tale-of-the-tape header + `EdgeRow` needles for Height/Reach/Age + Recent Form W/L chips.
+## Conventions
+- **Frame numbers:** use `Math.floor(currentTime * fps) + 1` with `fight.fps`, and step frames with `delta / fps` seconds. Never hardcode fps.
+- **Event text** comes from `utils/describeEvent.ts`, and category, colour and icon come from `utils/eventTaxonomy.ts`, keyed on `action`. Never parse or display `description`. Only `fight_end` has one.
+- **Strike attribution** (`utils/liveStats.ts`) uses `fighter_id` for predictions (matched against `fights.red_fighter_id`) and `corner` for labels, never text.
+- **Corner-swap correction is display-only**, via `utils/cornerSwap.ts`'s `isFrameSwapped`. It is used for box colour in `FighterOverlay` and for fighter names in `describeEvent`. Never write a swapped corner back.
+- **`useFighterFrames(fightId)`** with no range downloads the whole fight's keypoints, tens of MB. That's fine for Player and Annotate, which scrub anywhere. Anything that needs only a few frames must pass `{start_frame, end_frame}`.
+- **Mock data:** fighter profiles, stats, pace and recent form are hardcoded in `src/mocks/fightMock.ts`. `TODO_BACKEND_DATA.md` lists the API each one needs.
+- **Badge colours:** purpose and other badges must not reuse the red/blue corner colours or the error/warning colours, because a red badge reads as "red corner". See `PURPOSE_COLORS` in `types/Fight.ts`.
 
-### Live feed event derivation
-`LiveFeed` drives on **real** backend events (same `useEvents` hook) — `{ source: 'prediction' }` for an `ai_labeled` fight, `{ source: 'label' }` otherwise (a fight is never re-run, so exactly one source ever has real content — see "Fight purpose" below). Each event's category/colour/icon come from `utils/eventTaxonomy.ts`'s `categoryForAction`/`colorForAction`/`iconForAction`, driven entirely by the structured `action` column; its display text comes from `utils/describeEvent.ts`, reconstructed from `action`/`target`/`corner` (labels) or `action`/`fighter_id`/`success`/`state` (predictions) — never from `description`, which is only ever stored for `action='fight_end'`. `LiveFeed` is passed `redName`/`blueName`, `redFighterId` (`fights.red_fighter_id`, to resolve a prediction's `fighter_id`), `rounds` (to recover a round marker's number), and `cornerSwapSpans` (to swap-correct a label event's fighter name for its own frame, independent of the current playhead). Filter pills (All / Strikes / Fight State / Grapple) and click-to-seek work the same way as the design reference.
-
-### Mock data
-All hardcoded values (fighter profiles, per-round stats, pace arrays, recent form) live in `src/mocks/fightMock.ts`. Every gap is documented with the API shape needed to replace it in `TODO_BACKEND_DATA.md`.
-
-### Responsive
-`useWindowWidth()` drives a `narrow = width < 1100` flag. Below 1100px: top grid collapses to single column (live feed becomes a fixed-height `420px` block below controls); fighter columns stack; matchup tale-of-the-tape collapses; form lists both align left.
-
-## API Proxy (vite.config.ts)
-Both `/events` and `/fights` are proxied to `http://127.0.0.1:8000`.
-Video files are served from `public/` via a custom range-request middleware.
-
-## Frame-numbering contract
-**Frames are 1-based** — the first frame of the video is frame 1.
-
-Convert `video.currentTime` to a frame number with:
-```ts
-const currentFrame = Math.floor(currentTime * fps) + 1;
-```
-where `fps` comes from `FightResponse.fps` (an integer stored on the `fights` DB row).
-
-This value is used to:
-- Look up `frameMap.get(currentFrame)` in `FighterOverlay`
-- Filter `events.filter(e => e.frame <= currentFrame)` in `Player`
-- Match round boundaries: `rounds.find(r => currentFrame >= r.start_frame && currentFrame <= r.end_frame)`
-
-Never hardcode an fps value — always use `selectedFight.fps`.
-
-## FighterOverlay component
-`<canvas>` absolutely positioned over the video (`pointer-events: none`).
-
-On each `currentFrame` change:
-1. Resize canvas to its CSS display size (`canvas.width = canvas.clientWidth`, etc.)
-2. Clear canvas
-3. If `showBoxes` is false, return early
-4. Look up `frameMap.get(currentFrame)` → array of `FighterFrame`
-5. Scale each bbox from the fight's **native resolution** (`fightWidth` × `fightHeight` from `FightResponse`) to the canvas display size:
-   ```ts
-   const scaleX = canvas.width / fightWidth;
-   const scaleY = canvas.height / fightHeight;
-   ```
-6. Draw red rect for `corner === 0`, blue for `corner === 1` — **flipped** if the frame falls inside a `cornerSwapSpans` entry (`utils/cornerSwap.ts`'s `isFrameSwapped`), a display-only correction for a confirmed `corner_swap` label span. `fighter_frames.corner` itself is never touched — see `label-events-corner-is-box-not-person`.
-
-`VideoPlayer` accepts `children` so `FighterOverlay` can be rendered inside the `position: relative` video container and stack correctly.
-
-## Fight selector (Player.tsx)
-- Populated from `useFights`, filtered to `isFightViewable(state)` (`completed` or `labeling_complete`)
-- Defaults to the most recently processed fight (last element of the list)
-- Changing selection re-fetches events, frames, and rounds for the new fight
-
-## Fight purpose
-
-`Fight.purpose` says what a video is *for*: `training_data` (labels feed model training),
-`reference` (held out of training; scored against to measure pipeline accuracy) or
-`ai_labeled` (produced by the full AI pipeline). It is chosen in `UploadDialog` and set
-once server-side at upload — nothing can change it afterwards, and a fight's pipeline
-never runs again after that first pass. Pipeline accuracy is validated by uploading
-the *same* source video a second time as a brand-new fight (`purpose='ai_labeled'`,
-a different fight_id) and comparing its predictions against the first upload's hand
-labels across the two fight IDs — not by re-processing an already-labelled fight.
-
-`UploadDialog` derives it from the two `ModeCard`s: **AI annotation** forces
-`ai_labeled` (not user-selectable), **Self-annotate** reveals a radio row —
-native `<input type="radio" name="fight-purpose">`, the only radio group in the app —
-with **no default selected**, and the submit button stays disabled until one is picked.
-That gate is deliberate: training and evaluation sets must stay disjoint, so the split
-should never be decided by inattention. `uploadFight()` sends `purpose` as the sole
-track selector; the old `mode: 'ai' | 'manual'` form field is gone, since `purpose`
-already implies it.
-
-`FightPurposeBadge` renders the chip. Its colours (`PURPOSE_COLORS` in `Fight.ts`)
-deliberately avoid the corner colours `#ff4d4d`/`#3aa0ff` — a badge in either would read
-as "red corner" — plus `#ef4444` (error) and `#f59e0b` (the rounds-unverified warning).
+## Upload (`UploadDialog`)
+**AI annotation** always sends `purpose='ai_labeled'`. **Self-annotate** shows a purpose radio group (`training_data` / `reference`) with **no default**, and Upload stays disabled until one is picked. The gate is deliberate: the training and evaluation sets must never be split by inattention. `uploadFight()` sends `purpose` as the only track selector.
 
 ## Deleting a fight
-`DELETE /fights/{id}` is irreversible — it kills any running pipeline, unlinks the video file, and
-cascades away every fight_events row (predictions and hand labels alike), rounds and fighter frames. Two entry points, both
-routed through `ConfirmDialog`:
-
-- **`Player.tsx`** — Delete button in the back-nav row (icon-only when `narrow`). The only way to
-  delete a healthy fight. Two things the handler must keep doing: `videoRef.current.pause()` before
-  the request, because the DELETE unlinks the file the `<video>` is streaming and the
-  `requestVideoFrameCallback` loop is still reading it; and `navigate('/', { replace: true })`, so
-  browser Back can't land on a now-dead `/fights/{id}`.
-- **`Annotate.tsx`** — icon-only button at the far right of the header, past "Finish Labeling".
-  Its `confirmDelete` state is mirrored into `confirmDeleteRef` and checked in the global keydown
-  handler alongside `endOpenRef` — **any new modal on this page must do the same**, or its overlay
-  will happily sit there while `z`/`o`/`p`/digit presses keep writing label events and spans
-  underneath it.
-- **`FightList.tsx`** — gated behind `errored` (`failed || invalid`), so it does *not* appear on
-  healthy cards; it's a "delete and re-upload" recovery affordance, not a general delete. One
-  dialog instance lives outside the `.map`, driven by `pendingDelete`.
-
-Set `KEEP_VIDEO_ON_DELETE=1` on the backend when exercising this by hand — the row still goes, but
-the source video survives.
-
-## Key design decisions
-- `useFighterFrames` builds a `Map<number, FighterFrame[]>` on load for O(1) per-frame overlay lookup during playback
-
-### Fighter-frame payload size
-
-`GET /fights/{id}/frames/` with no range returns every `fighter_frames` row for the fight — 17 keypoints
-`[x, y, confidence]` per detection, two detections per frame — which for a real fight measures in the
-tens of MB (a 3-minute round: ~13.7k rows, ~12MB). Player/Annotate genuinely need the whole thing (free
-scrub anywhere in the video), so they call `useFighterFrames(fightId)` with no range and pay that cost
-once per fight, up front. `ClipPlayer` (Training Data QA) used to do the same for its own ~30-frame,
-0.6s review clip — meaning *reviewing a single strike downloaded and parsed the entire fight's keypoints*
-just to draw ~1/450th of them, which is what made "the skeleton is slow to load" (a real user report)
-true: it was blocked on that whole-fight fetch every time the reviewed event's fight changed. `ClipPlayer`
-now passes `useFighterFrames`'s `range` (`{start_frame, end_frame}`, 1-based inclusive, its own
-`windowStartFrame + 1`/`windowEndFrame + 1`) so it only ever fetches its own clip window — ~30 rows,
-~70KB, regardless of the fight's length. `ix_fighter_frames_fight_frame` (`fight_id`, `frame`) backs
-the ranged query, so it stays index-only.
-- `useRounds` provides DB-backed round boundaries; `Player` uses `rounds.find(...)` instead of a hardcoded duration constant
-- `stepFrame(delta)` uses `delta / fps` seconds, so frame-stepping is always exact regardless of the video's actual fps
-
-## Labelling (Annotate page)
-
-`Annotate.tsx` (`/fights/{id}/annotate`) is where a **manual**-mode upload gets hand-labelled once it reaches `labeling_in_progress`. It shares `AnnotateStage`/`VideoPlayer`/`FighterOverlay` with the Player, and calls the same `useEvents`/`GET /fights/{id}/events/` as the Player does — but always with `{ source: 'label' }`, and it only ever creates/updates/deletes through `createEvent`/`updateEvent`/`deleteEvent`, which the backend always writes as `source='label'`. The backend enforces the other half: `event_service.delete_event`/`update_event` are scoped to `source='label'` rows only, so nothing Annotate does can ever touch a `source='prediction'` row, even though both now live in one `fight_events` table.
-
-**Palette-driven strikes/state/etc. (`taxonomy.ts` → `createEvent({ kind: 'point', ... })`).** Every `ToolItem` in `TOOL_GROUPS` drives its palette button, keyboard shortcut, and the keyboard legend from one definition. Hand strikes (jab/hooks/uppercuts/elbow) carry `hasTarget: true` — plain key = head, `Shift`+key = body, read via `e.code` (not `e.key`, which a US layout maps to a different character under Shift) together with `e.shiftKey`. Kicks carry a `fixedTarget` instead (the action name already encodes it: `calf_kick`/`low_kick` → leg, `middle_kick` → body, `high_kick` → head). `successForAction` returns `null` for every strike except `knockdown` — landed-vs-missed is deferred, so nothing claims a strike landed by default. `logTool()` no longer sends a `description` in the create payload for any of these — `ToolItem.text()` is only used locally to build the toast message; the stored row carries `action`/`target`/`corner` and its display text is reconstructed on every render by `utils/describeEvent.ts` (`ACTION_TO_TOOL`, a reverse index over `TOOL_GROUPS`, is what that reconstruction looks the `ToolItem` back up by). `fight_end` (built ad hoc in `confirmFightEnd`, not a `ToolItem`) is the one action that still sends and stores a real `description`.
-
-`Annotate.tsx` builds one `describe(e)` closure (over `redName`/`blueName` and the fight's own `corner_swap` spans, via `utils/describeEvent.ts` + `isFrameSwapped`) and passes it down through `AnnotationPanel` to both `AnnotationList` and `AnnotationTimeline`, which call it instead of reading `e.description` anywhere (list rows, timeline clip titles, the hover tooltip) — so marking or editing a `corner_swap` span updates already-logged strikes' displayed fighter name immediately, with no backfill.
-
-**Span annotation (`O`/`P` keys → `createEvent({ kind: 'round'|'corner_swap'|'excluded', ... })`).** `round`/`corner_swap`/`excluded` rows are the range-shaped `kind`s of the same `fight_events` table (`frame` = start, `end_frame` nullable). `round` events are auto-seeded server-side from the AI-segmented `rounds` table the first time Annotate fetches `source='label'` events for a fight, and rendered as draggable blocks in `AnnotationTimeline`'s ROUNDS lane (edge-drag calls `onUpdateSpan`, which `PUT`s `frame`/`end_frame`). `corner_swap`/`excluded` are start/end toggles: `Annotate.tsx`'s `openSpanRef` tracks the in-flight event id per kind so the second `O`/`P` press knows what to close — `toggleSpan()` creates one with `end_frame=null` on open, `PUT`s `end_frame` to close it. `AnnotationTimeline` renders an open span dashed, running to the current playhead. `Annotate.tsx` derives its `events` (kind='point') and `spans` (kind!='point') arrays from the one `useEvents(fightId, { source: 'label' })` result via `useMemo`.
-
-**"Finish Labeling" is gated.** `POST /fights/{id}/finish-labeling` (via `handleFinishLabeling`) 409s until every detected round has a confirmed `round`-kind label event — the backend check (`rounds_fully_annotated`), not anything client-side.
-
-**Editing a finished fight.** A `labeling_complete` fight (`isLabelEditable` — never an `ai_labeled` one, which ends at `completed`) shows an **Edit labels** button in `Player.tsx`'s back-nav row. It calls `reopenLabeling()` (`POST /fights/{id}/reopen-labeling`, `labeling_complete → labeling_in_progress`) and only then navigates to `/fights/{id}/annotate` — Annotate only opens on `labeling_in_progress`, so the transition has to land first. From there it is the ordinary Annotate page (every edit autosaves, same as a first pass); the existing **Finish Labeling** puts it back to `labeling_complete` and returns to the Player with `replace`, so Back doesn't land on Annotate's "already labeled" screen. `labeled_at` stays set throughout, which is what `isEditingLabels` (`labeling_in_progress && labeled_at !== null`) keys on for the "EDIT LABELS" page title, and why `needsRoundReview` checks `labeled_at` too — the rounds were hand-confirmed on the first finish, so the unverified-rounds banner must not come back during an edit. Leaving mid-edit without finishing leaves the fight in `labeling_in_progress`: FightList routes it to Annotate like any in-progress fight, and `Player.tsx` shows a "labels are being edited" card with **Continue editing** instead of the processing spinner. Annotate's own "already labeled" screen offers the same **Edit labels** action for a direct visit to `/annotate`.
-
-**Fight-state marks are change points, not spans.** `W`/`F`/`G` (STRIKING/CLINCH/GROUND) log a single-frame `label_event`; `AnnotationTimeline`'s STATE lane derives contiguous segments by pairing each mark with the next one chronologically (last mark implicitly runs to the end of the timeline in the UI — the harness-side derivation in `ai/eval/labels_db.py` instead runs it to the end of its round, which matters when exporting).
-
-## Training Data QA (`TrainingDataQA.tsx`)
-
-`/training-data` is a reviewer's pass over every hand-labelled point event that is an actual training class (`utils/trainingDataTaxonomy.ts`'s `TRAINING_CLASSES` — the `needsFighter` items of Annotate's `TOOL_GROUPS`, minus `takedown_attempt`/`takedown_defended`/`submission_attempt`/`knockdown`/every `state_*` mark), across **every** `training_data` fight at once — the one page in this app that isn't scoped to a single `fightId`. `useTrainingDataEvents()` fetches every `purpose='training_data'` fight that has reached Annotate (`state` in `labeling_in_progress`/`labeling_complete`), then that fight's `source='label' kind='point'` events, tags each with its own `fight`, and filters to `TRAINING_ACTIONS`. Deliberately excludes `reference` fights even though they're hand-labelled the same way: a `reference` fight's labels are the held-out ground truth the Accuracy page scores pipeline predictions against, and letting them surface here — where a reviewer's confirm/decline feeds training — would leak the eval set into training data.
-
-**Three-level navigation, each level a real route**: `/training-data` (classes, `ClassGrid`) → `/training-data/:action` (one class's events, `EventTable`, filterable by verdict) → `/training-data/:action/:eventId` (one event's review, `EventReview`) — `action` is the class's real exported action string (`jab`, `left_hook`, …), `eventId` the `fight_events.id` being reviewed, so any point in the review is directly linkable/bookmarkable and browser back/forward walk it. `TrainingDataQA.tsx` reads both via `useParams` and derives `cls`/`ev` from them rather than holding its own view state; every transition goes through `navigate()` — deliberate ones (opening a class, opening an event from the table, breadcrumbs) `push`, in-review micro-navigation (arrow keys, "up next" clicks, the post-verdict auto-advance) `replace` so stepping through a queue doesn't flood history. A "done" screen appears at the `/training-data/:action` URL right after the last event in a class gets a verdict — flagged via `navigate(..., { state: { justFinished: true } })` rather than a distinct route, so a plain visit/reload of that URL shows the event table, not the celebration.
-
-**The verdict is real, persisted state — `fight_events.is_verified`** (`true`=confirmed training-worthy, `false`=declined, `null`=not reviewed), set via `PUT /fights/{fight_id}/events/{event_id}/verify` (`verifyEvent()` in `api.ts`), scoped server-side to `source='label' kind='point'` rows only — the exact opposite scope from the plain span-editing `PUT .../events/{event_id}`. `useTrainingDataEvents`'s `setVerdict()` updates optimistically and refetches on failure. `EventReview`'s Confirm/Decline buttons toggle: clicking the verdict a row already has clears it back to pending: **`act(target)` in `EventReview.tsx` computes `v === target ? null : target`** — this is the only source of the null case, since the confirm/decline handlers always pass a concrete boolean. Toggling a verdict **off** never auto-advances (only setting a real verdict does, via `TrainingDataQA.tsx`'s `onVerdict`, ~170ms delay before jumping to the next pending event in the class, or ~240ms to the "done" screen if none remain).
-
-**`ClipPlayer.tsx` plays the real video, not a synthesised clip.** Unlike the design mockup this page is built from (which rendered a fabricated pose-animation "clip" with fabricated defect flags — see the project's `Training Data.html`/`td-data.js`), there is no per-event confidence/keypoint-quality signal to synthesise from, so the "automatic checks" panel from that mockup was deliberately dropped rather than faked. `ClipPlayer` instead reuses the same `requestVideoFrameCallback` draw loop as `Player.tsx`, scoped to a strict `CLIP_DURATION_SECS = 0.6` window around the event's real frame, converted to whole frames via the fight's own `fps` (`Math.round(0.6 * fps)`) so the clip length never drifts with fractional-frame rounding, looping automatically during playback, with the real `FighterOverlay` (boxes + skeletons, `highlightCorner` = the label's own `corner`, corner-swap-aware) drawn on top — same frame-numbering contract as everywhere else (`Math.floor(t * fps) + 1`).
-
-**Only the attacker's skeleton is drawn.** `ClipPlayer` passes `FighterOverlay`'s `hideUnhighlighted` prop (off by default everywhere else — Player/Annotate are unaffected), which skips the non-`highlightCorner` fighter's skeleton entirely so only the corner that threw the reviewed strike is shown. The defender's bounding box is unaffected by this prop — boxes already only ever draw for the selected corner (`highlightCorner`).
-
-**Speed persists.** `SPEEDS = [0.25, 0.5, 1]`, defaulting to 0.5× the first time (slow enough for frame-level review without forcing it); the current selection is read from/written to `localStorage['td-clip-speed']` on every change, same pattern as `AnnotationPanel.tsx`'s `annot-view`, so it survives a reload and carries across events. `skip_previous`/`skip_next` buttons step exactly one frame (`stepFrame(±1)`, pausing playback first), clamped to the clip window — same icons as `VideoControls.tsx`'s frame-step buttons.
+`DELETE /fights/{id}` is irreversible: it kills the pipeline, unlinks the video, and cascades every event. All entry points go through `ConfirmDialog`:
+- **`Player.tsx`** is the only place to delete a healthy fight. Keep two things:
+  - `videoRef.current.pause()` before the request, because the `<video>` is still streaming the file being unlinked.
+  - `navigate('/', { replace: true })` afterwards.
+- **`Annotate.tsx`** has a header button. See the Annotate rule for the keyboard guard every modal needs.
+- **`FightList.tsx`** shows delete only on `failed`/`invalid` cards, as a delete-and-re-upload recovery path. It uses one dialog outside the `.map`, driven by `pendingDelete`.

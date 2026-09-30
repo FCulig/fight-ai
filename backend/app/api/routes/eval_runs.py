@@ -1,9 +1,10 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.models.eval_run import EvalRunCreate, EvalRunResponse, EvalRunSummary, FixtureSummary
 from app.services import eval_run_service
+from app.utils.auth import require_role
 
 router = APIRouter()
 
@@ -26,7 +27,7 @@ def get_run(run_id: int):
     return run
 
 
-@router.post("/", response_model=EvalRunResponse, status_code=201)
+@router.post("/", response_model=EvalRunResponse, status_code=201, dependencies=[Depends(require_role("admin"))])
 def create_run(payload: EvalRunCreate):
     try:
         return eval_run_service.create_run(

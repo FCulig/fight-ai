@@ -2,7 +2,7 @@
  * One `python -m eval.cli score-pair` run: a `purpose='reference'` fight's
  * hand labels scored against a `purpose='ai_labeled'` fight's pipeline
  * predictions — two different fight ids, per the real accuracy workflow (see
- * frontend/CLAUDE.md "Fight purpose" and backend/CLAUDE.md).
+ * the root CLAUDE.md's `fights.purpose` contract).
  *
  * `f1`/`precision`/`recall`/`tp`/`fp`/`fn`/`offset_bias_frames`/
  * `offset_jitter_frames` are computed server-side at read time from the

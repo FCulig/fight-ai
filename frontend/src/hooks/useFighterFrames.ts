@@ -6,7 +6,7 @@ import type { FighterFrame } from '../types/FighterFrame';
  * `range` narrows the fetch to a frame window instead of the whole fight —
  * pass it when the caller only ever draws a handful of frames (ClipPlayer's
  * ~0.6s clip); a full fight's keypoints run into the tens of MB (see
- * frontend CLAUDE.md's "Fighter-frame payload size"). Player/Annotate omit
+ * frontend/CLAUDE.md's `useFighterFrames` convention). Player/Annotate omit
  * it and keep fetching the whole fight, which they genuinely need for
  * free-scrub. Included in the effect's deps so a caller whose window moves
  * (ClipPlayer, as the reviewed event changes) refetches for the new range.

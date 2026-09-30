@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Fight } from '../../types/Fight';
 import type { FixtureSummary } from '../../types/EvalRun';
 import { createEvalRun } from '../../services/api';
+import { useAuth } from '../../hooks/useAuth';
 
 interface NotMeasurableProps {
   fixture: FixtureSummary;
@@ -24,6 +25,7 @@ export default function NotMeasurable({ fixture, candidates, onScored }: NotMeas
   const [picked, setPicked] = useState<number | ''>('');
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { can } = useAuth();
 
   const cmd = `python -m eval.cli score-pair --labels-fight-id ${fixture.reference_fight_id} --predictions-fight-id <ai_labeled fight id> --write-db`;
 
@@ -54,7 +56,7 @@ export default function NotMeasurable({ fixture, candidates, onScored }: NotMeas
         "AI annotation" fight) to make it an evaluation fixture, then score it
         against these labels — keep it out of the training set.
       </p>
-      {candidates.length > 0 ? (
+      {candidates.length > 0 && can('admin') ? (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
           <select
             value={picked}
@@ -83,7 +85,9 @@ export default function NotMeasurable({ fixture, candidates, onScored }: NotMeas
         </div>
       ) : (
         <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)' }}>
-          No completed AI-processed fight exists yet to score.
+          {candidates.length > 0
+            ? 'An admin can score it against a completed AI-processed fight.'
+            : 'No completed AI-processed fight exists yet to score.'}
         </div>
       )}
       {error && <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--red-500)' }}>{error}</div>}

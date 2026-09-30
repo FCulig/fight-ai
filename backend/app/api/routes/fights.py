@@ -5,8 +5,9 @@ import re
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
+from starlette.datastructures import UploadFile
 
 from app.models.fight import FIGHT_PURPOSES, FightResponse
 from app.models.fighter_frame import FighterFrameResponse
@@ -18,6 +19,7 @@ from app.models.fight_event import (
     FightEventVerify,
 )
 from app.models.round import RoundResponse
+from app.models.user import User
 from app.services import (
     event_service,
     fight_service,
@@ -26,9 +28,13 @@ from app.services import (
     round_service,
 )
 from app.services.pipeline_runner import extract_video_meta, run_validation_async, terminate_pipeline
+from app.utils.auth import require_role
 from app.utils.fight_state_listener import register_queue, unregister_queue
 
+# Reads need only a session (app/main.py). Writes declare their minimum role here.
 router = APIRouter()
+_LABELLER = [Depends(require_role("labeller"))]
+_ADMIN = [Depends(require_role("admin"))]
 
 
 _VIDEO_BASE_DIR = Path(os.getenv("VIDEO_BASE_DIR", ""))
@@ -103,13 +109,35 @@ async def stream_fight_state(request: Request):
     )
 
 
-@router.post("/upload", response_model=FightResponse, status_code=201)
-async def upload_fight(
-    file: UploadFile = File(...),
-    red_fighter_id: Optional[int] = Form(None),
-    blue_fighter_id: Optional[int] = Form(None),
-    purpose: str = Form(...),
-):
+@router.post("/upload", response_model=FightResponse, status_code=201, dependencies=_ADMIN)
+async def upload_fight(request: Request):
+    # The form is parsed here rather than declared as File()/Form() params:
+    # FastAPI reads declared body params before it runs dependencies, so a
+    # viewer could stream a whole video to disk before the admin check ran.
+    form = await request.form()
+    try:
+        return await _store_upload(form)
+    finally:
+        await form.close()
+
+
+def _optional_int(value) -> Optional[int]:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"Expected an integer fighter id, got {value!r}")
+
+
+async def _store_upload(form):
+    file = form.get("file")
+    if not isinstance(file, UploadFile):
+        raise HTTPException(status_code=400, detail="file is required")
+    red_fighter_id = _optional_int(form.get("red_fighter_id"))
+    blue_fighter_id = _optional_int(form.get("blue_fighter_id"))
+    purpose = form.get("purpose")
+
     if purpose not in FIGHT_PURPOSES:
         raise HTTPException(
             status_code=400,
@@ -214,14 +242,16 @@ def get_fight_events(
 
 
 @router.post("/{fight_id}/events/", response_model=FightEventResponse, status_code=201)
-def create_fight_event(fight_id: int, payload: FightEventCreate):
+def create_fight_event(
+    fight_id: int, payload: FightEventCreate, user: User = Depends(require_role("labeller")),
+):
     fight = fight_service.get_fight_by_id(fight_id)
     if fight is None:
         raise HTTPException(status_code=404, detail="Fight not found")
-    return event_service.create_event(fight_id, payload)
+    return event_service.create_event(fight_id, payload, labeler=user.email)
 
 
-@router.put("/{fight_id}/events/{event_id}", response_model=FightEventResponse)
+@router.put("/{fight_id}/events/{event_id}", response_model=FightEventResponse, dependencies=_LABELLER)
 def update_fight_event(fight_id: int, event_id: int, payload: FightEventUpdate):
     event = event_service.update_event(fight_id, event_id, payload)
     if event is None:
@@ -229,7 +259,7 @@ def update_fight_event(fight_id: int, event_id: int, payload: FightEventUpdate):
     return event
 
 
-@router.put("/{fight_id}/events/{event_id}/verify", response_model=FightEventResponse)
+@router.put("/{fight_id}/events/{event_id}/verify", response_model=FightEventResponse, dependencies=_LABELLER)
 def verify_fight_event(fight_id: int, event_id: int, payload: FightEventVerify):
     try:
         event = event_service.set_verified(fight_id, event_id, payload.is_verified)
@@ -240,7 +270,7 @@ def verify_fight_event(fight_id: int, event_id: int, payload: FightEventVerify):
     return event
 
 
-@router.put("/{fight_id}/events/{event_id}/reclassify", response_model=FightEventResponse)
+@router.put("/{fight_id}/events/{event_id}/reclassify", response_model=FightEventResponse, dependencies=_LABELLER)
 def reclassify_fight_event(fight_id: int, event_id: int, payload: FightEventReclassify):
     event = event_service.reclassify_event(fight_id, event_id, payload.action, payload.target, payload.success)
     if event is None:
@@ -248,7 +278,7 @@ def reclassify_fight_event(fight_id: int, event_id: int, payload: FightEventRecl
     return event
 
 
-@router.delete("/{fight_id}/events/{event_id}", status_code=204)
+@router.delete("/{fight_id}/events/{event_id}", status_code=204, dependencies=_LABELLER)
 def delete_fight_event(fight_id: int, event_id: int):
     deleted = event_service.delete_event(fight_id, event_id)
     if not deleted:
@@ -256,7 +286,7 @@ def delete_fight_event(fight_id: int, event_id: int):
     return Response(status_code=204)
 
 
-@router.post("/{fight_id}/finish-labeling", response_model=FightResponse)
+@router.post("/{fight_id}/finish-labeling", response_model=FightResponse, dependencies=_LABELLER)
 def finish_labeling(fight_id: int):
     try:
         fight = fight_service.finish_labeling(fight_id)
@@ -270,7 +300,7 @@ def finish_labeling(fight_id: int):
     return fight
 
 
-@router.post("/{fight_id}/reopen-labeling", response_model=FightResponse)
+@router.post("/{fight_id}/reopen-labeling", response_model=FightResponse, dependencies=_LABELLER)
 def reopen_labeling(fight_id: int):
     fight = fight_service.reopen_labeling(fight_id)
     if fight is None:
@@ -292,7 +322,7 @@ def get_fight_video(fight_id: int):
     return FileResponse(str(video_path), media_type="video/mp4")
 
 
-@router.delete("/{fight_id}", status_code=204)
+@router.delete("/{fight_id}", status_code=204, dependencies=_ADMIN)
 def delete_fight(fight_id: int):
     pid = fight_service.get_fight_pid(fight_id)
     if pid is not None:

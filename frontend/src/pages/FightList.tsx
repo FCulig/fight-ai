@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useFights } from '../hooks/useFights';
 import { useFightStream } from '../hooks/useFightStream';
 import { useWindowWidth } from '../hooks/useWindowWidth';
+import { useAuth } from '../hooks/useAuth';
 import { deleteFight } from '../services/api';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -23,6 +24,7 @@ export default function FightList() {
   const navigate = useNavigate();
   const location = useLocation();
   const { fights, setFights, loading, error, refetch } = useFights();
+  const { can } = useAuth();
   const width = useWindowWidth();
   const isMobile = width < 640;
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -108,7 +110,8 @@ export default function FightList() {
           const errored = failed || invalid;
           const progress = STATE_PROGRESS[fight.state] ?? 0;
           const stateLabel = STATE_LABELS[fight.state] ?? fight.state;
-          const target = labelingReady ? `/fights/${fight.id}/annotate` : `/fights/${fight.id}`;
+          // Viewers can't annotate: Player shows them the "being labelled" state instead.
+          const target = labelingReady && can('labeller') ? `/fights/${fight.id}/annotate` : `/fights/${fight.id}`;
           const deleting = deletingId === fight.id;
 
           return (
@@ -233,7 +236,7 @@ export default function FightList() {
                 </span>
               )}
 
-              {errored && (
+              {errored && can('admin') && (
                 <button
                   onClick={ev => { ev.stopPropagation(); setDeleteError(null); setPendingDelete(fight); }}
                   disabled={deleting}

@@ -77,7 +77,7 @@ def _ensure_round_events_seeded(session, fight_id: int) -> None:
         session.commit()
 
 
-def create_event(fight_id: int, payload: FightEventCreate) -> FightEvent:
+def create_event(fight_id: int, payload: FightEventCreate, labeler: Optional[str] = None) -> FightEvent:
     def _query(session):
         event = FightEvent(
             fight_id=fight_id,
@@ -91,7 +91,7 @@ def create_event(fight_id: int, payload: FightEventCreate) -> FightEvent:
             target=payload.target,
             success=payload.success,
             value=payload.value,
-            labeler=payload.labeler,
+            labeler=labeler,
         )
         session.add(event)
         session.commit()

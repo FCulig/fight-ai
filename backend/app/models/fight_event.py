@@ -58,7 +58,8 @@ class FightEventCreate(BaseModel):
     a field here — the service always writes `source="label"`, since this is
     exclusively Annotate's write path (the AI pipeline writes predictions via
     its own raw SQL, never through this schema). That makes it structurally
-    impossible for a client request to spoof a prediction row."""
+    impossible for a client request to spoof a prediction row. `labeler` is
+    left out for the same reason: the route stamps the signed-in user's email."""
 
     kind: str = "point"
     frame: int
@@ -68,7 +69,6 @@ class FightEventCreate(BaseModel):
     action: Optional[str] = None
     target: Optional[str] = None
     success: Optional[bool] = None
-    labeler: Optional[str] = None
     value: Optional[str] = None
 
     @model_validator(mode="after")

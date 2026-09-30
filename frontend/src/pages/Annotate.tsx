@@ -5,8 +5,9 @@ import { useEvents } from '../hooks/useEvents';
 import { useFighterFrames } from '../hooks/useFighterFrames';
 import { useRounds } from '../hooks/useRounds';
 import { useWindowWidth } from '../hooks/useWindowWidth';
+import { useAuth } from '../hooks/useAuth';
 import {
-  createEvent, updateEvent, deleteEvent, finishLabeling, deleteFight, reopenLabeling,
+  createEvent, updateEvent, deleteEvent, finishLabeling, deleteFight, reopenLabeling, videoUrl,
   type CreateEventPayload,
 } from '../services/api';
 import type { SpanKind } from '../components/annotate/taxonomy';
@@ -32,6 +33,7 @@ export default function Annotate() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const fightId = id ? Number(id) : null;
+  const { can } = useAuth();
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<FighterOverlayHandle>(null);
@@ -87,7 +89,7 @@ export default function Annotate() {
 
   const currentFrame = Math.floor(currentTime * fps) + 1;
   const currentMs = Math.floor(currentTime * 1000);
-  const videoSrc = selectedFight ? `/fights/${selectedFight.id}/video` : undefined;
+  const videoSrc = selectedFight ? videoUrl(selectedFight.id) : undefined;
 
   const togglePlay = () => {
     const video = videoRef.current;
@@ -555,18 +557,20 @@ export default function Annotate() {
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{finishing ? 'progress_activity' : 'task_alt'}</span>
           Finish Labeling
         </button>
-        <button
-          onClick={() => { setDeleteError(null); setConfirmDelete(true); }}
-          title="Delete this fight"
-          style={{
-            width: 38, height: 38, flexShrink: 0, display: 'grid', placeItems: 'center',
-            borderRadius: 10, border: '1px solid var(--f-red-dim)',
-            background: 'rgba(239,68,68,0.08)', color: 'var(--red-500)',
-            cursor: 'pointer', fontFamily: 'inherit',
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>delete</span>
-        </button>
+        {can('admin') && (
+          <button
+            onClick={() => { setDeleteError(null); setConfirmDelete(true); }}
+            title="Delete this fight"
+            style={{
+              width: 38, height: 38, flexShrink: 0, display: 'grid', placeItems: 'center',
+              borderRadius: 10, border: '1px solid var(--f-red-dim)',
+              background: 'rgba(239,68,68,0.08)', color: 'var(--red-500)',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>delete</span>
+          </button>
+        )}
       </div>
 
       <ConfirmDialog

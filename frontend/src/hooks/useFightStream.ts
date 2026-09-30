@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { Fight } from '../types/Fight';
+import { FIGHT_STREAM_URL } from '../services/api';
 
 export function useFightStream(
   setFights: React.Dispatch<React.SetStateAction<Fight[]>>,
@@ -11,7 +12,7 @@ export function useFightStream(
   useEffect(() => {
     if (!enabled) return;
 
-    const es = new EventSource('/fights/stream');
+    const es = new EventSource(FIGHT_STREAM_URL);
 
     es.addEventListener('snapshot', (e: MessageEvent) => {
       const items: { id: number; state: string }[] = JSON.parse(e.data);

@@ -248,7 +248,7 @@ def _is_clean_frame(
     ZERO clean frames across all 18,518 frames of NAZHANDvsSTAROPOLI, so the
     appearance path never ran and every tracker identity swap went uncorrected.
     This is the same relaxation `frame_usable` makes, for the same reason —
-    see ai/CLAUDE.md "Frame usability".
+    see .claude/rules/ai-fight-processing.md "Frame usability".
     """
     if len(dets) != 2 or len(descriptors) != 2:
         return False

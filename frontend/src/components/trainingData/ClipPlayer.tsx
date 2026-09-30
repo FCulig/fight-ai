@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import type { Fight } from '../../types/Fight';
 import { useFighterFrames } from '../../hooks/useFighterFrames';
 import { useEvents } from '../../hooks/useEvents';
+import { videoUrl } from '../../services/api';
 import FighterOverlay, { type FighterOverlayHandle } from '../FighterOverlay';
 
 const CLIP_DURATION_SECS = 0.6;
@@ -53,8 +54,8 @@ export default function ClipPlayer({ fight, frame, corner }: ClipPlayerProps) {
   const windowEnd = windowEndFrame / fps;
 
   // Only this clip's ~30-frame window, not the whole fight — a full fight's
-  // keypoints run into the tens of MB (see frontend CLAUDE.md's "Fighter-frame
-  // payload size"), which used to make every review's skeleton wait on that
+  // keypoints run into the tens of MB (see frontend/CLAUDE.md's
+  // `useFighterFrames` convention), which used to make every review's skeleton wait on that
   // whole download. +1s: windowStartFrame/windowEndFrame are 0-based indices,
   // fighter_frames.frame is 1-based.
   const { frameMap } = useFighterFrames(fight.id, {
@@ -161,7 +162,7 @@ export default function ClipPlayer({ fight, frame, corner }: ClipPlayerProps) {
       <div style={{ position: 'relative', width: '100%', maxWidth: 720, margin: '0 auto', borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border-glass)', background: '#000' }}>
         <video
           ref={videoRef}
-          src={`/fights/${fight.id}/video`}
+          src={videoUrl(fight.id)}
           muted
           playsInline
           style={{ width: '100%', display: 'block' }}

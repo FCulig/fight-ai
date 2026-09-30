@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useWindowWidth } from '../hooks/useWindowWidth';
+import { useAuth } from '../hooks/useAuth';
+import type { Role } from '../types/User';
 import UploadDialog from './UploadDialog';
 
-const NAV_LINKS = [
+const NAV_LINKS: { label: string; to: string; minRole?: Role }[] = [
   { label: 'Analysis', to: '/' },
   { label: 'Library', to: '/library' },
   { label: 'Accuracy', to: '/accuracy' },
-  { label: 'Data QA', to: '/training-data' },
+  { label: 'Data QA', to: '/training-data', minRole: 'labeller' },
+  { label: 'Users', to: '/users', minRole: 'admin' },
 ];
 
 export default function Header() {
@@ -15,6 +18,7 @@ export default function Header() {
   const isMobile = width < 640;
   const [uploadOpen, setUploadOpen] = useState(false);
   const navigate = useNavigate();
+  const { user, can, signOut } = useAuth();
 
   return (
     <header style={{
@@ -39,8 +43,8 @@ export default function Header() {
       </span>
 
       {/* Nav */}
-      <nav style={{ display: 'flex', gap: 2, flex: 1 }}>
-        {NAV_LINKS.map(({ label, to }) => (
+      <nav style={{ display: 'flex', gap: 2, flex: 1, minWidth: 0, overflowX: 'auto', scrollbarWidth: 'none' }}>
+        {NAV_LINKS.filter(({ minRole }) => !minRole || can(minRole)).map(({ label, to }) => (
           <NavLink
             key={label}
             to={to}
@@ -59,41 +63,53 @@ export default function Header() {
 
       {/* Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-        <button
-          className="btn-upload"
-          onClick={() => setUploadOpen(true)}
-          style={{
-            fontWeight: 700,
-            fontSize: 12,
-            height: 36,
-            padding: isMobile ? '0 10px' : '0 16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>upload</span>
-          {!isMobile && 'Upload Video'}
-        </button>
-
-        {!isMobile && ['notifications', 'account_circle'].map(icon => (
+        {can('admin') && (
           <button
-            key={icon}
-            className="icon-btn"
-            style={{ width: 36, height: 36 }}
+            className="btn-upload"
+            onClick={() => setUploadOpen(true)}
+            style={{
+              fontWeight: 700,
+              fontSize: 12,
+              height: 36,
+              padding: isMobile ? '0 10px' : '0 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{icon}</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>upload</span>
+            {!isMobile && 'Upload Video'}
           </button>
-        ))}
+        )}
+
+        {!isMobile && (
+          <button className="icon-btn" style={{ width: 36, height: 36 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>notifications</span>
+          </button>
+        )}
+
+        {!isMobile && (
+          <div title={user.email} style={{ textAlign: 'right', lineHeight: 1.25, marginLeft: 6, maxWidth: 180 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user.name ?? user.email}
+            </div>
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>{user.role}</div>
+          </div>
+        )}
+        <button className="icon-btn" onClick={signOut} title="Sign out" aria-label="Sign out" style={{ width: 36, height: 36 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>logout</span>
+        </button>
       </div>
       {/* Both AI and manual uploads land on FightList — manual mode still needs
           detection/tracking/pose/corners/scoreboard/segmentation to run before
           the fight is ready to label, same live-progress UX as AI mode. */}
-      <UploadDialog
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        onSuccess={() => { setUploadOpen(false); navigate('/', { state: { uploaded: Date.now() } }); }}
-      />
+      {can('admin') && (
+        <UploadDialog
+          open={uploadOpen}
+          onClose={() => setUploadOpen(false)}
+          onSuccess={() => { setUploadOpen(false); navigate('/', { state: { uploaded: Date.now() } }); }}
+        />
+      )}
     </header>
   );
 }

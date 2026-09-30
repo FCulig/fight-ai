@@ -18,7 +18,12 @@ def session_factory(monkeypatch):
     # use an in-memory SQLite database for the test
     engine = create_engine("sqlite:///:memory:")
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    db.Base.metadata.create_all(bind=engine)
+    # Only the tables under test: other test modules import app.main, which
+    # registers Postgres-only types (eval_runs' JSONB) that SQLite can't create.
+    db.Base.metadata.create_all(
+        bind=engine,
+        tables=[Fight.__table__, Fighter.__table__, Round.__table__, FightEvent.__table__],
+    )
 
     # patch the service's run_db_query helper to use the test session
     def fake_run_db_query(fn):

@@ -11,8 +11,8 @@ from app.utils.db import Base
 class EvalRun(Base):
     """One `python -m eval.cli score-pair` run: `reference_fight_id`'s hand
     labels scored against `scored_fight_id`'s pipeline predictions — two
-    different fights, per the real accuracy workflow (see backend/CLAUDE.md,
-    "Pipeline accuracy is validated by..."). `report` is the exact `report`
+    different fights, per the real accuracy workflow (see the root
+    CLAUDE.md's `fights.purpose` contract). `report` is the exact `report`
     sub-object `ai/eval/report_io.save_report()` already produces; see
     db/alembic/versions/b4ea83f7c87b_create_eval_runs_table.py for why it
     isn't normalised into columns."""

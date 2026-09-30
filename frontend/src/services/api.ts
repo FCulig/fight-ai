@@ -4,6 +4,53 @@ import type { Fight, FightPurpose } from '../types/Fight';
 import type { Fighter } from '../types/Fighter';
 import type { FighterFrame } from '../types/FighterFrame';
 import type { Round } from '../types/Round';
+import type { Role, User } from '../types/User';
+
+const API = '/api';
+
+/** Every data call goes through here. A 401 means the session expired or was
+ * cleared mid-use: reloading lets AuthProvider re-check /auth/me and show the
+ * sign-in page. */
+const apiFetch = async (path: string, init?: RequestInit): Promise<Response> => {
+  const response = await fetch(`${API}${path}`, init);
+  if (response.status === 401) {
+    window.location.reload();
+    return new Promise<Response>(() => {}); // never settles: the page is going away
+  }
+  return response;
+};
+
+/** `<video src>` and EventSource can't go through apiFetch, but the session
+ * cookie still rides along because they are same-origin. */
+export const videoUrl = (fightId: number) => `${API}/fights/${fightId}/video`;
+export const FIGHT_STREAM_URL = `${API}/fights/stream`;
+
+const errorDetail = async (response: Response, fallback: string): Promise<string> => {
+  const body = await response.json().catch(() => null);
+  return typeof body?.detail === 'string' ? body.detail : `${fallback}: ${response.statusText}`;
+};
+
+export type MeResult =
+  | { status: 'signed_in'; user: User }
+  | { status: 'signed_out' }
+  | { status: 'disabled' };
+
+/** Uses plain fetch, not apiFetch: a 401 here is the normal signed-out
+ * answer, and reloading on it would loop. */
+export const fetchMe = async (): Promise<MeResult> => {
+  const response = await fetch(`${API}/auth/me`);
+  if (response.status === 401) return { status: 'signed_out' };
+  if (response.status === 403) return { status: 'disabled' };
+  if (!response.ok) throw new Error(await errorDetail(response, 'Failed to load your account'));
+  return { status: 'signed_in', user: await response.json() };
+};
+
+/** A full-page navigation target, not a fetch: the backend redirects to Google. */
+export const loginUrl = (next: string) => `${API}/auth/login?next=${encodeURIComponent(next)}`;
+
+export const logout = async (): Promise<void> => {
+  await fetch(`${API}/auth/logout`, { method: 'POST' });
+};
 
 export interface FetchEventsParams {
   source?: EventSource;
@@ -22,7 +69,6 @@ export interface CreateEventPayload {
   action?: string | null;
   target?: string | null;
   success?: boolean | null;
-  labeler?: string | null;
   value?: string | null;
 }
 
@@ -40,13 +86,13 @@ export const fetchEvents = async (fightId: number, params?: FetchEventsParams): 
     });
   }
   const qs = query.toString();
-  const response = await fetch(`/fights/${fightId}/events/${qs ? `?${qs}` : ''}`);
+  const response = await apiFetch(`/fights/${fightId}/events/${qs ? `?${qs}` : ''}`);
   if (!response.ok) throw new Error(`Failed to fetch events: ${response.statusText}`);
   return response.json();
 };
 
 export const createEvent = async (fightId: number, payload: CreateEventPayload): Promise<Event> => {
-  const response = await fetch(`/fights/${fightId}/events/`, {
+  const response = await apiFetch(`/fights/${fightId}/events/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -59,7 +105,7 @@ export const createEvent = async (fightId: number, payload: CreateEventPayload):
 };
 
 export const updateEvent = async (fightId: number, eventId: number, payload: UpdateEventPayload): Promise<Event> => {
-  const response = await fetch(`/fights/${fightId}/events/${eventId}`, {
+  const response = await apiFetch(`/fights/${fightId}/events/${eventId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -72,7 +118,7 @@ export const updateEvent = async (fightId: number, eventId: number, payload: Upd
 };
 
 export const verifyEvent = async (fightId: number, eventId: number, isVerified: boolean | null): Promise<Event> => {
-  const response = await fetch(`/fights/${fightId}/events/${eventId}/verify`, {
+  const response = await apiFetch(`/fights/${fightId}/events/${eventId}/verify`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ is_verified: isVerified }),
@@ -91,7 +137,7 @@ export interface ReclassifyEventPayload {
 }
 
 export const reclassifyEvent = async (fightId: number, eventId: number, payload: ReclassifyEventPayload): Promise<Event> => {
-  const response = await fetch(`/fights/${fightId}/events/${eventId}/reclassify`, {
+  const response = await apiFetch(`/fights/${fightId}/events/${eventId}/reclassify`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -104,12 +150,12 @@ export const reclassifyEvent = async (fightId: number, eventId: number, payload:
 };
 
 export const deleteEvent = async (fightId: number, eventId: number): Promise<void> => {
-  const response = await fetch(`/fights/${fightId}/events/${eventId}`, { method: 'DELETE' });
+  const response = await apiFetch(`/fights/${fightId}/events/${eventId}`, { method: 'DELETE' });
   if (!response.ok) throw new Error(`Failed to delete event: ${response.statusText}`);
 };
 
 export const fetchFights = async (): Promise<Fight[]> => {
-  const response = await fetch('/fights/');
+  const response = await apiFetch('/fights/');
   if (!response.ok) throw new Error(`Failed to fetch fights: ${response.statusText}`);
   return response.json();
 };
@@ -127,20 +173,20 @@ export const fetchFighterFrames = async (fightId: number, params?: FetchFighterF
   if (params?.start_frame != null) query.append('start_frame', String(params.start_frame));
   if (params?.end_frame != null) query.append('end_frame', String(params.end_frame));
   const qs = query.toString();
-  const response = await fetch(`/fights/${fightId}/frames/${qs ? `?${qs}` : ''}`);
+  const response = await apiFetch(`/fights/${fightId}/frames/${qs ? `?${qs}` : ''}`);
   if (!response.ok) throw new Error(`Failed to fetch fighter frames: ${response.statusText}`);
   return response.json();
 };
 
 export const fetchRounds = async (fightId: number): Promise<Round[]> => {
-  const response = await fetch(`/fights/${fightId}/rounds/`);
+  const response = await apiFetch(`/fights/${fightId}/rounds/`);
   if (!response.ok) throw new Error(`Failed to fetch rounds: ${response.statusText}`);
   return response.json();
 };
 
 export const fetchFighters = async (search?: string): Promise<Fighter[]> => {
   const params = search ? `?search=${encodeURIComponent(search)}` : '';
-  const response = await fetch(`/fighters/${params}`);
+  const response = await apiFetch(`/fighters/${params}`);
   if (!response.ok) throw new Error(`Failed to fetch fighters: ${response.statusText}`);
   return response.json();
 };
@@ -150,7 +196,7 @@ export const createFighter = async (data: {
   last_name: string;
   nickname?: string;
 }): Promise<Fighter> => {
-  const response = await fetch('/fighters/', {
+  const response = await apiFetch('/fighters/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -172,7 +218,7 @@ export const uploadFight = async (
   // `purpose` also picks the pipeline track server-side: only 'ai_labeled'
   // runs strike detection and the state machine.
   form.append('purpose', purpose);
-  const response = await fetch('/fights/upload', { method: 'POST', body: form });
+  const response = await apiFetch('/fights/upload', { method: 'POST', body: form });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(body?.detail ?? `Upload failed: ${response.statusText}`);
@@ -181,7 +227,7 @@ export const uploadFight = async (
 };
 
 export const finishLabeling = async (fightId: number): Promise<Fight> => {
-  const response = await fetch(`/fights/${fightId}/finish-labeling`, { method: 'POST' });
+  const response = await apiFetch(`/fights/${fightId}/finish-labeling`, { method: 'POST' });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(body?.detail ?? `Failed to finish labeling: ${response.statusText}`);
@@ -192,7 +238,7 @@ export const finishLabeling = async (fightId: number): Promise<Fight> => {
 /** labeling_complete → labeling_in_progress, so Annotate re-opens the fight for
  * editing; finishLabeling() is the way back. */
 export const reopenLabeling = async (fightId: number): Promise<Fight> => {
-  const response = await fetch(`/fights/${fightId}/reopen-labeling`, { method: 'POST' });
+  const response = await apiFetch(`/fights/${fightId}/reopen-labeling`, { method: 'POST' });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(body?.detail ?? `Failed to reopen labeling: ${response.statusText}`);
@@ -201,12 +247,12 @@ export const reopenLabeling = async (fightId: number): Promise<Fight> => {
 };
 
 export const deleteFight = async (fightId: number): Promise<void> => {
-  const response = await fetch(`/fights/${fightId}`, { method: 'DELETE' });
+  const response = await apiFetch(`/fights/${fightId}`, { method: 'DELETE' });
   if (!response.ok) throw new Error(`Failed to delete fight: ${response.statusText}`);
 };
 
 export const fetchFixtures = async (): Promise<FixtureSummary[]> => {
-  const response = await fetch('/eval-runs/fixtures');
+  const response = await apiFetch('/eval-runs/fixtures');
   if (!response.ok) throw new Error(`Failed to fetch fixtures: ${response.statusText}`);
   return response.json();
 };
@@ -217,13 +263,13 @@ export const fetchEvalRuns = async (
 ): Promise<EvalRunSummary[]> => {
   const query = new URLSearchParams({ reference_fight_id: String(referenceFightId) });
   if (scoredFightId != null) query.append('scored_fight_id', String(scoredFightId));
-  const response = await fetch(`/eval-runs/?${query.toString()}`);
+  const response = await apiFetch(`/eval-runs/?${query.toString()}`);
   if (!response.ok) throw new Error(`Failed to fetch eval runs: ${response.statusText}`);
   return response.json();
 };
 
 export const fetchEvalRun = async (runId: number): Promise<EvalRunResponse> => {
-  const response = await fetch(`/eval-runs/${runId}`);
+  const response = await apiFetch(`/eval-runs/${runId}`);
   if (!response.ok) throw new Error(`Failed to fetch eval run: ${response.statusText}`);
   return response.json();
 };
@@ -233,7 +279,7 @@ export const createEvalRun = async (
   scoredFightId: number,
   toleranceSecs?: number,
 ): Promise<EvalRunResponse> => {
-  const response = await fetch('/eval-runs/', {
+  const response = await apiFetch('/eval-runs/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -246,5 +292,35 @@ export const createEvalRun = async (
     const body = await response.json().catch(() => null);
     throw new Error(body?.detail ?? `Failed to run scoring: ${response.statusText}`);
   }
+  return response.json();
+};
+
+export const fetchUsers = async (): Promise<User[]> => {
+  const response = await apiFetch('/users/');
+  if (!response.ok) throw new Error(await errorDetail(response, 'Failed to fetch users'));
+  return response.json();
+};
+
+/** Pre-provisions an email so its first sign-in lands with this role. */
+export const createUser = async (email: string, role: Role): Promise<User> => {
+  const response = await apiFetch('/users/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, role }),
+  });
+  if (!response.ok) throw new Error(await errorDetail(response, 'Failed to add user'));
+  return response.json();
+};
+
+export const updateUser = async (
+  userId: number,
+  patch: { role?: Role; is_active?: boolean },
+): Promise<User> => {
+  const response = await apiFetch(`/users/${userId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) throw new Error(await errorDetail(response, 'Failed to update user'));
   return response.json();
 };

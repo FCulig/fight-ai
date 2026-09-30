@@ -5,8 +5,9 @@ import { useFights } from '../hooks/useFights';
 import { useFighterFrames } from '../hooks/useFighterFrames';
 import { useRounds } from '../hooks/useRounds';
 import { useWindowWidth } from '../hooks/useWindowWidth';
+import { useAuth } from '../hooks/useAuth';
 import { isEditingLabels, isFightViewable, isLabelEditable, isLabelingReady } from '../types/Fight';
-import { deleteFight, reopenLabeling } from '../services/api';
+import { deleteFight, reopenLabeling, videoUrl } from '../services/api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import VideoPlayer from '../components/VideoPlayer';
 import VideoControls from '../components/VideoControls';
@@ -28,6 +29,7 @@ export default function Player() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const fightId = id ? Number(id) : null;
+  const { can } = useAuth();
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<FighterOverlayHandle>(null);
@@ -111,7 +113,7 @@ export default function Player() {
   const currentFrame = Math.floor(currentTime * fps) + 1;
   const currentMs = Math.floor(currentTime * 1000);
 
-  const videoSrc = selectedFight ? `/fights/${selectedFight.id}/video` : undefined;
+  const videoSrc = selectedFight ? videoUrl(selectedFight.id) : undefined;
 
   const togglePlay = () => {
     const video = videoRef.current;
@@ -227,7 +229,7 @@ export default function Player() {
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
               Back to fights
             </button>
-            {isBeingLabeled && (
+            {isBeingLabeled && can('labeller') && (
               <button
                 onClick={() => navigate(`/fights/${fightId}/annotate`)}
                 className="btn-glass"
@@ -278,7 +280,7 @@ export default function Player() {
             {reopenError}
           </span>
         )}
-        {selectedFight && isLabelEditable(selectedFight) && (
+        {selectedFight && isLabelEditable(selectedFight) && can('labeller') && (
           <button
             onClick={handleEditLabels}
             disabled={reopening}
@@ -296,7 +298,7 @@ export default function Player() {
             {!narrow && 'Edit labels'}
           </button>
         )}
-        {selectedFight && (
+        {selectedFight && can('admin') && (
           <button
             onClick={() => { setDeleteError(null); setConfirmDelete(true); }}
             title="Delete this fight"

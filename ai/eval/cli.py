@@ -164,7 +164,7 @@ def _cmd_score(args) -> int:
 
 def _cmd_score_pair(args) -> int:
     """Score one fight's pipeline predictions against a *different* fight's
-    hand labels — the real accuracy workflow (backend/CLAUDE.md): the labelled
+    hand labels — the real accuracy workflow (root CLAUDE.md, `fights.purpose`): the labelled
     fixture (`purpose='reference'`) is never re-run, so the pipeline version
     under test is a separate re-upload of the same source video
     (`purpose='ai_labeled'`), a different fight_id. Plain `score` can't do this
@@ -382,8 +382,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     scp = sub.add_parser("score-pair", help="score one fight's predictions against a "
                                               "DIFFERENT fight's hand labels — the real "
-                                              "cross-version workflow, see backend/CLAUDE.md "
-                                              "'Pipeline accuracy is validated by...'")
+                                              "cross-version workflow, see the root "
+                                              "CLAUDE.md's `fights.purpose` contract")
     scp.add_argument("--labels-fight-id", type=int, required=True, metavar="ID",
                      help="fight id holding the hand labels (purpose=reference, labeled_at set)")
     scp.add_argument("--predictions-fight-id", type=int, required=True, metavar="ID",

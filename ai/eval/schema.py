@@ -7,7 +7,7 @@ attributes are stored decomposed (family / target / landed) rather than as the
 pipeline's flat ``jab_head`` strings.
 
 Frames are **1-based**, matching the pipeline's frame-numbering contract
-(see ai/CLAUDE.md — the Nth frame of the video is frame N).
+(see the root CLAUDE.md — the Nth frame of the video is frame N).
 
 Schema
 ------

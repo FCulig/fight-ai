@@ -9,7 +9,7 @@ def get_fighter_frames(
 ) -> List[FighterFrame]:
     """`start_frame`/`end_frame` (1-based, inclusive) narrow this to a window
     instead of the whole fight — a full fight's keypoints run into the tens
-    of MB (see frontend CLAUDE.md's "Fighter-frame payload size"), which is
+    of MB (see frontend/CLAUDE.md's `useFighterFrames` convention), which is
     fine for Player/Annotate's free-scrub timeline but wasteful for
     ClipPlayer's ~0.6s review clip. `ix_fighter_frames_fight_frame` covers
     `(fight_id, frame)`, so this stays index-only regardless of fight length."""

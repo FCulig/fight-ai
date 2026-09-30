@@ -14,7 +14,7 @@ _SCORE_TIMEOUT_S = 60  # a DB read + in-memory matching pass, not a video decode
 
 class InvalidPairing(Exception):
     """Raised when a reference/scored fight pairing doesn't satisfy the real
-    accuracy workflow (backend/CLAUDE.md), or when `score-pair` itself fails
+    accuracy workflow (root CLAUDE.md, `fights.purpose`), or when `score-pair` itself fails
     (e.g. the reference fight isn't finished labelling)."""
 
 
@@ -29,7 +29,7 @@ def _prf(tp: int, fp: int, fn: int) -> tuple[float, float, float]:
 
 def _pipeline_versions(session, reference_fight_id: int) -> dict[int, int]:
     """`scored_fight_id` → 1-based pipeline version for one fixture. A fight's
-    pipeline never re-runs (backend/CLAUDE.md), so every pipeline version is a
+    pipeline never re-runs (root CLAUDE.md), so every pipeline version is a
     new `ai_labeled` upload of the reference video: versions are the fixture's
     scored fights in upload (id) order, however many times each was scored.
     `git_sha` can't serve — it's the scorer's HEAD at scoring time, not the
