@@ -1,0 +1,19 @@
+Lets explore the architecture for implementing the authentication to the app. Currently nothing is protected, everything is public. What I would like is some light weight authentication/authroziation system. Preferably SSO only to make it easier. What are the best options for me, also please consider that this is an MVP which I want to host as cheap as possible (even free if possible).
+
+---
+
+Okay lets go with the google auth built into the FAST API. Write me a plan for implementing it.
+
+---
+
+When I try to sign in I get redirect_uri_mismatch
+
+---
+
+This is all I get Ne možete se prijaviti jer je aplikacija poslala nevažeći zahtjev. Možete pokušati ponovno kasnije ili se obratite razvojnom programeru u vezi s tim problemom. Saznajte više o ovoj pogrešci
+Ako ste razvojni programer ove aplikacije, pogledajte pojedinosti o pogrešci.
+Pogreška 400: redirect_uri_mismatch
+
+<pasted_content id="e947">
+https://accounts.google.com/signin/oauth/error?REDACTED&flowName=GeneralOAuthFlow&REDACTED.apps.googleusercontent.com&as=S1728620215%3A1790750159056969&REDACTED
+</pasted_content id="e947">
