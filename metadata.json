@@ -1,0 +1,49 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M3RGQX5QKKKTJKFGYATVVYAG",
+  "strategy": "manual-commit",
+  "branch": "master",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "ai/CLAUDE.md",
+    "ai/eval/cli.py",
+    "ai/eval/schema.py",
+    "ai/video_processing/corner_assignment/corner_assignment.py",
+    "backend/.env.example",
+    "backend/CLAUDE.md",
+    "backend/app/api/routes/eval_runs.py",
+    "backend/app/api/routes/fighters.py",
+    "backend/app/api/routes/fights.py",
+    "backend/app/api/routes/tracking.py",
+    "backend/app/main.py",
+    "backend/app/models/eval_run.py",
+    "backend/app/models/fight_event.py",
+    "backend/app/services/eval_run_service.py",
+    "backend/app/services/event_service.py",
+    "backend/app/services/fighter_frame_service.py",
+    "backend/requirements.txt",
+    "backend/tests/test_event_service.py",
+    "frontend/CLAUDE.md",
+    "frontend/src/hooks/useFightStream.ts",
+    "frontend/src/hooks/useFighterFrames.ts",
+    "frontend/src/services/api.ts",
+    "frontend/src/types/EvalRun.ts",
+    "frontend/vite.config.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 86,
+    "cache_creation_tokens": 41152,
+    "cache_read_tokens": 3442836,
+    "output_tokens": 10310,
+    "api_call_count": 43
+  }
+}

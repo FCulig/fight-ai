@@ -1,0 +1,62 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M3RGQX5QKKKTJKFGYATVVYAG",
+  "session_id": "86042a18-464b-41a4-ab26-d2578f64d5f6",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-30T06:41:28.14739Z",
+  "branch": "master",
+  "checkpoints_count": 6,
+  "save_step_count": 1,
+  "files_touched": [
+    "ai/CLAUDE.md",
+    "ai/eval/cli.py",
+    "ai/eval/schema.py",
+    "ai/video_processing/corner_assignment/corner_assignment.py",
+    "backend/.env.example",
+    "backend/CLAUDE.md",
+    "backend/app/api/routes/eval_runs.py",
+    "backend/app/api/routes/fighters.py",
+    "backend/app/api/routes/fights.py",
+    "backend/app/api/routes/tracking.py",
+    "backend/app/main.py",
+    "backend/app/models/eval_run.py",
+    "backend/app/models/fight_event.py",
+    "backend/app/services/eval_run_service.py",
+    "backend/app/services/event_service.py",
+    "backend/app/services/fighter_frame_service.py",
+    "backend/requirements.txt",
+    "backend/tests/test_event_service.py",
+    "frontend/CLAUDE.md",
+    "frontend/src/hooks/useFightStream.ts",
+    "frontend/src/hooks/useFighterFrames.ts",
+    "frontend/src/services/api.ts",
+    "frontend/src/types/EvalRun.ts",
+    "frontend/vite.config.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-sonnet-5",
+  "turn_id": "e1733bf14077",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 86,
+    "cache_creation_tokens": 41152,
+    "cache_read_tokens": 3442836,
+    "output_tokens": 10310,
+    "api_call_count": 43
+  },
+  "session_metrics": {
+    "turn_count": 6
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-30T06:41:28.12845Z",
+    "agent_lines": 349,
+    "agent_removed": 1057,
+    "human_added": 981,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1330,
+    "total_lines_changed": 2460,
+    "agent_percentage": 57.15447154471545,
+    "metric_version": 2
+  }
+}
