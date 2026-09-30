@@ -3,7 +3,7 @@
   "checkpoint_id": "01M3RGQX5QKKKTJKFGYATVVYAG",
   "strategy": "manual-commit",
   "branch": "master",
-  "checkpoints_count": 6,
+  "checkpoints_count": 8,
   "files_touched": [
     "ai/CLAUDE.md",
     "ai/eval/cli.py",
@@ -24,6 +24,7 @@
     "backend/requirements.txt",
     "backend/tests/test_event_service.py",
     "frontend/CLAUDE.md",
+    "frontend/src/components/trainingData/ClipPlayer.tsx",
     "frontend/src/hooks/useFightStream.ts",
     "frontend/src/hooks/useFighterFrames.ts",
     "frontend/src/services/api.ts",
@@ -37,6 +38,10 @@
       "compact_transcript": "/0/transcript.jsonl",
       "content_hash": "/0/content_hash.txt",
       "prompt": "/0/prompt.txt"
+    },
+    {
+      "metadata": "/1/metadata.json",
+      "prompt": ""
     }
   ],
   "token_usage": {
