@@ -1,0 +1,135 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M3XHNHRWTSB0RTE121H3RQ6Z",
+  "session_id": "0b76689b-ebd6-4375-919a-c437efc72780",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-02T05:33:52.092915Z",
+  "branch": "master",
+  "checkpoints_count": 9,
+  "save_step_count": 1,
+  "files_touched": [
+    "frontend/src/components/player/FightBreakdown.tsx"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "4e4c098a9045",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 496,
+    "cache_creation_tokens": 1963603,
+    "cache_read_tokens": 113104788,
+    "output_tokens": 361286,
+    "api_call_count": 248
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_0111aUMg4jL3xAhX95JnRhx3",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "redesign-existing-projects"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "4e4c098a9045",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 30,
+        "end": 31,
+        "entry_ids": [
+          "7597b658-f6df-4f2b-a359-ed1de96f7ce0"
+        ],
+        "tool_use_id": "toolu_0111aUMg4jL3xAhX95JnRhx3"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_0111aUMg4jL3xAhX95JnRhx3"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: redesign-existing-projects",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_019aChxAoM8ZaUCBg338Vybn",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "design-taste-frontend"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "4e4c098a9045",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 62,
+        "end": 63,
+        "entry_ids": [
+          "a30a2ba5-75e4-4373-994e-f776aa930104"
+        ],
+        "tool_use_id": "toolu_019aChxAoM8ZaUCBg338Vybn"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_019aChxAoM8ZaUCBg338Vybn"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: design-taste-frontend",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_012YghXEx6ywikQE6ikdpjrr",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "dataviz"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "4e4c098a9045",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 491,
+        "end": 492,
+        "entry_ids": [
+          "56c230bb-b411-4ca2-9f6c-71bac43eb831"
+        ],
+        "tool_use_id": "toolu_012YghXEx6ywikQE6ikdpjrr"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_012YghXEx6ywikQE6ikdpjrr"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: dataviz",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 9
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-02T05:33:51.677378Z",
+    "agent_lines": 136,
+    "agent_removed": 0,
+    "human_added": 8923,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 9059,
+    "total_lines_changed": 9059,
+    "agent_percentage": 1.5012694557898223,
+    "metric_version": 2
+  }
+}

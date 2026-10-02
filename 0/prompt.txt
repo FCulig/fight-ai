@@ -1,0 +1,33 @@
+Use the new design skills you have in order to redesign the landing/ page to something more unique and more relevant. If you have any questions, ask.
+
+---
+
+How do I run the landing page project locally?
+
+---
+
+Make the video run in the smoother loop. It looks jerky when restarting.
+
+---
+
+Can you make scrolling sticky/snappy?
+
+---
+
+I don't like this behaviour, I want to snap to next section as soon as I scroll
+
+---
+
+Now regrading the animation on the right side, lets try to implement a behaviour where for the top most section (top of the page) fighters are fightning. When user scrolls down to the pose part. Animate the carachters to dsiplay a certain pose that is recognized. Next for corners, use fighting animation again, but just distinguish between red and blue corner. Strikes section leave as it is i like that slowed down animation. For timeline I also like the timeline part but please remove the timeline form the pose, corners, strikes sections.
+
+---
+
+Can you now also redesign the frontend/ app as well? Using the same principles of the design you used for the landing page? Functionality should remain unchanged.
+
+---
+
+In the followup questions you asked me about possible layoit re-design as well. Which pages you see fit for that layout re-design? Is there an easier way to just preview the possible changes without implementing them first?
+
+---
+
+Okay lets do these changes
