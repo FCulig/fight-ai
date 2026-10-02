@@ -21,7 +21,7 @@ export function colorForAction(action: string | null): string {
   if (action.startsWith('takedown_') || action === 'clinch_initiated') return 'var(--orange-400)';
   if (action.startsWith('state_')) return 'var(--slate-400)';
   if (action.startsWith('round_')) return 'var(--green-500)';
-  return 'var(--accent)';
+  return 'var(--text-primary)'; // strikes are the plain case: ink, so orange stays the brand and never sits beside the red corner
 }
 
 export function iconForAction(action: string | null): string {

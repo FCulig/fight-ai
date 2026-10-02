@@ -20,7 +20,7 @@ const LANE_H = 14;
 function Lane({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '76px 1fr', gap: 10, alignItems: 'center', marginBottom: 5 }}>
-      <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-disabled)', textAlign: 'right' }}>{label}</span>
+      <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-disabled)', textAlign: 'right' }}>{label}</span>
       <div style={{ position: 'relative', height: LANE_H, borderRadius: 3, background: 'rgba(255,255,255,0.03)', overflow: 'hidden' }}>{children}</div>
     </div>
   );
@@ -79,7 +79,7 @@ export default function CoverageStrip({ fight, rounds, pointEvents, swapEvents, 
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#0e0f12' }}>R{r.round_number}</span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 600, color: 'var(--bg-base)' }}>R{r.round_number}</span>
             </div>
           );
         })}
@@ -120,12 +120,12 @@ export default function CoverageStrip({ fight, rounds, pointEvents, swapEvents, 
             title={`${d} strikes in this ${(durSecs / BUCKETS).toFixed(0)}s bucket`}
             style={{
               position: 'absolute', top: 0, bottom: 0, left: `${(i / BUCKETS) * 100}%`, width: `${100 / BUCKETS}%`,
-              background: d ? `color-mix(in srgb, var(--accent) ${8 + (d / densityMax) * 84}%, transparent)` : 'transparent',
+              background: d ? `color-mix(in srgb, var(--text-primary) ${8 + (d / densityMax) * 84}%, transparent)` : 'transparent',
             }}
           />
         ))}
       </Lane>
-      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', marginTop: 4 }}>{durLabel} of video</div>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 400, color: 'var(--text-muted)', marginTop: 4 }}>{durLabel} of video</div>
     </div>
   );
 }

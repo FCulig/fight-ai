@@ -15,6 +15,7 @@ import FrameInfo from '../components/FrameInfo';
 import FighterOverlay, { type FighterOverlayHandle } from '../components/FighterOverlay';
 import LiveFeed from '../components/player/LiveFeed';
 import FightReport from '../components/player/FightReport';
+import Momentum from '../components/player/Momentum';
 import MatchupCard from '../components/player/MatchupCard';
 import FightPurposeBadge from '../components/FightPurposeBadge';
 import { fighters as mockFighters, withRealName } from '../mocks/fightMock';
@@ -202,7 +203,7 @@ export default function Player() {
       }}>
         <div className="glass" style={{
           textAlign: 'center',
-          borderRadius: 20,
+          borderRadius: 12,
           padding: '48px 56px',
           maxWidth: 420,
         }}>
@@ -210,21 +211,21 @@ export default function Player() {
             fontSize: 40, color: 'var(--text-muted)', display: 'block', marginBottom: 16,
             animation: isBeingLabeled ? undefined : 'spin 1.5s linear infinite',
           }}>{isBeingLabeled ? 'edit_note' : 'progress_activity'}</span>
-          <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 10px', color: 'var(--text-primary)' }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 10px', color: 'var(--text-primary)' }}>
             {editingLabels
               ? 'This fight\'s labels are being edited'
               : isBeingLabeled ? 'This fight is being labeled' : 'This fight is still being processed'}
           </h2>
           <p style={{ fontSize: 14, color: 'var(--text-disabled)', margin: '0 0 20px', lineHeight: 1.6 }}>
             {isBeingLabeled
-              ? 'Press Finish Labeling on the labeling page to bring it back to the Player.'
+              ? 'Press Finish labeling on the labeling page to bring it back to the Player.'
               : 'The AI pipeline is analyzing the video. This usually takes a few minutes.'}
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
             <button
               onClick={() => navigate('/')}
               className="btn-glass"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, whiteSpace: 'nowrap' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8, whiteSpace: 'nowrap' }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
               Back to fights
@@ -233,7 +234,7 @@ export default function Player() {
               <button
                 onClick={() => navigate(`/fights/${fightId}/annotate`)}
                 className="btn-glass"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, whiteSpace: 'nowrap' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8, whiteSpace: 'nowrap' }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
                 {editingLabels ? 'Continue editing' : 'Open labeling'}
@@ -265,10 +266,10 @@ export default function Player() {
         </button>
         {selectedFight && (
           <div style={{ minWidth: 0 }}>
-            <div className="font-display" style={{ fontSize: narrow ? 22 : 30, letterSpacing: '0.02em', color: 'var(--text-primary)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div className="font-display" style={{ fontSize: narrow ? 22 : 30, color: 'var(--text-primary)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {displayFighters.red.name} vs {displayFighters.blue.name}
             </div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 600, marginTop: 3 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500, marginTop: 3 }}>
               {rounds.length || '—'} round{rounds.length === 1 ? '' : 's'} · {duration ? formatDuration(duration) : fightName} · {fps} fps
             </div>
           </div>
@@ -276,7 +277,7 @@ export default function Player() {
         {selectedFight && <FightPurposeBadge purpose={selectedFight.purpose} />}
         <span style={{ flex: 1 }} />
         {reopenError && (
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--red-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--red-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {reopenError}
           </span>
         )}
@@ -290,7 +291,7 @@ export default function Player() {
             style={{
               flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: narrow ? '7px 10px' : '7px 14px',
-              fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+              fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
               cursor: reopening ? 'not-allowed' : 'pointer', opacity: reopening ? 0.6 : 1,
             }}
           >
@@ -304,9 +305,9 @@ export default function Player() {
             title="Delete this fight"
             style={{
               flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: narrow ? '6px 8px' : '6px 12px', borderRadius: 999,
+              padding: narrow ? '6px 8px' : '6px 12px', borderRadius: 6,
               border: '1px solid var(--f-red-dim)', background: 'rgba(239,68,68,0.08)',
-              color: 'var(--red-500)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+              color: 'var(--red-500)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
@@ -317,7 +318,7 @@ export default function Player() {
 
       <ConfirmDialog
         open={confirmDelete}
-        title="DELETE FIGHT?"
+        title="Delete fight?"
         message={
           <>
             <strong style={{ color: 'var(--text-primary)' }}>{fightName}</strong> will be permanently
@@ -337,7 +338,7 @@ export default function Player() {
       {/* TOP GRID: video | live feed */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: narrow ? '1fr' : '1fr 410px',
+        gridTemplateColumns: narrow ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 410px', // minmax(0, …): the column may be narrower than its controls row
         gap: 16,
         alignItems: 'stretch',
       }}>
@@ -369,8 +370,8 @@ export default function Player() {
             )}
             {/* Round chip */}
             <div style={{ position: 'absolute', top: 14, left: 16, display: 'flex', gap: 8, alignItems: 'center', pointerEvents: 'none' }}>
-              <span style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6, letterSpacing: '0.06em' }}>
-                {currentRound === '-' ? 'LOADING…' : `ROUND ${currentRound}`}
+              <span style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: '#fff', fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: 500, padding: '4px 10px', borderRadius: 6 }}>
+                {currentRound === '-' ? 'Loading…' : `Round ${currentRound}`}
               </span>
             </div>
           </VideoPlayer>
@@ -385,6 +386,22 @@ export default function Player() {
             onStepForward={() => stepFrame(1)}
           />
 
+          {/* Momentum sits under the seek bar and shares its padding, so the chart's
+              time axis lines up with the playhead above it. */}
+          {!eventsLoading && (
+            <div className="glass" style={{ padding: '12px 16px 8px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px 14px', flexWrap: 'wrap', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Momentum</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Significant strikes landed per 30 seconds</span>
+                <span style={{ display: 'flex', gap: 14, marginLeft: 'auto', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><i style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--f-red)', display: 'block' }} />{displayFighters.red.name}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><i style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--f-blue)', display: 'block' }} />{displayFighters.blue.name}</span>
+                </span>
+              </div>
+              <Momentum time={currentTime} duration={duration} r1EndSeconds={r1EndSeconds} events={events} fps={fps} fighters={displayFighters} redFighterId={selectedFight?.red_fighter_id} bare height={96} />
+            </div>
+          )}
+
           <FrameInfo currentFrame={currentFrame} currentMs={currentMs} fps={fps} />
 
           {/* Overlay controls */}
@@ -394,16 +411,16 @@ export default function Player() {
                 type="checkbox"
                 checked={showBoxes}
                 onChange={e => setShowBoxes(e.target.checked)}
-                style={{ accentColor: 'var(--accent)', width: 14, height: 14, cursor: 'pointer' }}
+                style={{ accentColor: 'var(--text-primary)', width: 14, height: 14, cursor: 'pointer' }}
               />
-              Fighter Boxes
+              Fighter boxes
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
               <input
                 type="checkbox"
                 checked={showSkeletons}
                 onChange={e => setShowSkeletons(e.target.checked)}
-                style={{ accentColor: 'var(--accent)', width: 14, height: 14, cursor: 'pointer' }}
+                style={{ accentColor: 'var(--text-primary)', width: 14, height: 14, cursor: 'pointer' }}
               />
               Skeletons
             </label>
@@ -444,7 +461,7 @@ export default function Player() {
         )}
       </div>
 
-      {/* REPORT — summary tiles, head-to-head, per-fighter breakdown, momentum */}
+      {/* REPORT — summary tiles and the mirrored head-to-head breakdown */}
       {!eventsLoading && (
         <FightReport
           currentFrame={currentFrame}
@@ -453,9 +470,6 @@ export default function Player() {
           rounds={rounds}
           fighters={displayFighters}
           redFighterId={selectedFight?.red_fighter_id}
-          time={currentTime}
-          duration={duration}
-          r1EndSeconds={r1EndSeconds}
         />
       )}
 

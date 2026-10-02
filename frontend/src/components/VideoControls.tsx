@@ -44,7 +44,7 @@ export default function VideoControls({
     <div style={{
       background: 'var(--surface-glass)',
       border: '1px solid var(--border-glass)',
-      borderRadius: 14,
+      borderRadius: 12,
       padding: isMobile ? '12px' : '12px 16px',
     }}>
       {/* Seek bar */}
@@ -60,7 +60,8 @@ export default function VideoControls({
             width: '100%',
             height: isMobile ? 5 : 3,
             appearance: 'none',
-            background: `linear-gradient(to right, var(--accent) ${progress}%, rgba(255,255,255,0.1) ${progress}%)`,
+            background: `linear-gradient(to right, var(--text-primary) ${progress}%, rgba(255,255,255,0.14) ${progress}%)`,
+            accentColor: 'var(--text-primary)',
             borderRadius: 3,
             outline: 'none',
             cursor: 'pointer',
@@ -69,14 +70,13 @@ export default function VideoControls({
       </div>
 
       {/* Controls row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8 }}>
         <button
           className="btn-glass"
           onMouseDown={() => startHold(onStepBackward)}
           onMouseUp={stopHold}
           onMouseLeave={stopHold}
           style={{
-            borderRadius: 8,
             padding: isMobile ? '10px 12px' : '6px 8px',
             minWidth: isMobile ? 44 : 'auto',
             minHeight: isMobile ? 44 : 'auto',
@@ -86,15 +86,12 @@ export default function VideoControls({
         </button>
 
         <button
-          className="btn-primary"
+          className="btn-ink"
           onClick={onTogglePlay}
           style={{
-            background: 'linear-gradient(135deg, var(--accent), var(--accent-deep))',
-            borderRadius: 999,
-            color: 'var(--accent-on)',
-            fontWeight: 700,
+            fontWeight: 600,
             fontSize: isMobile ? 13 : 13,
-            padding: isMobile ? '10px 20px' : '7px 20px',
+            padding: isMobile ? '10px 12px' : '7px 20px',
             display: 'flex',
             alignItems: 'center',
             gap: 5,
@@ -113,7 +110,6 @@ export default function VideoControls({
           onMouseUp={stopHold}
           onMouseLeave={stopHold}
           style={{
-            borderRadius: 8,
             padding: isMobile ? '10px 12px' : '6px 8px',
             minWidth: isMobile ? 44 : 'auto',
             minHeight: isMobile ? 44 : 'auto',
@@ -127,7 +123,7 @@ export default function VideoControls({
           color: 'var(--text-secondary)',
           fontFamily: 'var(--mono)',
           fontVariantNumeric: 'tabular-nums',
-          fontWeight: 600,
+          fontWeight: 500,
           marginLeft: 4,
         }}>
           {formatTime(currentTime)}

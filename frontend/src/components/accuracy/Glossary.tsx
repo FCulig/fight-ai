@@ -20,13 +20,13 @@ export default function Glossary() {
   return (
     <div style={{
       display: 'flex', flexWrap: 'wrap', rowGap: 6, columnGap: 16,
-      fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+      fontSize: 11, fontWeight: 500, color: 'var(--text-muted)',
       padding: '10px 12px', marginTop: 12, borderRadius: 8,
       background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-subtle)',
     }}>
       {TERMS.map(({ term, def }) => (
         <span key={term}>
-          <code style={{ color: 'var(--accent-hover)', fontWeight: 700 }}>{term}</code> {def}
+          <code style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{term}</code> {def}
         </span>
       ))}
     </div>

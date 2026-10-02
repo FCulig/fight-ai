@@ -52,8 +52,8 @@ function derive(row: LedgerFight, fixtures: FixtureSummary[]): Derived {
 function LM({ k, children }: { k: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 3, whiteSpace: 'nowrap' }}>{k}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{children}</div>
+      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 3, whiteSpace: 'nowrap' }}>{k}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{children}</div>
     </div>
   );
 }
@@ -86,14 +86,14 @@ export default function FightLedger({ ledger, fixtures }: FightLedgerProps) {
       <div className="glass" style={{ padding: '20px 22px 22px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>Fights</h2>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)', marginTop: 4 }}>
+            <h2 className="font-display" style={{ margin: 0, fontSize: 24, lineHeight: 1.05, color: 'var(--text-primary)' }}>Fights</h2>
+            <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-muted)', marginTop: 4 }}>
               {ledger.length} fights · {finished} finished · {inProgress} in progress · expand a fight for its spans and coverage
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Sort</span>
-            <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 999, background: 'var(--surface-glass)', border: '1px solid var(--border-glass)' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Sort</span>
+            <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 8, background: 'var(--surface-glass)', border: '1px solid var(--border-glass)' }}>
               {SORTS.map((s) => (
                 <button key={s} type="button" className={'pill' + (sort === s ? ' active' : '')} onClick={() => setSort(s)} style={{ padding: '5px 11px', fontSize: 11.5 }}>{s}</button>
               ))}
@@ -108,7 +108,7 @@ export default function FightLedger({ ledger, fixtures }: FightLedgerProps) {
               <div
                 key={row.fight.id}
                 style={{
-                  border: '1px solid var(--border-subtle)', borderRadius: 18, background: 'var(--surface-glass)',
+                  border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--surface-glass)',
                   borderColor: open ? 'var(--border-glass)' : 'var(--border-subtle)',
                   overflow: 'hidden', transition: 'border-color .12s, background .12s',
                 }}
@@ -123,15 +123,15 @@ export default function FightLedger({ ledger, fixtures }: FightLedgerProps) {
                     </span>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text-primary)' }}>{fightLabel(row.fight)}</span>
+                        <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>{fightLabel(row.fight)}</span>
                         <FightPurposeBadge purpose={row.fight.purpose} size="sm" />
                         {d.warnings.length > 0 && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 6, background: 'rgba(255,177,153,0.14)', border: '1px solid rgba(255,177,153,0.3)', color: '#ffb199', fontSize: 11, fontWeight: 800 }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 6, background: 'color-mix(in srgb, var(--warn) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warn) 30%, transparent)', color: 'var(--warn)', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 500 }}>
                             <span className="material-symbols-outlined" style={{ fontSize: 12 }}>warning</span>{d.warnings.length}
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginTop: 4 }}>
+                      <div style={{ fontSize: 11.5, fontWeight: 400, color: 'var(--text-muted)', marginTop: 4 }}>
                         #{row.fight.id} · {row.rounds.length} round{row.rounds.length === 1 ? '' : 's'} · {row.fight.state.replace(/_/g, ' ')}
                       </div>
                     </div>
@@ -146,10 +146,10 @@ export default function FightLedger({ ledger, fixtures }: FightLedgerProps) {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 22px', padding: '0 14px 13px' }}>
                   <LM k="Round min">{row.minutes > 0 ? row.minutes.toFixed(1) : <span style={{ color: 'var(--text-disabled)' }}>—</span>}</LM>
                   <LM k="Strikes · /min">
-                    {row.minutes > 0 ? <>{d.strikes} <span style={{ fontWeight: 700, color: d.perMin != null && d.perMin < 0.3 ? '#ffb199' : 'var(--text-muted)' }}>{d.perMin?.toFixed(1)}/min</span></> : <span style={{ color: 'var(--text-disabled)' }}>—</span>}
+                    {row.minutes > 0 ? <>{d.strikes} <span style={{ fontWeight: 600, color: d.perMin != null && d.perMin < 0.3 ? 'var(--warn)' : 'var(--text-muted)' }}>{d.perMin?.toFixed(1)}/min</span></> : <span style={{ color: 'var(--text-disabled)' }}>—</span>}
                   </LM>
                   <LM k="State marks">{d.stateMarks || <span style={{ color: 'var(--text-disabled)' }}>—</span>}</LM>
-                  <LM k="Swaps">{d.swaps > 0 ? <span style={{ color: '#ffb199' }}>{d.swaps}</span> : <span style={{ color: 'var(--text-disabled)' }}>—</span>}</LM>
+                  <LM k="Swaps">{d.swaps > 0 ? <span style={{ color: 'var(--warn)' }}>{d.swaps}</span> : <span style={{ color: 'var(--text-disabled)' }}>—</span>}</LM>
                   <LM k="Excluded">{d.excluded || <span style={{ color: 'var(--text-disabled)' }}>—</span>}</LM>
                   <LM k="Corner check"><StatusBadge status="none" size="sm">Not run</StatusBadge></LM>
                   <LM k="Strike F1">{d.f1 != null ? <StatusBadge status="good" size="sm">{d.f1}%</StatusBadge> : <span style={{ color: 'var(--text-disabled)' }}>—</span>}</LM>
@@ -167,16 +167,16 @@ export default function FightLedger({ ledger, fixtures }: FightLedgerProps) {
                       <div>
                         <div className="label" style={{ marginBottom: 9 }}>Warnings · {d.warnings.length}</div>
                         {d.warnings.length === 0 ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: 'var(--accent)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: 'var(--green-500)' }}>
                             <span className="material-symbols-outlined" style={{ fontSize: 15 }}>check_circle</span>Nothing flagged
                           </div>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                             {d.warnings.map((w, i) => (
                               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                                <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#ffb199', flexShrink: 0, marginTop: 1 }}>warning</span>
+                                <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--warn)', flexShrink: 0, marginTop: 1 }}>warning</span>
                                 <div style={{ minWidth: 0 }}>
-                                  <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)' }}>{w.t}</div>
+                                  <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>{w.t}</div>
                                   <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', lineHeight: 1.5 }}>{w.d}</div>
                                 </div>
                               </div>
@@ -187,20 +187,20 @@ export default function FightLedger({ ledger, fixtures }: FightLedgerProps) {
                       <div>
                         <div className="label" style={{ marginBottom: 9 }}>Provenance</div>
                         <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '5px 12px', margin: 0 }}>
-                          <dt style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Labeller</dt>
-                          <dd style={{ margin: 0, fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                          <dt style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Labeller</dt>
+                          <dd style={{ margin: 0, fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
                             {d.labeler ?? <StatusBadge status="none" size="sm">Not recorded</StatusBadge>}
                           </dd>
-                          <dt style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Segmentation</dt>
-                          <dd style={{ margin: 0, fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                          <dt style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Segmentation</dt>
+                          <dd style={{ margin: 0, fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
                             {row.fight.segmentation_needs_review
                               ? <StatusBadge status="warning" size="sm">Detection only</StatusBadge>
                               : <StatusBadge status="good" size="sm">Clock</StatusBadge>}
                           </dd>
                           {row.fight.segmentation_review_reason && (
                             <>
-                              <dt style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Reason</dt>
-                              <dd style={{ margin: 0, fontSize: 11.5, fontWeight: 600, fontStyle: 'italic', color: 'var(--text-tertiary)' }}>“{row.fight.segmentation_review_reason}”</dd>
+                              <dt style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Reason</dt>
+                              <dd style={{ margin: 0, fontSize: 11.5, fontWeight: 500, fontStyle: 'italic', color: 'var(--text-tertiary)' }}>“{row.fight.segmentation_review_reason}”</dd>
                             </>
                           )}
                         </dl>

@@ -17,7 +17,7 @@ interface LabOverviewProps {
   onNavigate: (id: string) => void;
 }
 
-function Tile({ label, value, sub, color, onClick }: { label: string; value: React.ReactNode; sub: string; color?: string; onClick?: () => void }) {
+function Tile({ label, value, sub, onClick }: { label: string; value: React.ReactNode; sub: string; onClick?: () => void }) {
   return (
     <div
       className="inner-tile"
@@ -25,8 +25,8 @@ function Tile({ label, value, sub, color, onClick }: { label: string; value: Rea
       style={{ padding: '14px 16px 15px', cursor: onClick ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}
     >
       <div className="label">{label}</div>
-      <span className="font-display" style={{ fontSize: 30, lineHeight: 0.92, color: color ?? 'var(--text-primary)' }}>{value}</span>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', lineHeight: 1.45 }}>{sub}</div>
+      <span className="font-num" style={{ fontSize: 26, lineHeight: 1, color: 'var(--text-primary)' }}>{value}</span>
+      <div style={{ fontSize: 11.5, fontWeight: 400, color: 'var(--text-muted)', lineHeight: 1.45 }}>{sub}</div>
     </div>
   );
 }
@@ -82,27 +82,27 @@ export default function LabOverview({ events, fights, roundMinutes, allFights, f
           <div>
             <div className="label" style={{ marginBottom: 12 }}>Training set progress</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, marginBottom: 3 }}>
-              <span className="font-display" style={{ fontSize: 52, lineHeight: 0.86, color: 'var(--text-primary)' }}>{stats.have}</span>
-              <span className="font-display" style={{ fontSize: 26, lineHeight: 1, color: 'var(--text-disabled)' }}>/ {TRAINING_TARGET}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>strikes</span>
+              <span className="font-num" style={{ fontSize: 44, lineHeight: 0.95, color: 'var(--text-primary)' }}>{stats.have}</span>
+              <span className="font-num" style={{ fontSize: 22, lineHeight: 1, color: 'var(--text-disabled)' }}>/ {TRAINING_TARGET}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-muted)' }}>strikes</span>
             </div>
           </div>
           <div>
-            <div style={{ position: 'relative', height: 14, borderRadius: 7, background: 'color-mix(in srgb, var(--accent) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 16%, transparent)', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${stats.pct}%`, background: 'linear-gradient(90deg, var(--accent-deep), var(--accent))', borderRadius: '7px 4px 4px 7px' }} />
+            <div style={{ position: 'relative', height: 10, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${stats.pct}%`, background: 'var(--text-primary)', borderRadius: 2 }} />
             </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, fontSize: 11.5, fontWeight: 700, color: 'var(--text-tertiary)' }}>
-              <span style={{ color: 'var(--accent)' }}>{stats.pct}%</span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, fontSize: 12, fontWeight: 500, color: 'var(--text-tertiary)' }}>
+              <span style={{ fontFamily: 'var(--mono)', color: 'var(--text-primary)' }}>{stats.pct}%</span>
               <span style={{ color: 'var(--text-disabled)' }}>·</span>
               <span>{stats.recent} in the last 14 days</span>
             </div>
-            <div style={{ marginTop: 9, paddingTop: 9, borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            <div style={{ marginTop: 9, paddingTop: 9, borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: 11.5, fontWeight: 400, color: 'var(--text-muted)', lineHeight: 1.6 }}>
               {stats.totalMinutes.toFixed(0)} min of labelled round time across {fights.length} fight{fights.length === 1 ? '' : 's'}
               {stats.largestFight && stats.largestShare >= 40 && (
-                <> · <span style={{ color: '#ffb199' }}>{fightLabel(stats.largestFight)} alone is {stats.largestShare}% of it</span></>
+                <> · <span style={{ color: 'var(--warn)' }}>{fightLabel(stats.largestFight)} alone is {stats.largestShare}% of it</span></>
               )}
               {stats.belowMin.length > 0 && (
-                <> · <span style={{ color: '#ffb199' }}>{stats.belowMin.length} of {STRIKE_FAMILIES.length} families below the {MIN_EXAMPLES}-example minimum</span> ({stats.belowMin.join(', ')})</>
+                <> · <span style={{ color: 'var(--warn)' }}>{stats.belowMin.length} of {STRIKE_FAMILIES.length} families below the {MIN_EXAMPLES}-example minimum</span> ({stats.belowMin.join(', ')})</>
               )}
             </div>
           </div>
@@ -123,7 +123,6 @@ export default function LabOverview({ events, fights, roundMinutes, allFights, f
           <Tile
             label="Strike detection F1"
             value={bestMeasurable?.latest_run ? `${bestMeasurable.latest_run.f1}%` : 'Not scorable'}
-            color={bestMeasurable?.latest_run ? 'var(--accent)' : undefined}
             sub={bestMeasurable?.latest_run ? `${bestMeasurable.latest_run.tp! + bestMeasurable.latest_run.fn!} labelled · v${bestMeasurable.latest_run.pipeline_version}` : 'No evaluation fixture scored yet'}
             onClick={() => onNavigate('sec-e')}
           />

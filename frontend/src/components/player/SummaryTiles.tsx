@@ -10,11 +10,11 @@ interface Tile {
 function TileCard({ value, unit, label, note }: Tile) {
   return (
     <div className="glass" style={{ padding: '20px 20px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div className="font-display" style={{ fontSize: 'clamp(40px, 4.4vw, 56px)', lineHeight: 0.92, color: 'var(--text-primary)' }}>
-        {value}{unit && <small style={{ fontSize: '.34em', letterSpacing: '-0.03em', color: 'var(--accent)', marginLeft: '.08em' }}>{unit}</small>}
+      <div className="font-num" style={{ fontSize: 'clamp(34px, 3.6vw, 46px)', lineHeight: 1, color: 'var(--text-primary)' }}>
+        {value}{unit && <small style={{ fontSize: '.4em', letterSpacing: 0, color: 'var(--text-muted)', marginLeft: '.18em' }}>{unit}</small>}
       </div>
-      <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)' }}>{label}</div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', lineHeight: 1.4 }}>{note}</div>
+      <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
+      <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', lineHeight: 1.4 }}>{note}</div>
     </div>
   );
 }
@@ -28,7 +28,7 @@ interface SummaryTilesProps {
 }
 
 /** The design's four "Report" hero tiles — every number here is a plain sum
- * or ratio over the same real per-fighter FighterStats FighterColumn already
+ * or ratio over the same real per-fighter FighterStats FightBreakdown already
  * renders (see utils/liveStats.ts deriveStatsForRange); nothing new is
  * fetched or fabricated. */
 export default function SummaryTiles({ red, blue, redName, blueName, scopeLabel }: SummaryTilesProps) {

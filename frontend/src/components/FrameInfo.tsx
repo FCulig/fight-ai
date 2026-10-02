@@ -11,7 +11,7 @@ export default function FrameInfo({ currentFrame, currentMs, fps }: FrameInfoPro
         display: 'flex',
         gap: 20,
         fontSize: 11,
-        color: 'var(--text-disabled)',
+        color: 'var(--text-muted)',
         fontFamily: 'var(--mono)',
         fontVariantNumeric: 'tabular-nums',
         padding: '2px 4px',

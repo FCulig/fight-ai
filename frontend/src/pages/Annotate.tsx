@@ -486,24 +486,24 @@ export default function Annotate() {
   if (isFightViewable(selectedFight.state)) {
     return (
       <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 58px)', padding: 24 }}>
-        <div className="glass" style={{ textAlign: 'center', borderRadius: 20, padding: '48px 56px', maxWidth: 420 }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--accent)', display: 'block', marginBottom: 16 }}>check_circle</span>
-          <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 10px', color: 'var(--text-primary)' }}>This fight is already labeled</h2>
-          <p style={{ fontSize: 14, color: 'var(--text-disabled)', margin: '0 0 20px', lineHeight: 1.6 }}>Open it in the Player to review the tagged events.</p>
+        <div className="glass" style={{ textAlign: 'center', borderRadius: 12, padding: '48px 56px', maxWidth: 420 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--text-primary)', display: 'block', marginBottom: 16 }}>check_circle</span>
+          <h2 className="font-display" style={{ fontSize: 24, lineHeight: 1.05, margin: '0 0 10px', color: 'var(--text-primary)' }}>This fight is already labeled</h2>
+          <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 20px', lineHeight: 1.6 }}>Open it in the Player to review the tagged events.</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-            <button onClick={() => navigate(`/fights/${selectedFight.id}`)} className="btn-glass" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            <button onClick={() => navigate(`/fights/${selectedFight.id}`)} className="btn-glass" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>play_circle</span>
               Open Player
             </button>
             {isLabelEditable(selectedFight) && (
-              <button onClick={handleReopenLabeling} disabled={reopening} className="btn-glass" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', cursor: reopening ? 'not-allowed' : 'pointer', opacity: reopening ? 0.6 : 1 }}>
+              <button onClick={handleReopenLabeling} disabled={reopening} className="btn-glass" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', cursor: reopening ? 'not-allowed' : 'pointer', opacity: reopening ? 0.6 : 1 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{reopening ? 'progress_activity' : 'edit'}</span>
                 Edit labels
               </button>
             )}
           </div>
           {reopenError && (
-            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--red-500)', margin: '14px 0 0' }}>{reopenError}</p>
+            <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--red-500)', margin: '14px 0 0' }}>{reopenError}</p>
           )}
         </div>
       </div>
@@ -513,15 +513,15 @@ export default function Annotate() {
   if (!ready) {
     return (
       <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 58px)', padding: 24 }}>
-        <div className="glass" style={{ textAlign: 'center', borderRadius: 20, padding: '48px 56px', maxWidth: 420 }}>
+        <div className="glass" style={{ textAlign: 'center', borderRadius: 12, padding: '48px 56px', maxWidth: 420 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--text-muted)', display: 'block', marginBottom: 16, animation: 'spin 1.5s linear infinite' }}>progress_activity</span>
-          <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 10px', color: 'var(--text-primary)' }}>
+          <h2 className="font-display" style={{ fontSize: 24, lineHeight: 1.05, margin: '0 0 10px', color: 'var(--text-primary)' }}>
             {STATE_LABELS[selectedFight.state] ?? 'Detecting fighters'}
           </h2>
-          <p style={{ fontSize: 14, color: 'var(--text-disabled)', margin: '0 0 20px', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 20px', lineHeight: 1.6 }}>
             Fighters are still being detected — labeling opens once that's done.
           </p>
-          <button onClick={() => navigate('/')} className="btn-glass" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600 }}>
+          <button onClick={() => navigate('/')} className="btn-glass" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 500 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
             Back to fights
           </button>
@@ -537,10 +537,10 @@ export default function Annotate() {
           <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_back</span>
         </button>
         <div>
-          <div className="font-display" style={{ fontSize: 30, letterSpacing: '0.03em', color: 'var(--text-primary)', lineHeight: 1 }}>
-            {isEditingLabels(selectedFight) ? 'EDIT LABELS' : 'SELF-ANNOTATE'}
+          <div className="font-display" style={{ fontSize: 30, color: 'var(--text-primary)', lineHeight: 1 }}>
+            {isEditingLabels(selectedFight) ? 'Edit labels' : 'Self-annotate'}
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 600, marginTop: 3 }}>{redName} vs {blueName}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500, marginTop: 3 }}>{redName} vs {blueName}</div>
         </div>
         <FightPurposeBadge purpose={selectedFight.purpose} />
         <span style={{ flex: 1 }} />
@@ -548,14 +548,15 @@ export default function Annotate() {
         <button
           onClick={handleFinishLabeling}
           disabled={finishing}
+          className="btn-primary"
           style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg, var(--accent), var(--accent-deep))',
-            color: 'var(--accent-on)', fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 999, padding: '9px 16px',
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            fontWeight: 600, fontSize: 13, padding: '9px 16px',
             cursor: finishing ? 'not-allowed' : 'pointer', opacity: finishing ? 0.5 : 1, fontFamily: 'inherit',
           }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{finishing ? 'progress_activity' : 'task_alt'}</span>
-          Finish Labeling
+          Finish labeling
         </button>
         {can('admin') && (
           <button
@@ -563,7 +564,7 @@ export default function Annotate() {
             title="Delete this fight"
             style={{
               width: 38, height: 38, flexShrink: 0, display: 'grid', placeItems: 'center',
-              borderRadius: 10, border: '1px solid var(--f-red-dim)',
+              borderRadius: 6, border: '1px solid var(--f-red-dim)',
               background: 'rgba(239,68,68,0.08)', color: 'var(--red-500)',
               cursor: 'pointer', fontFamily: 'inherit',
             }}
@@ -575,7 +576,7 @@ export default function Annotate() {
 
       <ConfirmDialog
         open={confirmDelete}
-        title="DELETE FIGHT?"
+        title="Delete fight?"
         message={
           <>
             <strong style={{ color: 'var(--text-primary)' }}>{redName} vs {blueName}</strong> will be
@@ -599,27 +600,27 @@ export default function Annotate() {
           gap: 10,
           marginBottom: 14,
           padding: '11px 14px',
-          borderRadius: 10,
-          border: '1px solid rgba(245,158,11,0.25)',
-          background: 'rgba(245,158,11,0.07)',
+          borderRadius: 6,
+          border: '1px solid color-mix(in srgb, var(--warn) 25%, transparent)',
+          background: 'color-mix(in srgb, var(--warn) 7%, transparent)',
         }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 19, color: '#f59e0b', flexShrink: 0 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 19, color: 'var(--warn)', flexShrink: 0 }}>
             rule
           </span>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#f59e0b', marginBottom: 2 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--warn)', marginBottom: 2 }}>
               Round boundaries are unverified
             </div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
               {selectedFight.segmentation_review_reason
                 ?? 'Segmentation could not confirm these rounds against the scoreboard.'}
-              {' '}Check the ROUNDS lane below and drag the edges before labelling.
+              {' '}Check the Rounds lane below and drag the edges before labelling.
             </div>
           </div>
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 460px', gap: 16, alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: narrow ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 460px', gap: 16, alignItems: 'stretch' }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <AnnotateStage
             videoRef={videoRef}
@@ -659,8 +660,8 @@ export default function Annotate() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="glass" style={{ padding: '18px 18px 20px', borderRadius: 14 }}>
-            <div className="label" style={{ fontSize: 9.5, marginBottom: 11 }}>Active fighter</div>
+          <div className="glass" style={{ padding: '18px 18px 20px', borderRadius: 12 }}>
+            <div className="label" style={{ marginBottom: 11 }}>Active fighter</div>
             <FighterSelectCard
               selected={selected}
               onSelect={c => setSelected(s => (s === c ? null : c))}

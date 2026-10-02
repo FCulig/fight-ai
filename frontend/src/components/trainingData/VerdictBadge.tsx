@@ -19,9 +19,9 @@ export default function VerdictBadge({ isVerified, sm }: VerdictBadgeProps) {
       padding: sm ? '2px 6px' : '3px 8px', borderRadius: 6,
       background: `color-mix(in srgb, ${m.c} 13%, transparent)`,
       border: `1px solid color-mix(in srgb, ${m.c} 26%, transparent)`,
-      color: m.c, fontSize: sm ? 10 : 11, fontWeight: 700,
+      color: m.c, fontSize: sm ? 11 : 12, fontWeight: 500,
     }}>
-      <span className="material-symbols-outlined" style={{ fontSize: sm ? 11 : 12 }}>{m.icon}</span>
+      <span className="material-symbols-outlined" style={{ fontSize: sm ? 12 : 13 }}>{m.icon}</span>
       {m.t}
     </span>
   );

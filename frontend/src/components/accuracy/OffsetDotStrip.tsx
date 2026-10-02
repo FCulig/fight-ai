@@ -8,7 +8,7 @@ interface OffsetDotStripProps {
  * spread) called out separately. */
 export default function OffsetDotStrip({ offsets }: OffsetDotStripProps) {
   if (offsets.length === 0) {
-    return <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)' }}>No matched strikes to time yet.</div>;
+    return <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-muted)' }}>No matched strikes to time yet.</div>;
   }
 
   const sorted = [...offsets].sort((a, b) => a - b);
@@ -37,10 +37,10 @@ export default function OffsetDotStrip({ offsets }: OffsetDotStripProps) {
           );
         })}
       </svg>
-      <div style={{ marginTop: 6, fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)' }}>
+      <div style={{ marginTop: 6, fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
         bias {bias > 0 ? '+' : ''}{bias.toFixed(1)}f (systematic lag) · jitter {jitter.toFixed(1)}f (spread)
       </div>
-      <div style={{ marginTop: 2, fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>
+      <div style={{ marginTop: 2, fontSize: 10.5, fontWeight: 500, color: 'var(--text-muted)' }}>
         Bias is a constant to subtract once, not a reason to widen the tolerance.
       </div>
     </div>

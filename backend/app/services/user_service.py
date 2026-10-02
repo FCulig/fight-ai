@@ -7,6 +7,10 @@ from app.models.user import User, UserCreate, UserUpdate
 from app.utils.db import run_db_query
 
 
+# Not a real TLD's domain, so no Google account can ever sign in as one of these.
+DEV_EMAIL_DOMAIN = "fightai.local"
+
+
 class EmailTaken(Exception):
     pass
 
@@ -41,6 +45,27 @@ def sign_in(email: str, name: Optional[str]) -> User:
             session.add(user)
         elif name and not user.name:
             user.name = name
+        user.last_login_at = func.now()
+        session.commit()
+        session.refresh(user)
+        return user
+
+    return run_db_query(_query)
+
+
+def dev_sign_in(role: str) -> User:
+    """Get-or-create the synthetic user for `role` (DEV_LOGIN only). The role
+    and active flag are reset on every call, so an edit on the Users page
+    can't leave `dev-admin` unable to administer."""
+    email = f"dev-{role}@{DEV_EMAIL_DOMAIN}"
+
+    def _query(session):
+        user = session.query(User).filter(User.email == email).first()
+        if user is None:
+            user = User(email=email, name=f"Dev {role}")
+            session.add(user)
+        user.role = role
+        user.is_active = True
         user.last_login_at = func.now()
         session.commit()
         session.refresh(user)

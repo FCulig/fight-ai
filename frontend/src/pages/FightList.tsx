@@ -20,6 +20,9 @@ function invalidReason(fight: Fight): string {
     + `(${pct}% missing) — the file is an incomplete download.`;
 }
 
+const formatLength = (secs: number) => `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
+const formatAdded = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+
 export default function FightList() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -55,14 +58,23 @@ export default function FightList() {
     }
   };
 
+  // Fights still moving through the pipeline come first, then anything that
+  // needs attention, then the rest in the order the API returned them.
+  const rank = (f: Fight) => (f.state === 'failed' || isInvalid(f.state) ? 1 : isFightViewable(f.state) || isLabelingReady(f.state) ? 2 : 0);
+  const ordered = fights.map((fight, i) => ({ fight, i })).sort((a, b) => rank(a.fight) - rank(b.fight) || a.i - b.i);
+
+  const columns = '24px minmax(0, 2.3fr) 124px minmax(0, 1.25fr) 64px 132px 96px 30px';
+  const cell: React.CSSProperties = { fontSize: 12.5, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+  const mono: React.CSSProperties = { ...cell, fontFamily: 'var(--mono)', fontSize: 12, fontVariantNumeric: 'tabular-nums' };
+
   return (
     <div style={{
-      maxWidth: 900,
+      maxWidth: 1180,
       width: '100%',
       margin: '0 auto',
-      padding: isMobile ? '20px 16px' : '40px 24px',
+      padding: isMobile ? '20px 16px' : '40px 30px',
     }}>
-      <div className="anim-fade-up anim-delay-1" style={{ marginBottom: 28 }}>
+      <div className="anim-fade-up anim-delay-1" style={{ marginBottom: 24 }}>
         <span className="eyebrow">Analysis</span>
         <h1 className="font-display" style={{
           fontSize: isMobile ? 30 : 'clamp(32px, 4vw, 48px)',
@@ -72,7 +84,7 @@ export default function FightList() {
         }}>
           Fights.
         </h1>
-        <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', margin: '10px 0 0' }}>
+        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)', margin: '10px 0 0' }}>
           Select a fight to open the analysis player.
         </p>
       </div>
@@ -96,172 +108,143 @@ export default function FightList() {
         </div>
       )}
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))',
-        gap: 14,
-      }}>
-        {fights.map((fight, i) => {
-          const viewable = isFightViewable(fight.state);
-          const labelingReady = isLabelingReady(fight.state);
-          const ready = viewable || labelingReady;
-          const failed = fight.state === 'failed';
-          const invalid = isInvalid(fight.state);
-          const errored = failed || invalid;
-          const progress = STATE_PROGRESS[fight.state] ?? 0;
-          const stateLabel = STATE_LABELS[fight.state] ?? fight.state;
-          // Viewers can't annotate: Player shows them the "being labelled" state instead.
-          const target = labelingReady && can('labeller') ? `/fights/${fight.id}/annotate` : `/fights/${fight.id}`;
-          const deleting = deletingId === fight.id;
+      {fights.length > 0 && (
+        <div className="glass anim-fade-up anim-delay-2" style={{ overflow: 'hidden' }}>
+          {!isMobile && (
+            <div style={{ display: 'grid', gridTemplateColumns: columns, gap: 14, alignItems: 'center', padding: '11px 18px', borderBottom: '1px solid var(--border-glass)' }}>
+              <span />
+              {['Fight', 'Purpose', 'Status', 'Length', 'Video', 'Added'].map(h => <span key={h} className="label">{h}</span>)}
+              <span />
+            </div>
+          )}
 
-          return (
-            <div
-              key={fight.id}
-              className={`glass fight-card anim-fade-up anim-delay-${Math.min(i + 2, 5)}${ready ? ' is-ready' : ''}`}
-              onClick={ready ? () => navigate(target) : undefined}
-              style={{
-                padding: '18px 20px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 14,
-                cursor: ready ? 'pointer' : 'default',
-                textAlign: 'left',
-                width: '100%',
-                opacity: ready || errored ? 1 : 0.6,
-              }}
-            >
-              <div style={{
-                width: 44,
-                height: 44,
-                borderRadius: 12,
-                background: ready ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : errored ? 'var(--f-red-dim)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${ready ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : errored ? 'color-mix(in srgb, var(--red-500) 15%, transparent)' : 'var(--border-glass)'}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
+          {ordered.map(({ fight }, row) => {
+            const viewable = isFightViewable(fight.state);
+            const labelingReady = isLabelingReady(fight.state);
+            const ready = viewable || labelingReady;
+            const failed = fight.state === 'failed';
+            const invalid = isInvalid(fight.state);
+            const errored = failed || invalid;
+            const progress = STATE_PROGRESS[fight.state] ?? 0;
+            const stateLabel = labelingReady ? 'Ready to label' : STATE_LABELS[fight.state] ?? fight.state;
+            // Viewers can't annotate: Player shows them the "being labelled" state instead.
+            const target = labelingReady && can('labeller') ? `/fights/${fight.id}/annotate` : `/fights/${fight.id}`;
+            const deleting = deletingId === fight.id;
+            const length = fight.decoded_frames != null && fight.fps > 0 ? formatLength(fight.decoded_frames / fight.fps) : null;
+            const video = `${fight.fps} fps · ${fight.width}×${fight.height}`;
+
+            const icon = (
+              <span className="material-symbols-outlined" style={{
+                fontSize: 20,
+                color: ready ? 'var(--text-secondary)' : errored ? 'var(--red-500)' : 'var(--text-muted)',
+                animation: (!ready && !errored) ? 'spin 1.5s linear infinite' : undefined,
               }}>
-                <span className="material-symbols-outlined" style={{
-                  fontSize: 22,
-                  color: ready ? 'var(--accent)' : errored ? 'var(--red-500)' : 'var(--text-muted)',
-                  animation: (!ready && !errored) ? 'spin 1.5s linear infinite' : undefined,
-                }}>
-                  {labelingReady ? 'edit_note' : viewable ? 'play_circle' : errored ? 'error' : 'progress_activity'}
-                </span>
-              </div>
-
-              <div style={{ flex: 1, minWidth: 0 }}>
+                {labelingReady ? 'edit_note' : viewable ? 'play_circle' : errored ? 'error' : 'progress_activity'}
+              </span>
+            );
+            const title = (
+              <div style={{ minWidth: 0 }}>
                 <p style={{
-                  margin: '0 0 3px',
-                  fontSize: 14,
-                  fontWeight: 700,
+                  margin: 0, fontSize: 14, fontWeight: 600,
                   color: ready ? 'var(--text-primary)' : errored ? 'var(--red-500)' : 'var(--text-tertiary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>
                   {fightLabel(fight)}
                 </p>
-                {ready ? (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                      <FightPurposeBadge purpose={fight.purpose} size="sm" />
-                      <p style={{
-                        margin: 0,
-                        fontSize: 12,
-                        color: 'var(--text-muted)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {labelingReady ? 'Ready to label · ' : ''}{fight.fps} fps · {fight.width}×{fight.height}
-                      </p>
-                    </div>
-                    {needsRoundReview(fight) && (
-                      <p style={{
-                        margin: '4px 0 0',
-                        fontSize: 12,
-                        color: '#f59e0b',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 5,
-                      }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 15 }}>
-                          rule
-                        </span>
-                        Rounds unverified — check before labelling
-                      </p>
-                    )}
-                  </>
-                ) : invalid ? (
-                  <>
-                    <div style={{ marginBottom: 4 }}>
-                      <FightPurposeBadge purpose={fight.purpose} size="sm" />
-                    </div>
-                    <p style={{ margin: 0, fontSize: 12, color: 'var(--red-500)', lineHeight: 1.5 }}>
-                      {invalidReason(fight)}
-                    </p>
-                  </>
-                ) : (
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, margin: '0 0 5px' }}>
-                      <FightPurposeBadge purpose={fight.purpose} size="sm" />
-                      <p style={{ margin: 0, fontSize: 12, color: failed ? 'var(--red-500)' : 'var(--text-tertiary)' }}>
-                        {stateLabel}
-                      </p>
-                    </div>
-                    {!failed && (
-                      <div style={{
-                        height: 4,
-                        borderRadius: 2,
-                        background: 'rgba(255,255,255,0.08)',
-                        overflow: 'hidden',
-                      }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${progress}%`,
-                          borderRadius: 2,
-                          background: 'linear-gradient(90deg, var(--accent-deep), var(--accent))',
-                          transition: 'width 0.5s ease',
-                        }} />
-                      </div>
-                    )}
+                {ready && needsRoundReview(fight) && (
+                  <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--warn)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 15 }}>rule</span>
+                    Rounds unverified — check before labelling
+                  </p>
+                )}
+                {invalid && (
+                  <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--red-500)', lineHeight: 1.5, whiteSpace: 'normal' }}>
+                    {invalidReason(fight)}
+                  </p>
+                )}
+              </div>
+            );
+            const status = (
+              <div style={{ minWidth: 0 }}>
+                <span style={{ ...cell, display: 'block', color: errored ? 'var(--red-500)' : ready ? 'var(--text-muted)' : 'var(--text-secondary)' }}>{stateLabel}</span>
+                {!ready && !errored && (
+                  <div style={{ height: 3, marginTop: 6, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${progress}%`, borderRadius: 2, background: 'var(--text-primary)', transition: 'width 0.5s ease' }} />
                   </div>
                 )}
               </div>
-
-              {ready && (
-                <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-disabled)', flexShrink: 0 }}>
-                  chevron_right
+            );
+            const action = errored && can('admin') ? (
+              <button
+                onClick={ev => { ev.stopPropagation(); setDeleteError(null); setPendingDelete(fight); }}
+                disabled={deleting}
+                title="Delete and re-upload"
+                aria-label="Delete and re-upload"
+                style={{
+                  width: 30, height: 30, flexShrink: 0, display: 'grid', placeItems: 'center',
+                  borderRadius: 6, border: '1px solid var(--f-red-dim)',
+                  background: 'rgba(239,68,68,0.08)', color: 'var(--red-500)',
+                  cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.5 : 1, fontFamily: 'inherit',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                  {deleting ? 'progress_activity' : 'delete'}
                 </span>
-              )}
+              </button>
+            ) : ready ? (
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-disabled)', justifySelf: 'end' }}>chevron_right</span>
+            ) : <span />;
 
-              {errored && can('admin') && (
-                <button
-                  onClick={ev => { ev.stopPropagation(); setDeleteError(null); setPendingDelete(fight); }}
-                  disabled={deleting}
-                  title="Delete and re-upload"
-                  style={{
-                    flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '7px 12px', borderRadius: 999, border: '1px solid var(--f-red-dim)',
-                    background: 'rgba(239,68,68,0.08)', color: 'var(--red-500)', fontSize: 12, fontWeight: 700,
-                    cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.5 : 1, fontFamily: 'inherit',
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>
-                    {deleting ? 'progress_activity' : 'delete'}
-                  </span>
-                  Delete
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            return (
+              <div
+                key={fight.id}
+                className={`fight-card${ready ? ' is-ready' : ''}`}
+                onClick={ready ? () => navigate(target) : undefined}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '24px minmax(0, 1fr) 30px' : columns,
+                  gap: isMobile ? 12 : 14,
+                  alignItems: 'center',
+                  padding: isMobile ? '13px 14px' : '13px 18px',
+                  borderTop: row > 0 ? '1px solid var(--border-subtle)' : 'none',
+                  cursor: ready ? 'pointer' : 'default',
+                  opacity: ready || errored ? 1 : 0.7,
+                }}
+              >
+                {icon}
+                {isMobile ? (
+                  <div style={{ minWidth: 0 }}>
+                    {title}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, marginTop: 5 }}>
+                      <FightPurposeBadge purpose={fight.purpose} size="sm" />
+                      <span style={cell}>{ready ? [length, video].filter(Boolean).join(' · ') : stateLabel}</span>
+                    </div>
+                    {!ready && !errored && (
+                      <div style={{ height: 3, marginTop: 7, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${progress}%`, borderRadius: 2, background: 'var(--text-primary)', transition: 'width 0.5s ease' }} />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {title}
+                    <div><FightPurposeBadge purpose={fight.purpose} size="sm" /></div>
+                    {status}
+                    <span style={mono}>{length ?? '—'}</span>
+                    <span style={mono}>{video}</span>
+                    <span style={cell}>{formatAdded(fight.created_at)}</span>
+                  </>
+                )}
+                {action}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <ConfirmDialog
         open={pendingDelete !== null}
-        title="DELETE FIGHT?"
+        title="Delete fight?"
         message={
           <>
             <strong style={{ color: 'var(--text-primary)' }}>

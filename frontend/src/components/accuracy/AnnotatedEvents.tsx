@@ -9,7 +9,8 @@ const MIN_EXAMPLES = 25;
 type View = 'Palette actions' | 'Training classes' | 'By fight';
 const VIEWS: View[] = ['Palette actions', 'Training classes', 'By fight'];
 
-const ZONE_COLORS: Record<string, string> = { head: 'var(--accent)', body: '#ffb199', leg: '#f5f5f4', ns: 'var(--text-muted)' };
+// One ink ramp, strongest at the head: these are human label counts, so no brand orange and no corner colours.
+const ZONE_COLORS: Record<string, string> = { head: 'var(--text-primary)', body: 'rgba(242,241,238,0.55)', leg: 'rgba(242,241,238,0.3)', ns: 'rgba(242,241,238,0.14)' };
 const ZONE_LABELS: [string, string][] = [['head', 'head'], ['body', 'body'], ['leg', 'leg'], ['ns', 'non-specific']];
 
 const STATE_ACTIONS: Record<string, 'STRIKING' | 'CLINCH' | 'GROUND'> = {
@@ -30,14 +31,14 @@ function BarRow({ label, n, max, share, r, b, low }: { label: string; n: number;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(112px,1.1fr) minmax(120px,2fr) 64px', gap: 10, alignItems: 'center', padding: '6px 10px', borderRadius: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
         {low && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 5, background: 'rgba(255,177,153,0.14)', border: '1px solid rgba(255,177,153,0.3)', color: '#ffb199', fontSize: 10, fontWeight: 800 }}>Low</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 5, background: 'color-mix(in srgb, var(--warn) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warn) 30%, transparent)', color: 'var(--warn)', fontSize: 10.5, fontWeight: 500 }}>Low</span>
         )}
       </div>
       <div>
-        <div style={{ position: 'relative', height: 9, background: 'rgba(255,255,255,0.045)', borderRadius: 2 }}>
-          <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${w}%`, minWidth: n ? 3 : 0, background: 'var(--accent)', borderRadius: '2px 4px 4px 2px' }} />
+        <div style={{ position: 'relative', height: 8 }}>
+          <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${w}%`, minWidth: n ? 3 : 0, background: 'var(--text-primary)', borderRadius: 2 }} />
         </div>
         {total > 0 && (
           <div style={{ display: 'flex', gap: 2, height: 4, marginTop: 3, width: `${w}%`, minWidth: n ? 3 : 0 }} title="Corner = the overlay box the labeller clicked (a track slot), not a named fighter.">
@@ -47,8 +48,8 @@ function BarRow({ label, n, max, share, r, b, low }: { label: string; n: number;
         )}
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, justifyContent: 'flex-end', fontVariantNumeric: 'tabular-nums' }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)' }}>{n}</span>
-        {share && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>{share}</span>}
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 500, color: 'var(--text-primary)' }}>{n}</span>
+        {share && <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 400, color: 'var(--text-muted)' }}>{share}</span>}
       </div>
     </div>
   );
@@ -75,19 +76,19 @@ function ZonePanel({ events, sel, onClear }: ZonePanelProps) {
         {sel && <button type="button" className="btn-glass" style={{ padding: '4px 9px', fontSize: 11 }} onClick={onClear}>Clear</button>}
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        <span className="font-display" style={{ fontSize: 30, lineHeight: 1, color: 'var(--text-primary)' }}>{grand}</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>labels</span>
+        <span className="font-num" style={{ fontSize: 26, lineHeight: 1, color: 'var(--text-primary)' }}>{grand}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-muted)' }}>labels</span>
       </div>
       {totals.map((t) => (
         <div key={t.k} style={{ display: 'grid', gridTemplateColumns: '78px minmax(0,1fr) 30px', gap: 9, alignItems: 'center', marginBottom: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{t.l}</span>
-          <div style={{ height: 10, background: 'rgba(255,255,255,0.045)', borderRadius: 2 }}>
-            <div style={{ height: '100%', width: `${(t.v / scale) * 100}%`, minWidth: t.v ? 3 : 0, background: t.c, borderRadius: '2px 4px 4px 2px' }} />
+          <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-muted)' }}>{t.l}</span>
+          <div style={{ height: 8 }}>
+            <div style={{ height: '100%', width: `${(t.v / scale) * 100}%`, minWidth: t.v ? 3 : 0, background: t.c, borderRadius: 2 }} />
           </div>
-          <span style={{ fontSize: 12, fontWeight: 800, textAlign: 'right', color: t.v ? 'var(--text-primary)' : 'var(--text-disabled)', fontVariantNumeric: 'tabular-nums' }}>{t.v || '—'}</span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 500, textAlign: 'right', color: t.v ? 'var(--text-primary)' : 'var(--text-disabled)', fontVariantNumeric: 'tabular-nums' }}>{t.v || '—'}</span>
         </div>
       ))}
-      <div style={{ marginTop: 12, paddingTop: 11, borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: 11, lineHeight: 1.55, fontWeight: 600, color: 'var(--text-muted)' }}>
+      <div style={{ marginTop: 12, paddingTop: 11, borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: 11, lineHeight: 1.55, fontWeight: 500, color: 'var(--text-muted)' }}>
         {sel
           ? `Only the zones ${sel} can land in carry a count — the rest are not part of the taxonomy.`
           : 'Click a strike row to filter this panel to one family.'}
@@ -168,23 +169,23 @@ function StateMix({ events }: StateMixProps) {
     <div className="inner-tile" style={{ padding: '15px 16px' }}>
       <div className="label" style={{ marginBottom: 11 }}>Strikes by fight state</div>
       <div style={{ display: 'grid', gridTemplateColumns: '62px 1fr', gap: 9, alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-primary)' }}>Overall</span>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-primary)' }}>Overall</span>
         <Stack height={16} segs={segsFor(overall)} />
       </div>
       {rows.map((r) => (
         <div key={r.name} style={{ display: 'grid', gridTemplateColumns: '62px 1fr', gap: 9, alignItems: 'center', marginBottom: 4 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>{r.name}</span>
+          <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>{r.name}</span>
           <Stack height={9} segs={segsFor(r)} />
         </div>
       ))}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 10 }}>
         {(['STRIKING', 'CLINCH', 'GROUND'] as const).map((s) => (
-          <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 700, color: 'var(--text-tertiary)' }}>
-            <span style={{ width: 9, height: 9, borderRadius: 2, background: STATE_C[s] }} />{s}
+          <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 500, color: 'var(--text-secondary)' }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: STATE_C[s] }} />{s[0] + s.slice(1).toLowerCase()}
           </span>
         ))}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 700, color: 'var(--text-tertiary)' }}>
-          <span style={{ width: 9, height: 9, borderRadius: 2, background: STATE_C.NONE }} />no state yet
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 500, color: 'var(--text-secondary)' }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: STATE_C.NONE }} />No state yet
         </span>
       </div>
     </div>
@@ -255,12 +256,12 @@ export default function AnnotatedEvents({ events, fights }: AnnotatedEventsProps
       <div className="glass" style={{ padding: '20px 22px 22px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>Annotated events</h2>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)', marginTop: 4 }}>
+            <h2 className="font-display" style={{ margin: 0, fontSize: 24, lineHeight: 1.05, color: 'var(--text-primary)' }}>Annotated events</h2>
+            <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-muted)', marginTop: 4 }}>
               {strikeTotal} strikes · {otherTotal} other events · {fights.length} labelled fight{fights.length === 1 ? '' : 's'}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 999, background: 'var(--surface-glass)', border: '1px solid var(--border-glass)' }}>
+          <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 8, background: 'var(--surface-glass)', border: '1px solid var(--border-glass)' }}>
             {VIEWS.map((v) => <Pill key={v} active={view === v} onClick={() => setView(v)}>{v}</Pill>)}
           </div>
         </div>
@@ -273,7 +274,7 @@ export default function AnnotatedEvents({ events, fights }: AnnotatedEventsProps
                   {paletteRows.map((g) => (
                     <div key={g.group} style={{ marginBottom: 12 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px 5px' }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-tertiary)' }}>{g.group}</span>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-muted)' }}>{g.group}</span>
                         <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)' }} />
                       </div>
                       {g.rows.map((row) => {
@@ -284,9 +285,9 @@ export default function AnnotatedEvents({ events, fights }: AnnotatedEventsProps
                             key={row.action}
                             onClick={() => fam && setSel(on ? null : fam)}
                             style={{
-                              cursor: fam ? 'pointer' : 'default', borderRadius: 8,
-                              background: on ? 'color-mix(in srgb, var(--accent) 9%, transparent)' : 'transparent',
-                              boxShadow: on ? 'inset 0 0 0 1px var(--border-cyan)' : 'none',
+                              cursor: fam ? 'pointer' : 'default', borderRadius: 6,
+                              background: on ? 'rgba(255,255,255,0.06)' : 'transparent',
+                              boxShadow: on ? 'inset 0 0 0 1px var(--border-strong)' : 'none',
                               opacity: sel && !on ? 0.45 : 1,
                             }}
                           >
@@ -302,7 +303,7 @@ export default function AnnotatedEvents({ events, fights }: AnnotatedEventsProps
 
             {view === 'Training classes' && (
               <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 10 }}>
                   Collapsed to the eight export families. Rows under the {MIN_EXAMPLES}-example minimum carry a Low chip.
                 </div>
                 {famRows.map((f) => (
@@ -310,9 +311,9 @@ export default function AnnotatedEvents({ events, fights }: AnnotatedEventsProps
                     key={f.name}
                     onClick={() => setSel(sel === f.name ? null : f.name)}
                     style={{
-                      cursor: 'pointer', borderRadius: 8,
-                      background: sel === f.name ? 'color-mix(in srgb, var(--accent) 9%, transparent)' : 'transparent',
-                      boxShadow: sel === f.name ? 'inset 0 0 0 1px var(--border-cyan)' : 'none',
+                      cursor: 'pointer', borderRadius: 6,
+                      background: sel === f.name ? 'rgba(255,255,255,0.06)' : 'transparent',
+                      boxShadow: sel === f.name ? 'inset 0 0 0 1px var(--border-strong)' : 'none',
                       opacity: sel && sel !== f.name ? 0.45 : 1,
                     }}
                   >
@@ -324,24 +325,24 @@ export default function AnnotatedEvents({ events, fights }: AnnotatedEventsProps
 
             {view === 'By fight' && (
               <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 10 }}>
                   Shared scale across every fight's panel.
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 11 }}>
                   {byFight.perFight.map(({ fight, rows }) => (
                     <div key={fight.id} className="inner-tile" style={{ padding: '12px 13px' }}>
-                      <div style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--text-secondary)', marginBottom: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {fightLabel(fight)}
                       </div>
                       {rows.map(([name, n]) => (
                         <div key={name} style={{ display: 'grid', gridTemplateColumns: '1fr 32px', gap: 8, alignItems: 'center', marginBottom: 5 }}>
                           <div>
-                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-                            <div style={{ height: 7, background: 'rgba(255,255,255,0.04)', borderRadius: 2 }}>
-                              <div style={{ height: '100%', width: `${(n / byFight.gmax) * 100}%`, background: 'var(--accent)', borderRadius: '2px 3px 3px 2px' }} />
+                            <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                            <div style={{ height: 6 }}>
+                              <div style={{ height: '100%', width: `${(n / byFight.gmax) * 100}%`, background: 'var(--text-primary)', borderRadius: 2 }} />
                             </div>
                           </div>
-                          <span style={{ fontSize: 11.5, fontWeight: 800, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{n}</span>
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: 500, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{n}</span>
                         </div>
                       ))}
                     </div>

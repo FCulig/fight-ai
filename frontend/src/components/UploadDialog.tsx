@@ -101,14 +101,14 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
       onClick={uploading ? undefined : onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', padding: 24,
-        background: 'rgba(3,5,7,0.66)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+        background: 'rgba(11,11,12,0.72)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
         animation: 'fade-up .2s ease-out',
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          width: 'min(640px, 100%)', maxHeight: '90vh', overflowY: 'auto', borderRadius: 18, padding: 0,
+          width: 'min(640px, 100%)', maxHeight: '90vh', overflowY: 'auto', borderRadius: 12, padding: 0,
           background: 'var(--surface-glass)',
           border: '1px solid var(--border-glass)',
           boxShadow: '0 40px 120px -30px rgba(0,0,0,0.85)',
@@ -118,8 +118,8 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, padding: '24px 26px 18px' }}>
           <div>
-            <div className="font-display" style={{ fontSize: 30, letterSpacing: '0.03em', color: 'var(--text-primary)', lineHeight: 1 }}>UPLOAD VIDEO</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, marginTop: 6 }}>Add a fight and choose how events get broken down.</div>
+            <div className="font-display" style={{ fontSize: 28, color: 'var(--text-primary)', lineHeight: 1 }}>Upload video</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500, marginTop: 6 }}>Add a fight and choose how events get broken down.</div>
           </div>
           {!uploading && (
             <button
@@ -147,17 +147,17 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
             onDragLeave={() => setDrag(false)}
             onDrop={e => { e.preventDefault(); setDrag(false); if (!uploading) takeFile(e.dataTransfer.files?.[0] ?? null); }}
             style={{
-              cursor: uploading ? 'default' : 'pointer', borderRadius: 14,
+              cursor: uploading ? 'default' : 'pointer', borderRadius: 8,
               padding: file ? '16px 18px' : '26px 18px',
-              border: `1.5px dashed ${drag ? 'var(--accent)' : 'rgba(255,255,255,0.07)'}`,
-              background: drag ? 'rgba(255,77,28,0.08)' : 'rgba(0,0,0,0.30)',
+              border: `1.5px dashed ${drag ? 'var(--text-primary)' : 'var(--border-strong)'}`,
+              background: drag ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.30)',
               display: 'flex', alignItems: 'center', gap: 16,
               transition: 'border-color .14s, background .14s',
               opacity: uploading ? 0.5 : 1,
             }}
           >
             <span style={{
-              width: 46, height: 46, flexShrink: 0, borderRadius: 12, display: 'grid', placeItems: 'center',
+              width: 46, height: 46, flexShrink: 0, borderRadius: 8, display: 'grid', placeItems: 'center',
               background: file ? 'color-mix(in srgb, var(--green-500) 16%, transparent)' : 'rgba(255,255,255,0.05)',
               color: file ? 'var(--green-500)' : 'var(--text-tertiary)',
             }}>
@@ -165,13 +165,13 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
             </span>
             {file ? (
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</div>
-                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600, marginTop: 2 }}>{sizeMB} · click to replace</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 500, marginTop: 2 }}>{sizeMB} · click to replace</div>
               </div>
             ) : (
               <div>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-secondary)' }}>Drag a video here, or <span style={{ color: 'var(--accent)' }}>browse</span></div>
-                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600, marginTop: 2 }}>MP4, MOV or MKV · up to 4 GB</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Drag a video here, or <span style={{ color: 'var(--text-primary)', textDecoration: 'underline', textUnderlineOffset: 3 }}>browse</span></div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 500, marginTop: 2 }}>MP4, MOV or MKV · up to 4 GB</div>
               </div>
             )}
           </div>
@@ -179,7 +179,7 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
 
         {/* Corner assignment */}
         <div style={{ padding: '20px 26px 0' }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 12 }}>
             Assign fighters to corners
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 13, alignItems: 'start' }}>
@@ -204,7 +204,7 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
 
         {/* Annotation mode */}
         <div style={{ padding: '20px 26px 0' }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 12 }}>
             How should events be annotated?
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 13 }}>
@@ -236,7 +236,7 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
         {/* Purpose — manual track only. AI uploads are always 'ai_labeled'. */}
         {mode === 'manual' && (
           <div style={{ padding: '20px 26px 0' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 12 }}>
               What is this footage for?
             </div>
             <div style={{ display: 'grid', gap: 9 }}>
@@ -247,10 +247,10 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
                     key={choice.value}
                     style={{
                       display: 'flex', alignItems: 'flex-start', gap: 11,
-                      padding: '11px 13px', borderRadius: 11,
+                      padding: '11px 13px', borderRadius: 6,
                       cursor: uploading ? 'default' : 'pointer',
-                      background: active ? 'rgba(255,77,28,0.06)' : 'rgba(0,0,0,0.30)',
-                      border: `1px solid ${active ? 'rgba(255,77,28,0.35)' : 'rgba(255,255,255,0.07)'}`,
+                      background: active ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.30)',
+                      border: `1px solid ${active ? 'var(--text-primary)' : 'var(--border-glass)'}`,
                       transition: 'border-color .14s, background .14s',
                       opacity: uploading ? 0.5 : 1,
                     }}
@@ -262,13 +262,13 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
                       checked={active}
                       disabled={uploading}
                       onChange={() => setManualPurpose(choice.value)}
-                      style={{ accentColor: 'var(--accent)', width: 15, height: 15, marginTop: 1, flexShrink: 0, cursor: 'inherit' }}
+                      style={{ accentColor: 'var(--text-primary)', width: 15, height: 15, marginTop: 1, flexShrink: 0, cursor: 'inherit' }}
                     />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: active ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: active ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
                         {PURPOSE_LABELS[choice.value]}
                       </div>
-                      <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600, marginTop: 3, lineHeight: 1.45 }}>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 500, marginTop: 3, lineHeight: 1.45 }}>
                         {choice.desc}
                       </div>
                     </div>
@@ -285,9 +285,9 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
           padding: '22px 26px 24px', marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.05)',
         }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <span style={{ fontSize: 11.5, color: 'var(--text-disabled)', fontWeight: 600 }}>{helperText}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--text-disabled)', fontWeight: 500 }}>{helperText}</span>
             {error && (
-              <div style={{ fontSize: 11.5, color: '#ef4444', fontWeight: 600, marginTop: 4 }}>{error}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--red-500)', fontWeight: 500, marginTop: 4 }}>{error}</div>
             )}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -295,16 +295,16 @@ export default function UploadDialog({ open, onClose, onSuccess }: UploadDialogP
               <button
                 onClick={onClose}
                 className="btn-glass"
-                style={{ padding: '8px 14px', fontWeight: 600, fontSize: 12.5 }}
+                style={{ padding: '8px 14px', fontWeight: 500, fontSize: 12.5 }}
               >Cancel</button>
             )}
             <button
               onClick={handleSubmit}
               disabled={!ready || uploading}
+              className="btn-primary"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 8,
-                background: 'linear-gradient(135deg, var(--accent), var(--accent-deep))', color: 'var(--accent-on)',
-                fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 999,
+                fontWeight: 600, fontSize: 13,
                 padding: '9px 16px', cursor: !ready || uploading ? 'not-allowed' : 'pointer',
                 opacity: !ready || uploading ? 0.4 : 1,
                 fontFamily: 'inherit',

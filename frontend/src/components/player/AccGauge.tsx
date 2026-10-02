@@ -15,10 +15,10 @@ export default function AccGauge({ pct, color, label }: AccGaugeProps) {
             strokeDasharray={`${pct / 100 * c} ${c}`} />
         </svg>
         <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-          <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>{pct}%</span>
+          <span className="font-num" style={{ fontSize: 14, color: 'var(--text-primary)' }}>{pct}%</span>
         </div>
       </div>
-      <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 700 }}>{label}</span>
+      <span className="label">{label}</span>
     </div>
   );
 }

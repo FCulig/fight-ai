@@ -5,9 +5,9 @@ interface SaveStatusProps {
 export default function SaveStatus({ saving }: SaveStatusProps) {
   return (
     <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 10,
+      display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 8,
       border: '1px solid var(--border-glass)', background: 'var(--surface-inner)',
-      color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 700,
+      color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600,
     }}>
       <span
         className="material-symbols-outlined"

@@ -68,8 +68,8 @@ export default function Header() {
             className="btn-upload"
             onClick={() => setUploadOpen(true)}
             style={{
-              fontWeight: 700,
-              fontSize: 12,
+              fontWeight: 600,
+              fontSize: 13,
               height: 36,
               padding: isMobile ? '0 10px' : '0 16px',
               display: 'flex',
@@ -78,7 +78,7 @@ export default function Header() {
             }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>upload</span>
-            {!isMobile && 'Upload Video'}
+            {!isMobile && 'Upload video'}
           </button>
         )}
 
@@ -90,10 +90,10 @@ export default function Header() {
 
         {!isMobile && (
           <div title={user.email} style={{ textAlign: 'right', lineHeight: 1.25, marginLeft: 6, maxWidth: 180 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user.name ?? user.email}
             </div>
-            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>{user.role}</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 400, color: 'var(--text-muted)' }}>{user.role}</div>
           </div>
         )}
         <button className="icon-btn" onClick={signOut} title="Sign out" aria-label="Sign out" style={{ width: 36, height: 36 }}>

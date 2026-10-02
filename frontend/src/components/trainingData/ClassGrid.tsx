@@ -5,67 +5,99 @@ import { classStats } from '../../utils/trainingDataStats';
 interface ClassGridProps {
   eventsByAction: Map<string, QAEvent[]>;
   onOpen: (action: string) => void;
+  narrow?: boolean;
 }
 
-export default function ClassGrid({ eventsByAction, onOpen }: ClassGridProps) {
-  const groups: { name: string; items: typeof TRAINING_CLASSES }[] = [];
-  TRAINING_CLASSES.forEach((c) => {
-    let g = groups.find((x) => x.name === c.group);
-    if (!g) { g = { name: c.group, items: [] }; groups.push(g); }
-    g.items.push(c);
-  });
+const COLUMNS = '34px minmax(0, 1.4fr) minmax(0, 1fr) 70px minmax(120px, 1.6fr) 84px 76px 92px 20px';
+const num: React.CSSProperties = { fontFamily: 'var(--mono)', fontSize: 12.5, fontVariantNumeric: 'tabular-nums', textAlign: 'right' };
+
+/**
+ * Every training class as one row, the classes with the most events still
+ * waiting for a verdict first, so "what needs review?" is the top of the table.
+ * Classes with no events yet sink to the bottom.
+ */
+export default function ClassGrid({ eventsByAction, onOpen, narrow }: ClassGridProps) {
+  const rows = TRAINING_CLASSES
+    .map((c, i) => ({ c, i, s: classStats(eventsByAction.get(c.action) ?? []) }))
+    .sort((a, b) => Number(b.s.total > 0) - Number(a.s.total > 0) || b.s.pending - a.s.pending || a.i - b.i);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-      {groups.map((g) => (
-        <section key={g.name}>
-          <div className="label" style={{ paddingBottom: 8, marginBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            {g.name}
+    <div className="glass" style={{ overflow: 'hidden' }}>
+      {!narrow && (
+        <div style={{ display: 'grid', gridTemplateColumns: COLUMNS, gap: 14, alignItems: 'center', padding: '11px 18px', borderBottom: '1px solid var(--border-glass)' }}>
+          <span className="label">Key</span>
+          <span className="label">Class</span>
+          <span className="label">Group</span>
+          <span className="label" style={{ textAlign: 'right' }}>Events</span>
+          <span className="label">Reviewed</span>
+          <span className="label" style={{ textAlign: 'right' }}>Confirmed</span>
+          <span className="label" style={{ textAlign: 'right' }}>Declined</span>
+          <span className="label" style={{ textAlign: 'right' }}>Pending</span>
+          <span />
+        </div>
+      )}
+      {rows.map(({ c, s }, row) => {
+        const empty = s.total === 0;
+        const bar = empty ? <span /> : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <div style={{ flex: 1, display: 'flex', gap: 2, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+              <div style={{ background: 'var(--green-500)', width: `${(s.confirmed / s.total) * 100}%` }} />
+              <div style={{ background: 'var(--red-500)', width: `${(s.declined / s.total) * 100}%` }} />
+            </div>
+            <span style={{ ...num, fontSize: 11.5, color: 'var(--text-muted)', minWidth: '7ch' }}>{s.reviewed}/{s.total}</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-            {g.items.map((c) => {
-              const evs = eventsByAction.get(c.action) ?? [];
-              const s = classStats(evs);
-              return (
-                <button
-                  key={c.action}
-                  type="button"
-                  className="glass td-class"
-                  onClick={() => onOpen(c.action)}
-                  disabled={s.total === 0}
-                  style={{
-                    display: 'flex', flexDirection: 'column', gap: 10, padding: '16px 16px 17px', textAlign: 'left',
-                    cursor: s.total === 0 ? 'default' : 'pointer', fontFamily: 'inherit', transition: 'border-color .14s, background .14s',
-                    opacity: s.total === 0 ? 0.45 : 1,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                    <span className="kbd">{c.key}</span>
-                    <span style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {c.name}
-                    </span>
-                    <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--text-disabled)', marginLeft: 'auto' }}>chevron_right</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                    <span className="font-display" style={{ fontSize: 36, lineHeight: 1, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>{s.total}</span>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)' }}>events</span>
-                  </div>
-                  {s.total > 0 && (
-                    <div style={{ display: 'flex', gap: 2, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-                      <div style={{ background: 'var(--green-500)', width: `${(s.confirmed / s.total) * 100}%` }} />
-                      <div style={{ background: 'var(--red-500)', width: `${(s.declined / s.total) * 100}%` }} />
-                    </div>
-                  )}
-                  <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>
-                    {s.total === 0 ? 'No events yet' : s.reviewed === 0 ? 'Not reviewed' : `${s.reviewed}/${s.total} reviewed`}
-                    {s.declined > 0 && <span style={{ color: 'var(--red-500)' }}> · {s.declined} declined</span>}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      ))}
+        );
+        const pending = empty ? (
+          <span style={{ fontSize: 12, color: 'var(--text-disabled)', textAlign: 'right', whiteSpace: 'nowrap' }}>No events yet</span>
+        ) : s.pending > 0 ? (
+          <span style={{ ...num, fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>{s.pending}</span>
+        ) : (
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5, fontSize: 12, fontWeight: 500, color: 'var(--green-500)' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>check_circle</span>Done
+          </span>
+        );
+        const name = (
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+        );
+        return (
+          <button
+            key={c.action}
+            type="button"
+            className="td-class"
+            onClick={() => onOpen(c.action)}
+            disabled={empty}
+            style={{
+              display: 'grid', gridTemplateColumns: narrow ? '34px minmax(0, 1fr) auto 20px' : COLUMNS, gap: narrow ? 12 : 14, alignItems: 'center',
+              width: '100%', padding: narrow ? '12px 14px' : '12px 18px', textAlign: 'left', fontFamily: 'inherit',
+              background: 'transparent', border: 'none', borderRadius: 0,
+              borderTop: row > 0 ? '1px solid var(--border-subtle)' : 'none',
+              cursor: empty ? 'default' : 'pointer', opacity: empty ? 0.45 : 1,
+            }}
+          >
+            <span className="kbd">{c.key}</span>
+            {narrow ? (
+              <>
+                <div style={{ minWidth: 0, display: 'grid', gap: 7 }}>
+                  {name}
+                  {bar}
+                </div>
+                {pending}
+              </>
+            ) : (
+              <>
+                {name}
+                <span style={{ fontSize: 12.5, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.group}</span>
+                <span style={{ ...num, color: empty ? 'var(--text-disabled)' : 'var(--text-primary)' }}>{s.total}</span>
+                {bar}
+                <span style={{ ...num, color: 'var(--text-secondary)' }}>{empty ? '' : s.confirmed}</span>
+                <span style={{ ...num, color: s.declined > 0 ? 'var(--text-secondary)' : 'var(--text-disabled)' }}>{empty ? '' : s.declined}</span>
+                {pending}
+              </>
+            )}
+            <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--text-disabled)', visibility: empty ? 'hidden' : 'visible' }}>chevron_right</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

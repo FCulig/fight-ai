@@ -2,10 +2,8 @@ import { useState } from 'react';
 import { useWindowWidth } from '../../hooks/useWindowWidth';
 import ScopeToggle from './ScopeToggle';
 import type { Scope } from './ScopeToggle';
-import FighterColumn from './FighterColumn';
 import SummaryTiles from './SummaryTiles';
-import HeadToHead from './HeadToHead';
-import Momentum from './Momentum';
+import FightBreakdown from './FightBreakdown';
 import type { FighterProfile, FighterStats } from '../../mocks/fightMock';
 import type { Event } from '../../types/Event';
 import type { Round } from '../../types/Round';
@@ -18,9 +16,6 @@ interface FightReportProps {
   rounds: Round[];
   fighters: { red: FighterProfile; blue: FighterProfile };
   redFighterId?: number | null;
-  time: number;
-  duration: number;
-  r1EndSeconds: number;
 }
 
 /** One real-data sentence in place of the design's hand-written fight
@@ -46,7 +41,7 @@ function summarize(red: FighterStats, blue: FighterStats, redName: string, blueN
   return clauses.join('. ') + '.';
 }
 
-export default function FightReport({ currentFrame, events, fps, rounds, fighters, redFighterId, time, duration, r1EndSeconds }: FightReportProps) {
+export default function FightReport({ currentFrame, events, fps, rounds, fighters, redFighterId }: FightReportProps) {
   const [scope, setScope] = useState<Scope>('fight');
   const width = useWindowWidth();
   const narrow = width < 1100;
@@ -77,7 +72,7 @@ export default function FightReport({ currentFrame, events, fps, rounds, fighter
           <h2 className="font-display" style={{ fontSize: 'clamp(28px, 3.4vw, 40px)', lineHeight: 1, margin: '10px 0 0', color: 'var(--text-primary)' }}>
             The whole fight, broken down.
           </h2>
-          <p style={{ margin: '10px 0 0', fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', maxWidth: '52ch' }}>
+          <p style={{ margin: '10px 0 0', fontSize: 14, fontWeight: 500, color: 'var(--text-muted)', maxWidth: '52ch' }}>
             {summarize(st.red, st.blue, redName, blueName)}
           </p>
         </div>
@@ -90,25 +85,8 @@ export default function FightReport({ currentFrame, events, fps, rounds, fighter
         <SummaryTiles red={st.red} blue={st.blue} redName={redName} blueName={blueName} scopeLabel={scopeLabel} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: narrow ? 'minmax(0,1fr)' : 'minmax(0,1fr) minmax(0,1fr)', gap: 12 }}>
-        <HeadToHead red={st.red} blue={st.blue} redName={redName} blueName={blueName} />
-        <div style={{ display: 'grid', gap: 12 }}>
-          <FighterColumn f={fighters.red} s={st.red} />
-          <FighterColumn f={fighters.blue} s={st.blue} />
-        </div>
-      </div>
+      <FightBreakdown fighters={fighters} red={st.red} blue={st.blue} narrow={narrow} />
 
-      <div className="glass" style={{ marginTop: 12, padding: '22px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap', marginBottom: 18 }}>
-          <h3 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>Momentum.</h3>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>Significant strikes landed per 30 seconds</span>
-          <span style={{ display: 'flex', gap: 16, fontSize: 11.5, fontWeight: 700, marginLeft: 'auto' }}>
-            <span style={{ color: 'var(--f-red)' }}>{redName}</span>
-            <span style={{ color: 'var(--f-blue)' }}>{blueName}</span>
-          </span>
-        </div>
-        <Momentum time={time} duration={duration} r1EndSeconds={r1EndSeconds} events={events} fps={fps} fighters={fighters} redFighterId={redFighterId} bare />
-      </div>
     </section>
   );
 }

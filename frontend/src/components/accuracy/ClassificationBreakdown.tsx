@@ -14,9 +14,9 @@ function Tile({ label, value, sub, status }: { label: string; value: React.React
       {status ? (
         <StatusBadge status={status} size="sm">{value}</StatusBadge>
       ) : (
-        <span className="font-display" style={{ fontSize: 28, lineHeight: 1, color: 'var(--text-primary)' }}>{value}</span>
+        <span className="font-num" style={{ fontSize: 24, lineHeight: 1, color: 'var(--text-primary)' }}>{value}</span>
       )}
-      <div style={{ marginTop: 6, fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>{sub}</div>
+      <div style={{ marginTop: 6, fontSize: 11.5, fontWeight: 400, color: 'var(--text-muted)' }}>{sub}</div>
     </div>
   );
 }
@@ -37,7 +37,7 @@ export default function ClassificationBreakdown({ strikes }: ClassificationBreak
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <StatusBadge status="circular" title="The labeller reads the corner off the pipeline's own overlay, so a tracker swap is copied into the label and cancels out.">Circular</StatusBadge>
-        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-tertiary)' }}>
+        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-tertiary)' }}>
           Corner read-back {cornerPct ?? '—'} ({strikes.fighter_total} matches) — not attribution accuracy.
           Use corner-swap spans instead.
         </span>

@@ -159,7 +159,7 @@ export default function ClipPlayer({ fight, frame, corner }: ClipPlayerProps) {
         <button type="button" className={'pill' + (showBoxes ? ' active' : '')} onClick={() => setShowBoxes((v) => !v)} style={{ padding: '4px 10px', fontSize: 11 }}>Box</button>
       </div>
 
-      <div style={{ position: 'relative', width: '100%', maxWidth: 720, margin: '0 auto', borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border-glass)', background: '#000' }}>
+      <div style={{ position: 'relative', width: '100%', maxWidth: 720, margin: '0 auto', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-glass)', background: '#000' }}>
         <video
           ref={videoRef}
           src={videoUrl(fight.id)}
@@ -199,19 +199,19 @@ export default function ClipPlayer({ fight, frame, corner }: ClipPlayerProps) {
           step={1 / fps}
           value={currentTime}
           onChange={(e) => handleScrub(Number(e.target.value))}
-          style={{ flex: 1, minWidth: 140, accentColor: 'var(--accent)', height: 4 }}
+          style={{ flex: 1, minWidth: 140, accentColor: 'var(--text-primary)', height: 4 }}
           aria-label="Frame"
         />
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
           {String(Math.min(clipFrame, clipFrames)).padStart(2, '0')} / {clipFrames}
         </span>
-        <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 9, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 8, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border-subtle)' }}>
           {SPEEDS.map((s) => (
             <button key={s} type="button" className={'pill' + (speed === s ? ' active' : '')} onClick={() => setSpeed(s)} title="Playback speed — remembered next time" style={{ padding: '4px 9px', fontSize: 11 }}>{s}×</button>
           ))}
         </div>
       </div>
-      <div style={{ marginTop: 9, fontSize: 10.5, fontWeight: 600, color: 'var(--text-disabled)' }}>
+      <div style={{ marginTop: 9, fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 400, color: 'var(--text-disabled)' }}>
         {fight.video_path.split('/').pop()} · {fps} fps
       </div>
     </div>

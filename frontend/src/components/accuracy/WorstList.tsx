@@ -23,14 +23,14 @@ export default function WorstList({ title, fps, items, emptyLabel, limit = 8 }: 
     <div>
       <div className="label" style={{ marginBottom: 9 }}>{title} ({items.length})</div>
       {shown.length === 0 ? (
-        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)' }}>{emptyLabel}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-muted)' }}>{emptyLabel}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {shown.map((it, i) => (
             <div key={i} style={{
               display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px',
               borderRadius: 8, background: 'rgba(0,0,0,0.24)', border: '1px solid var(--border-subtle)',
-              fontSize: 11.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+              fontSize: 11.5, fontWeight: 500, fontVariantNumeric: 'tabular-nums',
             }}>
               <span style={{ color: 'var(--text-muted)', minWidth: 62 }}>{fmtClock(it.frame, fps)}</span>
               <span style={{

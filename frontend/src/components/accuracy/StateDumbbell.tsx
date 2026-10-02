@@ -9,8 +9,8 @@ function Row({ label, truth, pred, unit, max, warn }: { label: string; truth: nu
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{label}</span>
-        <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text-tertiary)' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>{label}</span>
+        <span style={{ fontSize: 11, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'var(--text-tertiary)' }}>
           truth {truth.toFixed(1)}{unit} · predicted {pred.toFixed(1)}{unit}
         </span>
       </div>
@@ -18,7 +18,7 @@ function Row({ label, truth, pred, unit, max, warn }: { label: string; truth: nu
         <div style={{ position: 'absolute', top: -3, left: `${x(truth)}%`, width: 12, height: 12, borderRadius: '50%', background: 'var(--purple-600)', transform: 'translateX(-50%)' }} title="Truth" />
         <div style={{ position: 'absolute', top: -3, left: `${x(pred)}%`, width: 12, height: 12, borderRadius: '50%', background: 'var(--cyan-400)', transform: 'translateX(-50%)' }} title="Predicted" />
       </div>
-      {warn && <div style={{ marginTop: 6, fontSize: 10.5, fontWeight: 700, color: '#fab219' }}>⚠ {warn}</div>}
+      {warn && <div style={{ marginTop: 6, fontSize: 10.5, fontWeight: 600, color: 'var(--warn)' }}>⚠ {warn}</div>}
     </div>
   );
 }
@@ -47,7 +47,7 @@ export default function StateDumbbell({ state }: StateDumbbellProps) {
         unit="s"
         max={Math.max(state.gt_median_dwell_secs, state.pred_median_dwell_secs, 1) * 1.2}
       />
-      <div style={{ marginTop: 10, fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>
+      <div style={{ marginTop: 10, fontSize: 10.5, fontWeight: 500, color: 'var(--text-muted)' }}>
         Per-frame accuracy {accuracy != null ? `${accuracy.toFixed(1)}%` : '—'} ({state.frames_scored} frames) — dominated by the most common state, shown small on purpose.
       </div>
     </div>

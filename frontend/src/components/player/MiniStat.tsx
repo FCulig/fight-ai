@@ -6,10 +6,10 @@ interface MiniStatProps {
 export default function MiniStat({ value, label }: MiniStatProps) {
   return (
     <div className="inner-tile" style={{ padding: '12px 14px', flex: 1 }}>
-      <div className="font-display" style={{ fontSize: 26, lineHeight: 1, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+      <div className="font-num" style={{ fontSize: 22, lineHeight: 1, color: 'var(--text-primary)' }}>
         {value}
       </div>
-      <div className="label" style={{ marginTop: 5, fontSize: 9.5 }}>{label}</div>
+      <div className="label" style={{ marginTop: 6 }}>{label}</div>
     </div>
   );
 }

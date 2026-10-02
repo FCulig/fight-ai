@@ -37,22 +37,22 @@ export default function ConfirmDialog({
 
   if (!open) return null;
 
-  const accent = danger ? '#ef4444' : 'var(--purple-600)';
+  const accent = danger ? 'var(--red-500)' : 'var(--text-primary)';
 
   return (
     <div
       onClick={busy ? undefined : onCancel}
       style={{
         position: 'fixed', inset: 0, zIndex: 200, display: 'grid', placeItems: 'center',
-        background: 'rgba(4,6,9,0.66)', backdropFilter: 'blur(6px)', animation: 'feed-in .18s ease-out',
+        background: 'rgba(11,11,12,0.72)', backdropFilter: 'blur(6px)', animation: 'feed-in .18s ease-out',
       }}
     >
-      <div onClick={e => e.stopPropagation()} className="glass" style={{ width: 420, maxWidth: '92vw', padding: '22px 24px 24px', borderRadius: 18 }}>
+      <div onClick={e => e.stopPropagation()} className="glass" style={{ width: 420, maxWidth: '92vw', padding: '22px 24px 24px', borderRadius: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 22, color: accent }}>
             {danger ? 'delete_forever' : 'help'}
           </span>
-          <span className="font-display" style={{ fontSize: 24, letterSpacing: '0.03em', color: 'var(--text-primary)' }}>
+          <span className="font-display" style={{ fontSize: 23, color: 'var(--text-primary)' }}>
             {title}
           </span>
           <button onClick={onCancel} disabled={busy} className="icon-btn" style={{ marginLeft: 'auto', width: 32, height: 32, opacity: busy ? 0.35 : 1 }}>
@@ -67,8 +67,8 @@ export default function ConfirmDialog({
         {error && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '9px 12px',
-            borderRadius: 9, border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)',
-            color: '#ef4444', fontSize: 12.5, fontWeight: 600,
+            borderRadius: 6, border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)',
+            color: 'var(--red-500)', fontSize: 12.5, fontWeight: 500,
           }}>
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>error</span>
             {error}
@@ -80,9 +80,9 @@ export default function ConfirmDialog({
             onClick={onCancel}
             disabled={busy}
             style={{
-              flex: 1, padding: '11px', borderRadius: 10, cursor: busy ? 'not-allowed' : 'pointer',
-              fontWeight: 700, fontSize: 13, border: '1px solid var(--border-glass)',
-              background: 'var(--surface-inner)', color: 'var(--text-secondary)',
+              flex: 1, padding: '11px', borderRadius: 6, cursor: busy ? 'not-allowed' : 'pointer',
+              fontWeight: 600, fontSize: 13, border: '1px solid var(--border-strong)',
+              background: 'transparent', color: 'var(--text-primary)',
               opacity: busy ? 0.5 : 1, fontFamily: 'inherit',
             }}
           >Cancel</button>
@@ -91,12 +91,10 @@ export default function ConfirmDialog({
             disabled={busy}
             style={{
               flex: 1.4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-              padding: '11px', borderRadius: 10, cursor: busy ? 'not-allowed' : 'pointer',
-              fontWeight: 700, fontSize: 13, border: 'none', color: '#fff',
-              background: danger
-                ? 'linear-gradient(135deg, #ef4444, #b91c1c)'
-                : 'linear-gradient(135deg, var(--purple-600), #5b21b6)',
-              boxShadow: `0 0 16px color-mix(in srgb, ${accent} 32%, transparent)`,
+              padding: '11px', borderRadius: 6, cursor: busy ? 'not-allowed' : 'pointer',
+              fontWeight: 600, fontSize: 13, border: 'none',
+              color: danger ? '#fff' : 'var(--bg-base)',
+              background: accent,
               opacity: busy ? 0.6 : 1, fontFamily: 'inherit',
             }}
           >

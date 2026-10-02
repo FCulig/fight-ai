@@ -9,7 +9,7 @@ export type Status = 'good' | 'warning' | 'critical' | 'unverified' | 'none' | '
  */
 const STATUS: Record<Status, { color: string; icon: string }> = {
   good: { color: '#0ca30c', icon: 'check_circle' },
-  warning: { color: '#fab219', icon: 'warning' },
+  warning: { color: 'var(--warn)', icon: 'warning' },
   critical: { color: 'var(--red-500)', icon: 'error' },
   unverified: { color: 'var(--text-muted)', icon: 'help' },
   none: { color: 'var(--text-muted)', icon: 'remove' },
@@ -40,12 +40,11 @@ export default function StatusBadge({ status, children, size = 'md', title }: St
         background: `color-mix(in srgb, ${s.color} 13%, transparent)`,
         border: `1px solid color-mix(in srgb, ${s.color} 26%, transparent)`,
         color: s.color,
-        fontSize: sm ? 10 : 11,
-        fontWeight: 700,
-        letterSpacing: '0.01em',
+        fontSize: sm ? 11 : 12,
+        fontWeight: 500,
       }}
     >
-      <span className="material-symbols-outlined" style={{ fontSize: sm ? 11 : 13 }}>{s.icon}</span>
+      <span className="material-symbols-outlined" style={{ fontSize: sm ? 12 : 13 }}>{s.icon}</span>
       {children}
     </span>
   );

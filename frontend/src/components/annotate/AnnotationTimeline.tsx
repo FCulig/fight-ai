@@ -59,12 +59,12 @@ function Clip({ e, x, color, text, flash, selected, onSeek, onSelect, onHover }:
       onMouseLeave={() => onHover(null)}
       title={selected ? `${text} · Delete to remove` : text}
       style={{
-        position: 'absolute', left: x - 11, top: (TL.lane - 30) / 2, width: 22, height: 30, borderRadius: 7,
+        position: 'absolute', left: x - 11, top: (TL.lane - 30) / 2, width: 22, height: 30, borderRadius: 6,
         display: 'grid', placeItems: 'center', cursor: 'pointer', zIndex: flash || selected ? 6 : 4, padding: 0,
         transition: 'transform .1s',
         border: `1px solid color-mix(in srgb, ${color} ${flash || selected ? 90 : 55}%, transparent)`,
         background: `color-mix(in srgb, ${color} ${flash || selected ? 34 : 18}%, var(--surface-inner))`,
-        boxShadow: selected ? `0 0 0 2px #fff, 0 0 0 3.5px ${color}` : flash ? `0 0 0 1.5px ${color}, 0 0 16px -2px ${color}` : 'none',
+        boxShadow: selected ? `0 0 0 2px #fff, 0 0 0 3.5px ${color}` : flash ? `0 0 0 1.5px ${color}` : 'none',
         animation: 'feed-in .25s ease-out',
       }}
     >
@@ -287,7 +287,7 @@ export default function AnnotationTimeline({
           </div>
         )}
         {w > 30 && (
-          <span style={{ fontSize: 9.5, fontWeight: 800, color: c, whiteSpace: 'nowrap', paddingLeft: 8, pointerEvents: 'none' }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 500, color: c, whiteSpace: 'nowrap', paddingLeft: 8, pointerEvents: 'none' }}>
             {s.kind === 'round' ? `R${s.value ?? ''}` : s.value ?? s.kind.toUpperCase()}{open ? '…' : ''}
           </span>
         )}
@@ -310,36 +310,36 @@ export default function AnnotationTimeline({
   };
 
   return (
-    <div style={{ display: 'flex', position: 'relative', height: boxH, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+    <div style={{ display: 'flex', position: 'relative', height: boxH, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-glass)' }}>
       <div style={{ position: 'relative', width: TL.head, flexShrink: 0, background: 'var(--surface-inner)', zIndex: 8 }}>
         <div style={{
           position: 'absolute', top: 0, height: TL.ruler, width: TL.head, borderBottom: '1px solid var(--border-glass)',
           borderRight: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', padding: '0 12px',
-          fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--text-disabled)',
-        }}>TRACKS</div>
+          fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 500, color: 'var(--text-muted)',
+        }}>Tracks</div>
         <TrackHead top={TL.ruler} h={TL.round}>
           <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--green-500)' }}>flag</span>
-          <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--text-tertiary)' }}>ROUNDS</span>
+          <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-secondary)' }}>Rounds</span>
         </TrackHead>
         <TrackHead top={TL.ruler + TL.round} h={TL.state}>
           <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--slate-400)' }}>change_circle</span>
-          <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--text-tertiary)' }}>STATE</span>
+          <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-secondary)' }}>State</span>
         </TrackHead>
         <TrackHead top={spansTop} h={TL.span}>
           <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--purple-600)' }}>swap_horiz</span>
-          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.05em', color: 'var(--text-tertiary)' }}>CORNER SWAP</span>
+          <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-secondary)' }}>Corner swap</span>
         </TrackHead>
         <TrackHead top={spansTop + TL.span} h={TL.span}>
           <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-muted)' }}>visibility_off</span>
-          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.05em', color: 'var(--text-tertiary)' }}>EXCLUDED</span>
+          <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-secondary)' }}>Excluded</span>
         </TrackHead>
         <TrackHead top={lanesTop} h={TL.lane}>
-          <span style={{ width: 9, height: 9, borderRadius: 2, background: 'var(--f-red)' }} />
-          <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)' }}>{redName}</span>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--f-red)' }} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{redName}</span>
         </TrackHead>
         <TrackHead top={lanesTop + TL.lane} h={TL.lane}>
-          <span style={{ width: 9, height: 9, borderRadius: 2, background: 'var(--f-blue)' }} />
-          <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)' }}>{blueName}</span>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--f-blue)' }} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{blueName}</span>
         </TrackHead>
       </div>
 
@@ -364,7 +364,7 @@ export default function AnnotationTimeline({
             {ticks.map(t => (
               <div key={t} style={{ position: 'absolute', left: t * pxPerSec, top: 0, height: '100%', pointerEvents: 'none' }}>
                 <div style={{ position: 'absolute', left: 0, bottom: 0, width: 1, height: 7, background: 'rgba(255,255,255,0.22)' }} />
-                <span style={{ position: 'absolute', left: 5, top: 5, fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{fmtSec(t)}</span>
+                <span style={{ position: 'absolute', left: 5, top: 5, fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 500, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{fmtSec(t)}</span>
               </div>
             ))}
           </div>
@@ -384,12 +384,12 @@ export default function AnnotationTimeline({
                 title={s.state}
                 style={{
                   position: 'absolute', top: TL.ruler + TL.round + 5, left: s.t0 * pxPerSec, width: w, height: TL.state - 10,
-                  borderRadius: 6, zIndex: 2, background: `color-mix(in srgb, ${c} 16%, transparent)`,
+                  borderRadius: 4, zIndex: 2, background: `color-mix(in srgb, ${c} 16%, transparent)`,
                   border: `1px solid color-mix(in srgb, ${c} 38%, transparent)`, borderLeft: `3px solid ${c}`,
                   overflow: 'hidden', display: 'flex', alignItems: 'center', paddingLeft: 8,
                 }}
               >
-                {w > 64 && <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.05em', color: c, whiteSpace: 'nowrap' }}>{s.state}</span>}
+                {w > 64 && <span style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 500, color: c, whiteSpace: 'nowrap' }}>{s.state}</span>}
               </div>
             );
           })}
@@ -420,7 +420,7 @@ export default function AnnotationTimeline({
                   borderRadius: 6, zIndex: selected ? 6 : 5, display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0,
                   border: `1px solid color-mix(in srgb, ${c} 60%, transparent)`,
                   background: `color-mix(in srgb, ${c} ${fe ? 30 : 18}%, var(--surface-inner))`,
-                  boxShadow: selected ? `0 0 0 2px #fff, 0 0 0 3.5px ${c}` : e.id === flashId ? `0 0 0 1.5px ${c}, 0 0 14px -2px ${c}` : 'none',
+                  boxShadow: selected ? `0 0 0 2px #fff, 0 0 0 3.5px ${c}` : e.id === flashId ? `0 0 0 1.5px ${c}` : 'none',
                 }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 14, color: c }}>{iconForAction(e.action)}</span>
@@ -443,17 +443,17 @@ export default function AnnotationTimeline({
             <div key={'ld' + i} style={{ position: 'absolute', top: y, left: 0, width: '100%', height: 1, background: 'var(--border-subtle)', pointerEvents: 'none' }} />
           ))}
 
-          <div style={{ position: 'absolute', top: 0, left: playX, width: 2, height: totalH, background: 'var(--accent)', boxShadow: '0 0 8px var(--accent)', zIndex: 7, pointerEvents: 'none' }}>
-            <div style={{ position: 'absolute', top: 0, left: -6, width: 14, height: 11, background: 'var(--accent)', clipPath: 'polygon(0 0,100% 0,50% 100%)' }} />
+          <div style={{ position: 'absolute', top: 0, left: playX, width: 2, height: totalH, background: 'var(--text-primary)', zIndex: 7, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', top: 0, left: -6, width: 14, height: 11, background: 'var(--text-primary)', clipPath: 'polygon(0 0,100% 0,50% 100%)' }} />
           </div>
 
           {hover && (
             <div style={{ position: 'absolute', left: Math.max(4, hover.x - 70), top: lanesTop - 4, transform: 'translateY(-100%)', zIndex: 20, width: 200, pointerEvents: 'none' }}>
-              <div className="glass" style={{ padding: '9px 11px', borderRadius: 9, borderLeft: `3px solid ${hover.color}` }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>{hover.text}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4, fontSize: 10.5, color: 'var(--text-muted)' }}>
-                  <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{formatFrameClock(hover.e.frame, fps)}</span>
-                  <span style={{ marginLeft: 'auto', opacity: 0.7 }}>#{hover.e.frame}</span>
+              <div className="glass" style={{ padding: '9px 11px', borderRadius: 6, background: 'var(--surface-glass-2)', borderColor: 'var(--border-strong)', borderLeft: `3px solid ${hover.color}` }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>{hover.text}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4, fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--text-muted)' }}>
+                  <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{formatFrameClock(hover.e.frame, fps)}</span>
+                  <span style={{ marginLeft: 'auto' }}>#{hover.e.frame}</span>
                 </div>
               </div>
             </div>
@@ -463,12 +463,12 @@ export default function AnnotationTimeline({
 
       <div style={{
         position: 'absolute', right: 10, bottom: 10, display: 'flex', alignItems: 'center', gap: 4, zIndex: 9,
-        background: 'rgba(8,11,15,0.72)', backdropFilter: 'blur(8px)', padding: 4, borderRadius: 9, border: '1px solid var(--border-glass)',
+        background: 'rgba(11,11,12,0.8)', backdropFilter: 'blur(8px)', padding: 4, borderRadius: 8, border: '1px solid var(--border-glass)',
       }}>
         <button className="icon-btn" title="Zoom out" onClick={() => setZoom(z => Math.max(1, +(z - 0.5).toFixed(1)))} style={{ width: 28, height: 28 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 17 }}>remove</span>
         </button>
-        <button className="icon-btn" title="Fit" onClick={() => setZoom(1)} style={{ width: 28, height: 28, color: zoom === 1 ? 'var(--accent)' : 'var(--text-secondary)' }}>
+        <button className="icon-btn" title="Fit" onClick={() => setZoom(1)} style={{ width: 28, height: 28, color: zoom === 1 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>fit_screen</span>
         </button>
         <button className="icon-btn" title="Zoom in" onClick={() => setZoom(z => Math.min(12, +(z + 0.5).toFixed(1)))} style={{ width: 28, height: 28 }}>

@@ -9,13 +9,13 @@ interface FightPurposeBadgeProps {
 }
 
 const SIZES = {
-  sm: { font: 9.5, icon: 12, pad: '2px 7px', radius: 5, gap: 4 },
-  md: { font: 11, icon: 14, pad: '4px 9px', radius: 6, gap: 5 },
+  sm: { font: 11, icon: 13, pad: '1px 7px', radius: 5, gap: 4 },
+  md: { font: 12, icon: 14, pad: '3px 9px', radius: 6, gap: 5 },
 } as const;
 
 export default function FightPurposeBadge({ purpose, size = 'md' }: FightPurposeBadgeProps) {
   const known = purpose in PURPOSE_LABELS ? (purpose as FightPurpose) : null;
-  const color = known ? PURPOSE_COLORS[known] : '#64748b';
+  const color = known ? PURPOSE_COLORS[known] : 'var(--text-muted)';
   const label = known ? PURPOSE_LABELS[known] : purpose;
   const icon = known ? PURPOSE_ICONS[known] : 'help';
   const s = SIZES[size];
@@ -29,9 +29,7 @@ export default function FightPurposeBadge({ purpose, size = 'md' }: FightPurpose
         gap: s.gap,
         flexShrink: 0,
         fontSize: s.font,
-        fontWeight: 800,
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
+        fontWeight: 500,
         whiteSpace: 'nowrap',
         padding: s.pad,
         borderRadius: s.radius,

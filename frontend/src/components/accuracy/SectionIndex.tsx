@@ -47,7 +47,7 @@ export default function SectionIndex({ narrow }: SectionIndexProps) {
         : { position: 'sticky', top: 74 }}
     >
       {!narrow && (
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)', padding: '0 0 8px 2px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-muted)', padding: '0 0 8px 2px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 }}>
           Sections
         </div>
       )}
@@ -59,8 +59,8 @@ export default function SectionIndex({ narrow }: SectionIndexProps) {
               onClick={(e) => { e.preventDefault(); go(id); }}
               aria-current={active === id ? 'true' : undefined}
               style={{
-                display: 'flex', alignItems: 'center', gap: 9, padding: '8px 12px', borderRadius: 999,
-                textDecoration: 'none', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 9, padding: '8px 12px', borderRadius: 6,
+                textDecoration: 'none', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500,
                 color: active === id ? 'var(--text-primary)' : 'var(--text-muted)',
                 background: active === id ? 'var(--surface-glass-2)' : 'transparent',
                 border: `1px solid ${active === id ? 'var(--border-glass)' : 'transparent'}`,

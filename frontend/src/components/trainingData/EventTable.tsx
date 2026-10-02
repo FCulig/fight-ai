@@ -45,18 +45,18 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button type="button" className="btn-glass" onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', fontSize: 11.5, fontWeight: 700 }}>
+        <button type="button" className="btn-glass" onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', fontSize: 11.5, fontWeight: 600 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 15 }}>arrow_back</span>All classes
         </button>
         <span style={{ color: 'var(--text-disabled)', fontSize: 12 }}>/</span>
-        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)' }}>{cls.name}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>{cls.name}</span>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap', marginBottom: 16 }}>
         <div style={{ minWidth: 0 }}>
           <h1 className="font-display" style={{ fontSize: 32, lineHeight: 0.94, margin: 0, color: 'var(--text-primary)' }}>{cls.name}</h1>
-          <p style={{ margin: '5px 0 0', fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)' }}>
-            {s.total} labelled events · exports as <code style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--accent-hover)' }}>{cls.action}</code>
+          <p style={{ margin: '5px 0 0', fontSize: 12.5, fontWeight: 500, color: 'var(--text-muted)' }}>
+            {s.total} labelled events · exports as <code style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--text-primary)' }}>{cls.action}</code>
           </p>
         </div>
         <button
@@ -65,8 +65,8 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
           disabled={!firstPending}
           onClick={() => firstPending && onOpen(firstPending.id)}
           style={{
-            marginLeft: 'auto', background: 'linear-gradient(135deg, var(--accent), var(--accent-deep))', color: 'var(--accent-on)',
-            fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 999, padding: '9px 16px',
+            marginLeft: 'auto',
+            fontWeight: 600, fontSize: 13, padding: '9px 16px',
             display: 'inline-flex', alignItems: 'center', gap: 6,
             opacity: firstPending ? 1 : 0.45,
             cursor: firstPending ? 'pointer' : 'default', fontFamily: 'inherit',
@@ -77,8 +77,8 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
         </button>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', padding: '9px 12px', marginBottom: 14, borderRadius: 22, background: 'var(--surface-glass)', border: '1px solid var(--border-glass)' }}>
-        <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 999, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', padding: '9px 12px', marginBottom: 14, borderRadius: 8, background: 'var(--surface-glass)', border: '1px solid var(--border-glass)' }}>
+        <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 8, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border-subtle)' }}>
           {FILTERS.map((f) => (
             <button key={f} type="button" className={'pill' + (filter === f ? ' active' : '')} onClick={() => setFilter(f)} style={{ padding: '4px 9px', fontSize: 11 }}>{f}</button>
           ))}
@@ -86,7 +86,7 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
         {fightOptions.length > 1 && (
           <>
             <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)' }} />
-            <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 999, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 8, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
               <button type="button" className={'pill' + (fightId === ALL_FIGHTS ? ' active' : '')} onClick={() => setFightId(ALL_FIGHTS)} style={{ padding: '4px 9px', fontSize: 11 }}>{ALL_FIGHTS}</button>
               {fightOptions.map(([id, label]) => (
                 <button key={id} type="button" className={'pill' + (fightId === id ? ' active' : '')} onClick={() => setFightId(id)} style={{ padding: '4px 9px', fontSize: 11 }}>{label}</button>
@@ -95,7 +95,7 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
           </>
         )}
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{rows.length} shown</span>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>{rows.length} shown</span>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -107,19 +107,19 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
             onClick={() => onOpen(e.id)}
             style={{
               display: 'grid', gridTemplateColumns: '74px minmax(0,1fr) auto 18px', gap: 13, alignItems: 'center',
-              padding: '10px 16px 10px 12px', borderRadius: 18, background: 'var(--surface-glass)',
+              padding: '10px 16px 10px 12px', borderRadius: 8, background: 'var(--surface-glass)',
               border: '1px solid var(--border-subtle)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
               transition: 'border-color .12s, background .12s',
             }}
           >
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
               {formatFrameClock(e.frame, e.fight.fps)}
             </span>
             <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-              <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {fightLabel(e.fight)}
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 400, color: 'var(--text-muted)' }}>
                 <span style={{ width: 7, height: 7, borderRadius: 2, background: e.displayCorner != null ? CORNER_C[e.displayCorner] : 'var(--text-disabled)', flexShrink: 0 }} />
                 {e.displayCorner === 0 ? 'Red' : e.displayCorner === 1 ? 'Blue' : 'No corner'} · {e.target ?? 'non-specific'}
               </span>
@@ -129,7 +129,7 @@ export default function EventTable({ cls, events, onBack, onOpen }: EventTablePr
           </button>
         ))}
         {rows.length === 0 && (
-          <div style={{ padding: 26, textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+          <div style={{ padding: 26, textAlign: 'center', fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>
             No events match this filter.
           </div>
         )}

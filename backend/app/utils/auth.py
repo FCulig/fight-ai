@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 from functools import cache
 from typing import Callable, Optional
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, Request
@@ -26,6 +27,8 @@ class AuthConfig:
     # redirect URI is built from it rather than from the request, because the
     # Vite proxy rewrites Host to 127.0.0.1:8000.
     public_base_url: str
+    # Mounts /api/auth/dev-login, which starts a session without Google.
+    dev_login: bool = False
 
     @property
     def callback_url(self) -> str:
@@ -41,12 +44,27 @@ def get_config() -> AuthConfig:
     missing = [k for k in _REQUIRED_ENV if not os.getenv(k)]
     if missing:
         raise RuntimeError(f"Auth environment variables not set: {', '.join(missing)}")
+    public_base_url = os.environ["PUBLIC_BASE_URL"].rstrip("/")
+    dev_login = os.getenv("DEV_LOGIN") == "1"
+    if dev_login and not _is_local_origin(public_base_url):
+        # Refuse to boot rather than ignore the flag: a deployed instance with
+        # DEV_LOGIN set would otherwise hand an admin session to anyone.
+        raise RuntimeError(
+            f"DEV_LOGIN=1 is only allowed when PUBLIC_BASE_URL is http://localhost or "
+            f"http://127.0.0.1, not {public_base_url!r}"
+        )
     return AuthConfig(
         google_client_id=os.environ["GOOGLE_CLIENT_ID"],
         google_client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
         session_secret=os.environ["SESSION_SECRET"],
-        public_base_url=os.environ["PUBLIC_BASE_URL"].rstrip("/"),
+        public_base_url=public_base_url,
+        dev_login=dev_login,
     )
+
+
+def _is_local_origin(url: str) -> bool:
+    parts = urlsplit(url)
+    return parts.scheme == "http" and parts.hostname in ("localhost", "127.0.0.1")
 
 
 def current_user(request: Request) -> User:

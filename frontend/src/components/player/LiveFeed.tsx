@@ -21,7 +21,7 @@ type Filter = 'all' | 'strike' | 'state' | 'grapple';
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all',    label: 'All' },
   { key: 'strike', label: 'Strikes' },
-  { key: 'state',  label: 'Fight State' },
+  { key: 'state',  label: 'Fight state' },
   { key: 'grapple',label: 'Grapple' },
 ];
 
@@ -71,9 +71,9 @@ export default function LiveFeed({
       {/* Header */}
       <div style={{ padding: '14px 16px 10px', display: 'flex', flexDirection: 'column', gap: 11, borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--f-red)', animation: 'pulse-ring 1.4s infinite', flexShrink: 0 }} />
-          <span className="label" style={{ color: 'rgba(255,255,255,0.55)' }}>Live Play-by-Play</span>
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-disabled)', fontWeight: 600 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text-primary)', animation: 'pulse-ring 1.4s infinite', flexShrink: 0 }} />
+          <span className="label" style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>Live play-by-play</span>
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
             {visible.length} events
           </span>
         </div>
@@ -100,18 +100,18 @@ export default function LiveFeed({
             <button
               key={e.id}
               onClick={() => onSeek((e.frame - 1) / fps)}
-              style={{ display: 'flex', gap: 11, alignItems: 'flex-start', textAlign: 'left', padding: '11px 13px', borderRadius: 11, border: `1px solid var(--border-subtle)`, background: 'var(--surface-inner)', borderLeft: `3px solid ${c}`, cursor: 'pointer', animation: 'feed-in .35s ease-out', width: '100%' }}
+              style={{ display: 'flex', gap: 11, alignItems: 'flex-start', textAlign: 'left', padding: '11px 13px', borderRadius: 8, border: `1px solid var(--border-subtle)`, background: 'var(--surface-inner)', borderLeft: `3px solid ${c}`, cursor: 'pointer', animation: 'feed-in .35s ease-out', width: '100%' }}
             >
-              <span style={{ width: 28, height: 28, flexShrink: 0, borderRadius: 7, display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${c} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${c} 30%, transparent)` }}>
+              <span style={{ width: 28, height: 28, flexShrink: 0, borderRadius: 6, display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${c} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${c} 30%, transparent)` }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16, color: c }}>{icon}</span>
               </span>
               <span style={{ minWidth: 0, flex: 1 }}>
-                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.25, marginBottom: 2 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.25, marginBottom: 2 }}>
                   {e.text}
                 </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-disabled)' }}>
-                  <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', fontWeight: 700 }}>{e.tc}</span>
-                  <span style={{ marginLeft: 'auto', opacity: 0.7 }}>#{e.frame}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-disabled)' }}>
+                  <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', fontWeight: 500 }}>{e.tc}</span>
+                  <span style={{ marginLeft: 'auto' }}>#{e.frame}</span>
                 </span>
               </span>
             </button>

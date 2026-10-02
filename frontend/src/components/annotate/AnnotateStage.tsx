@@ -66,17 +66,17 @@ export default function AnnotateStage({
       <div style={{ position: 'absolute', top: 14, left: 16, display: 'flex', gap: 8, alignItems: 'center', pointerEvents: 'none' }}>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.55)',
-          backdropFilter: 'blur(8px)', color: '#fff', fontSize: 11, fontWeight: 800,
-          letterSpacing: '0.08em', padding: '4px 9px', borderRadius: 6,
+          backdropFilter: 'blur(8px)', color: '#fff', fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: 500,
+          padding: '4px 9px', borderRadius: 6,
         }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>edit_note</span>
-          ANNOTATING
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit_note</span>
+          Annotating
         </span>
         <span style={{
           background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', color: '#fff',
-          fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6, letterSpacing: '0.04em',
+          fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: 500, padding: '4px 10px', borderRadius: 6,
         }}>
-          {currentRound === '-' ? 'LOADING…' : `ROUND ${currentRound}`}
+          {currentRound === '-' ? 'Loading…' : `Round ${currentRound}`}
         </span>
       </div>
 
@@ -87,19 +87,19 @@ export default function AnnotateStage({
           padding: '5px 11px', borderRadius: 6, border: `1px solid ${selectedColor}`,
         }}>
           <span style={{ width: 8, height: 8, borderRadius: 2, background: selectedColor }} />
-          <span style={{ fontSize: 11.5, fontWeight: 800, color: '#fff', letterSpacing: '0.03em' }}>{selectedName}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{selectedName}</span>
         </div>
       )}
 
       {toast && (
         <div style={{
           position: 'absolute', left: '50%', bottom: 22, transform: 'translateX(-50%)', pointerEvents: 'none',
-          display: 'flex', alignItems: 'center', gap: 9, padding: '9px 16px', borderRadius: 10,
-          background: 'rgba(8,11,15,0.86)', backdropFilter: 'blur(10px)', border: `1px solid ${toast.color}`,
-          boxShadow: `0 0 24px -6px ${toast.color}`, animation: 'feed-in .2s ease-out',
+          display: 'flex', alignItems: 'center', gap: 9, padding: '9px 16px', borderRadius: 6,
+          background: 'rgba(11,11,12,0.86)', backdropFilter: 'blur(10px)', border: `1px solid ${toast.color}`,
+          animation: 'feed-in .2s ease-out',
         }}>
           <span className="material-symbols-outlined" style={{ fontSize: 18, color: toast.color }}>{toast.icon}</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{toast.text}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{toast.text}</span>
         </div>
       )}
     </VideoPlayer>

@@ -114,7 +114,7 @@ export default function PipelineAccuracy() {
           <h1 className="font-display" style={{ fontSize: isMobile ? 32 : 'clamp(36px, 4.6vw, 60px)', lineHeight: 0.94, margin: '10px 0 0', color: 'var(--text-primary)' }}>
             Training lab.
           </h1>
-          <p style={{ margin: '10px 0 0', fontSize: 13.5, fontWeight: 600, color: 'var(--text-muted)' }}>
+          <p style={{ margin: '10px 0 0', fontSize: 13.5, fontWeight: 500, color: 'var(--text-muted)' }}>
             What the model learns from, and how well it scores.
           </p>
         </div>
@@ -149,8 +149,8 @@ export default function PipelineAccuracy() {
 
           <section id="sec-e" style={{ animation: 'fade-up .5s ease-out .32s both' }}>
             <div className="glass" style={{ padding: '20px 22px 22px' }}>
-              <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>Pipeline accuracy</h2>
-              <p style={{ margin: '0 0 16px', fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)' }}>
+              <h2 className="font-display" style={{ margin: '0 0 4px', fontSize: 24, lineHeight: 1.05, color: 'var(--text-primary)' }}>Pipeline accuracy</h2>
+              <p style={{ margin: '0 0 16px', fontSize: 12.5, fontWeight: 500, color: 'var(--text-muted)' }}>
                 Reference fixtures scored against pipeline predictions, across versions
               </p>
 

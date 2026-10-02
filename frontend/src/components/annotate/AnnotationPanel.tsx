@@ -17,9 +17,9 @@ function ViewBtn({ active, onClick, icon, label }: ViewBtnProps) {
     <button
       onClick={onClick}
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7, cursor: 'pointer',
-        fontSize: 12, fontWeight: 700, border: 'none', background: active ? 'var(--accent)' : 'transparent',
-        color: active ? 'var(--cyan-on)' : 'var(--text-muted)', fontFamily: 'inherit',
+        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
+        fontSize: 12, fontWeight: 600, border: 'none', background: active ? 'var(--text-primary)' : 'transparent',
+        color: active ? 'var(--bg-base)' : 'var(--text-muted)', fontFamily: 'inherit',
         transition: 'color .12s, background .12s',
       }}
     >
@@ -62,18 +62,17 @@ export default function AnnotationPanel({
   );
 
   return (
-    <div className="glass" style={{ borderRadius: 16, padding: '16px 18px 18px', marginTop: 16 }}>
+    <div className="glass" style={{ borderRadius: 12, padding: '16px 18px 18px', marginTop: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 8px var(--accent)' }} />
-        <span className="font-display" style={{ fontSize: 21, letterSpacing: '0.04em', color: 'var(--text-primary)' }}>ANNOTATION TIMELINE</span>
-        <span style={{ fontSize: 11.5, color: 'var(--text-disabled)', fontWeight: 700 }}>{events.length} events</span>
+        <span className="font-display" style={{ fontSize: 22, color: 'var(--text-primary)' }}>Annotation timeline</span>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 500 }}>{events.length} events</span>
         <span style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 6 }}>
           {FILTERS.map(f => (
             <button key={f.key} className={'pill' + (filter === f.key ? ' active' : '')} onClick={() => setFilter(f.key)}>{f.label}</button>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 3, padding: 3, borderRadius: 9, background: 'var(--surface-inner)', border: '1px solid var(--border-glass)' }}>
+        <div style={{ display: 'flex', gap: 3, padding: 3, borderRadius: 8, background: 'var(--surface-inner)', border: '1px solid var(--border-glass)' }}>
           <ViewBtn active={view === 'timeline'} onClick={() => setView('timeline')} icon="view_timeline" label="Timeline" />
           <ViewBtn active={view === 'list'} onClick={() => setView('list')} icon="view_list" label="List" />
         </div>

@@ -1,11 +1,11 @@
 from typing import Optional
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from app.models.user import User, UserResponse
+from app.models.user import ROLES, User, UserResponse
 from app.services import user_service
 from app.utils.auth import current_user, get_config, safe_next
 
@@ -53,6 +53,28 @@ async def callback(request: Request):
         return _to_app("/?auth_error=disabled")
     request.session["uid"] = user.id
     return _to_app(next_path)
+
+
+_LOOPBACK = ("127.0.0.1", "::1")
+
+
+def dev_login(request: Request, role: str = "admin", next: Optional[str] = None):
+    """Starts a session as the synthetic `dev-<role>` user, for local runs
+    where nobody can complete Google sign-in (Claude sessions, curl)."""
+    # uvicorn may be bound to 0.0.0.0, which would offer this to the whole LAN.
+    if request.client is None or request.client.host not in _LOOPBACK:
+        raise HTTPException(status_code=404, detail="Not found")
+    if role not in ROLES:
+        raise HTTPException(status_code=422, detail=f"role must be one of {ROLES}")
+    user = user_service.dev_sign_in(role)
+    request.session.clear()
+    request.session["uid"] = user.id
+    return _to_app(safe_next(next))
+
+
+# get_config() refuses DEV_LOGIN unless PUBLIC_BASE_URL is a local http origin.
+if _config.dev_login:
+    router.add_api_route("/dev-login", dev_login, methods=["GET"])
 
 
 @router.get("/me", response_model=UserResponse)

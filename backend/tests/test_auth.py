@@ -6,22 +6,28 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 # app.main reads these at import; real values come from backend/.env when present.
 for _key in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "SESSION_SECRET"):
     os.environ.setdefault(_key, "test")
 os.environ.setdefault("PUBLIC_BASE_URL", "http://localhost:5173")
+os.environ["DEV_LOGIN"] = "1"  # mounts /api/auth/dev-login so it can be tested
 
 from app.main import app  # noqa: E402
 from app.models.user import User, UserCreate  # noqa: E402
 from app.services import event_service, fight_service, user_service  # noqa: E402
 from app.utils import db  # noqa: E402
-from app.utils.auth import current_user, safe_next  # noqa: E402
+from app.utils.auth import current_user, get_config, safe_next  # noqa: E402
 
 
 @pytest.fixture
 def session_factory(monkeypatch):
-    engine = create_engine("sqlite:///:memory:")
+    # One shared connection: sync routes run in a worker thread, and a second
+    # in-memory connection would see an empty database.
+    engine = create_engine(
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+    )
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     User.__table__.create(bind=engine)
 
@@ -36,7 +42,7 @@ def session_factory(monkeypatch):
 @pytest.fixture
 def client():
     # No `with`: the lifespan (pid reconcile, pg LISTEN) never runs.
-    yield TestClient(app)
+    yield TestClient(app, client=("127.0.0.1", 50000))
     app.dependency_overrides.clear()
 
 
@@ -81,6 +87,62 @@ def test_create_user_rejects_duplicate_email(session_factory):
     user_service.create_user(UserCreate(email="dup@example.com"))
     with pytest.raises(user_service.EmailTaken):
         user_service.create_user(UserCreate(email="DUP@example.com"))
+
+
+# --- dev login -----------------------------------------------------------------
+
+@pytest.mark.parametrize("url", [
+    "https://fightlytics.example.com", "http://fightlytics.example.com",
+    "https://localhost:5173", "http://localhost.evil.com",
+])
+def test_dev_login_refuses_to_boot_off_localhost(monkeypatch, url):
+    monkeypatch.setenv("DEV_LOGIN", "1")
+    monkeypatch.setenv("PUBLIC_BASE_URL", url)
+    with pytest.raises(RuntimeError, match="DEV_LOGIN"):
+        get_config.__wrapped__()
+
+
+@pytest.mark.parametrize("url", ["http://localhost:5173", "http://127.0.0.1:8000"])
+def test_dev_login_allowed_on_localhost(monkeypatch, url):
+    monkeypatch.setenv("DEV_LOGIN", "1")
+    monkeypatch.setenv("PUBLIC_BASE_URL", url)
+    assert get_config.__wrapped__().dev_login is True
+
+
+@pytest.mark.parametrize("value", [None, "", "0", "true"])
+def test_dev_login_is_off_unless_exactly_1(monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv("DEV_LOGIN", raising=False)
+    else:
+        monkeypatch.setenv("DEV_LOGIN", value)
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://fightlytics.example.com")
+    assert get_config.__wrapped__().dev_login is False
+
+
+def test_dev_login_starts_a_session_with_the_asked_role(session_factory, client):
+    response = client.get("/api/auth/dev-login?role=labeller&next=/fights/3", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/fights/3"
+    me = client.get("/api/auth/me").json()
+    assert me["email"] == "dev-labeller@fightai.local"
+    assert me["role"] == "labeller"
+
+
+def test_dev_login_resets_an_edited_dev_user(session_factory):
+    user = user_service.dev_sign_in("admin")
+    user_service.update_user(user.id, user_service.UserUpdate(role="viewer", is_active=False))
+    again = user_service.dev_sign_in("admin")
+    assert (again.id, again.role, again.is_active) == (user.id, "admin", True)
+
+
+def test_dev_login_is_hidden_from_other_machines(session_factory):
+    lan = TestClient(app, client=("192.168.1.20", 50000))
+    assert lan.get("/api/auth/dev-login", follow_redirects=False).status_code == 404
+    assert lan.get("/api/auth/me").status_code == 401
+
+
+def test_dev_login_rejects_unknown_role(session_factory, client):
+    assert client.get("/api/auth/dev-login?role=root").status_code == 422
 
 
 # --- post-login redirect -------------------------------------------------------

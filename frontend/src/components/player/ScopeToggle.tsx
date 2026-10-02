@@ -12,9 +12,9 @@ export default function ScopeToggle({ scope, setScope, rounds }: ScopeToggleProp
   const sortedRounds = [...rounds].sort((a, b) => a.round_number - b.round_number);
 
   return (
-    <div style={{ display: 'inline-flex', gap: 4, background: 'var(--surface-inner)', padding: 4, borderRadius: 9, border: '1px solid var(--border-subtle)' }}>
+    <div style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4, background: 'var(--surface-inner)', padding: 4, borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
       <button key="fight" onClick={() => setScope('fight')} className={'pill' + (scope === 'fight' ? ' active' : '')} style={{ borderRadius: 6 }}>
-        Whole Fight
+        Whole fight
       </button>
 
       <button key="live" onClick={() => setScope('live')} className={'pill' + (scope === 'live' ? ' active' : '')} style={{ borderRadius: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -23,7 +23,7 @@ export default function ScopeToggle({ scope, setScope, rounds }: ScopeToggleProp
             width: 6,
             height: 6,
             borderRadius: '50%',
-            background: 'var(--accent)',
+            background: 'var(--text-primary)',
             display: 'inline-block',
             animation: 'scope-pulse 1.2s ease-in-out infinite',
             flexShrink: 0,

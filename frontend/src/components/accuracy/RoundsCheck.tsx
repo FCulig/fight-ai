@@ -13,15 +13,15 @@ export default function RoundsCheck({ rounds }: RoundsCheckProps) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
           truth {rounds.gt_count} · predicted {rounds.pred_count}
         </span>
         <StatusBadge status={countOk ? 'good' : 'critical'} size="sm">{countOk ? 'Count OK' : 'Count WRONG'}</StatusBadge>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rounds.matched.map(([num, iou, dstart, dend, seeded]) => (
-          <div key={num} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, fontWeight: 600, color: 'var(--text-tertiary)' }}>
-            <span style={{ fontWeight: 800, color: 'var(--text-primary)', minWidth: 56 }}>Round {num}</span>
+          <div key={num} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, fontWeight: 500, color: 'var(--text-tertiary)' }}>
+            <span style={{ fontWeight: 700, color: 'var(--text-primary)', minWidth: 56 }}>Round {num}</span>
             {seeded ? (
               <StatusBadge status="warning" size="sm" title="Still byte-identical to the pipeline's own segmentation — a labeller hasn't confirmed it. Scoring its IoU would be circular.">
                 Seeded — not verified
@@ -36,7 +36,7 @@ export default function RoundsCheck({ rounds }: RoundsCheckProps) {
         ))}
       </div>
       {!countOk && (
-        <p style={{ margin: '10px 0 0', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+        <p style={{ margin: '10px 0 0', fontSize: 10.5, fontWeight: 500, color: 'var(--text-muted)', lineHeight: 1.5 }}>
           Mean IoU stays high when one round is split into several — the count is what catches that.
         </p>
       )}

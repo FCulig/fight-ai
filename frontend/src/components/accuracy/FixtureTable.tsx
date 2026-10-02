@@ -23,7 +23,7 @@ export default function FixtureTable({ fixtures, selectedId, onSelect }: Fixture
           <tr>
             {HEADERS.map((h, i) => (
               <th key={h} style={{
-                textAlign: i === 0 ? 'left' : 'right', padding: '7px 10px', fontSize: 11, fontWeight: 800,
+                textAlign: i === 0 ? 'left' : 'right', padding: '7px 10px', fontSize: 11.5, fontWeight: 500,
                 color: 'var(--text-muted)',
                 borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap',
               }}>{h}</th>
@@ -41,10 +41,10 @@ export default function FixtureTable({ fixtures, selectedId, onSelect }: Fixture
                 onClick={() => onSelect(fx.reference_fight_id)}
                 style={{
                   cursor: 'pointer',
-                  background: selectedId === fx.reference_fight_id ? 'color-mix(in srgb, var(--accent) 5%, transparent)' : 'transparent',
+                  background: selectedId === fx.reference_fight_id ? 'rgba(255,255,255,0.06)' : 'transparent',
                 }}
               >
-                <td style={{ padding: '9px 10px', fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                <td style={{ padding: '9px 10px', fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   #{fx.reference_fight_id} · {videoStem(fx.video_path)}
                 </td>
                 {!fx.is_measurable ? (
@@ -59,7 +59,7 @@ export default function FixtureTable({ fixtures, selectedId, onSelect }: Fixture
                     <Cell>{r?.tp} / {r?.fp} / {r?.fn}</Cell>
                     <Cell>{r?.precision}%</Cell>
                     <Cell>{r?.recall}%</Cell>
-                    <Cell><b style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{r?.f1}%</b></Cell>
+                    <Cell><b style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r?.f1}%</b></Cell>
                     <Cell>{r?.offset_bias_frames ?? '—'} · {r?.offset_jitter_frames ?? '—'}</Cell>
                     <Cell>{r?.git_sha.slice(0, 7)}</Cell>
                   </>
@@ -76,8 +76,8 @@ export default function FixtureTable({ fixtures, selectedId, onSelect }: Fixture
 function Cell({ children }: { children: React.ReactNode }) {
   return (
     <td style={{
-      padding: '9px 10px', textAlign: 'right', fontSize: 11.5, fontWeight: 600,
-      color: 'var(--text-tertiary)', fontVariantNumeric: 'tabular-nums',
+      padding: '9px 10px', textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11.5, fontWeight: 400,
+      color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums',
       borderBottom: '1px solid rgba(255,255,255,0.04)', whiteSpace: 'nowrap',
     }}>
       {children}

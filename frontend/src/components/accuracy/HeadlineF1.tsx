@@ -23,13 +23,13 @@ export default function HeadlineF1({ current, previous }: HeadlineF1Props) {
       <div className="inner-tile" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
         <AccGauge pct={Math.round(current.f1 ?? 0)} color="var(--cyan-400)" label="Strike F1" />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', fontVariantNumeric: 'tabular-nums' }}>
             P {current.precision}% · R {current.recall}%
           </span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
             TP {current.tp} · FP {current.fp} · FN {current.fn}
           </span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
             {labelled} labelled · {predicted} predicted
           </span>
         </div>

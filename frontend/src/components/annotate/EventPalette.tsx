@@ -32,8 +32,8 @@ export default function EventPalette({ selected, onLog, onFightEnd }: EventPalet
       {TOOL_GROUPS.map(g => (
         <div key={g.group}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 9 }}>
-            <div className="label" style={{ fontSize: 9.5 }}>{g.group}</div>
-            {g.note && <div style={{ fontSize: 10, color: 'var(--text-disabled)', fontWeight: 600 }}>{g.note}</div>}
+            <div className="label">{g.group}</div>
+            {g.note && <div style={{ fontSize: 10.5, color: 'var(--text-disabled)', fontWeight: 400 }}>{g.note}</div>}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8 }}>
             {g.items.map(it => {
@@ -46,7 +46,7 @@ export default function EventPalette({ selected, onLog, onFightEnd }: EventPalet
                   onClick={e => { e.currentTarget.blur(); onLog(it, e.shiftKey); }}
                   title={blocked ? 'Select a fighter first' : previewTarget ? `${it.name} · ${previewTarget} (Shift = body)` : it.name}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', borderRadius: 10,
+                    display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', borderRadius: 6,
                     cursor: 'pointer', textAlign: 'left', border: '1px solid var(--border-subtle)',
                     background: 'var(--surface-inner)', borderLeft: `3px solid ${c}`,
                     opacity: blocked ? 0.42 : 1, transition: 'transform .1s,opacity .12s',
@@ -59,8 +59,8 @@ export default function EventPalette({ selected, onLog, onFightEnd }: EventPalet
                     <span className="kbd">{it.key.toUpperCase()}</span>
                   )}
                   <span className="material-symbols-outlined" style={{ fontSize: 18, color: c }}>{iconForAction(it.action)}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', lineHeight: 1.1 }}>
-                    {it.name}{previewTarget === 'Body' && <span style={{ color: 'var(--accent)' }}> · Body</span>}
+                  <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-secondary)', lineHeight: 1.1 }}>
+                    {it.name}{previewTarget === 'Body' && <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}> · Body</span>}
                   </span>
                 </button>
               );
@@ -70,12 +70,12 @@ export default function EventPalette({ selected, onLog, onFightEnd }: EventPalet
       ))}
 
       <div>
-        <div className="label" style={{ fontSize: 9.5, marginBottom: 9 }}>Fight result</div>
+        <div className="label" style={{ marginBottom: 9 }}>Fight result</div>
         <button
           onClick={onFightEnd}
           style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            padding: '11px 8px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 12.5,
+            padding: '11px 8px', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 12.5,
             border: '1px solid color-mix(in srgb, var(--purple-600) 40%, transparent)',
             background: 'color-mix(in srgb, var(--purple-600) 10%, transparent)',
             color: 'var(--text-primary)', fontFamily: 'inherit',

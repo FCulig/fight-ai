@@ -46,11 +46,11 @@ export default function NotMeasurable({ fixture, candidates, onScored }: NotMeas
   return (
     <div style={{
       display: 'grid', placeItems: 'center', gap: 12, padding: '40px 24px',
-      borderRadius: 12, background: 'rgba(255,255,255,0.018)',
+      borderRadius: 8, background: 'rgba(255,255,255,0.018)',
       border: '1px dashed rgba(255,255,255,0.14)', textAlign: 'center',
     }}>
       <span className="material-symbols-outlined" style={{ fontSize: 34, color: 'var(--text-disabled)' }}>help</span>
-      <p style={{ margin: 0, maxWidth: '46ch', fontSize: 13, lineHeight: 1.6, fontWeight: 600, color: 'var(--text-secondary)' }}>
+      <p style={{ margin: 0, maxWidth: '46ch', fontSize: 13, lineHeight: 1.6, fontWeight: 500, color: 'var(--text-secondary)' }}>
         <strong>Strike accuracy isn't measurable yet</strong> for {videoStem(fixture.video_path)}.
         Re-run this source video through the AI pipeline (upload it again as an
         "AI annotation" fight) to make it an evaluation fixture, then score it
@@ -62,7 +62,7 @@ export default function NotMeasurable({ fixture, candidates, onScored }: NotMeas
             value={picked}
             onChange={(e) => setPicked(e.target.value === '' ? '' : Number(e.target.value))}
             className="btn-glass"
-            style={{ padding: '7px 10px', fontSize: 12, fontWeight: 600 }}
+            style={{ padding: '7px 10px', fontSize: 12, fontWeight: 500 }}
           >
             <option value="">Choose an AI-processed fight…</option>
             {candidates.map((f) => (
@@ -74,27 +74,23 @@ export default function NotMeasurable({ fixture, candidates, onScored }: NotMeas
             className="btn-primary"
             disabled={picked === '' || running}
             onClick={run}
-            style={{
-              background: 'linear-gradient(135deg, var(--accent), var(--accent-deep))',
-              color: 'var(--accent-on)', fontWeight: 700, fontSize: 12, padding: '7px 16px',
-              borderRadius: 999, opacity: picked === '' || running ? 0.5 : 1,
-            }}
+            style={{ fontWeight: 600, fontSize: 12, padding: '7px 16px', opacity: picked === '' || running ? 0.5 : 1 }}
           >
             {running ? 'Scoring…' : 'Run scoring'}
           </button>
         </div>
       ) : (
-        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)' }}>
+        <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-muted)' }}>
           {candidates.length > 0
             ? 'An admin can score it against a completed AI-processed fight.'
             : 'No completed AI-processed fight exists yet to score.'}
         </div>
       )}
-      {error && <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--red-500)' }}>{error}</div>}
+      {error && <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--red-500)' }}>{error}</div>}
       <code style={{
         display: 'block', maxWidth: '100%', overflowX: 'auto', padding: '8px 12px',
-        borderRadius: 8, background: 'rgba(0,0,0,0.42)', border: '1px solid var(--border-subtle)',
-        fontSize: 11, color: 'var(--accent-hover)', whiteSpace: 'pre',
+        borderRadius: 6, background: 'rgba(0,0,0,0.42)', border: '1px solid var(--border-subtle)',
+        fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-primary)', whiteSpace: 'pre',
       }}>
         {cmd}
       </code>

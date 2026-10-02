@@ -34,18 +34,18 @@ export default function ChangeTile({ current, previous }: ChangeTileProps) {
     <div className="inner-tile" style={{ padding: '13px 15px', flex: 1, minWidth: 160 }}>
       <div className="label" style={{ marginBottom: 9 }}>Change</div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <span style={{ fontSize: 20, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: deltaColor }}>
+        <span className="font-num" style={{ fontSize: 20, color: deltaColor }}>
           {delta > 0 ? '+' : ''}{delta.toFixed(1)} pts
         </span>
-        <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>vs {versionLabel(previous)}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 400, color: 'var(--text-muted)' }}>vs {versionLabel(previous)}</span>
       </div>
       {!comparable && (
-        <div style={{ marginTop: 6, fontSize: 10, fontWeight: 600, color: '#fab219' }}>
+        <div style={{ marginTop: 6, fontSize: 11, fontWeight: 500, color: 'var(--warn)' }}>
           Tolerance changed (±{previous.tolerance_frames}f → ±{current.tolerance_frames}f) — not strictly comparable.
         </div>
       )}
       {comparable && constantsChanged && (
-        <div style={{ marginTop: 6, fontSize: 10, fontWeight: 600, color: '#fab219' }}>
+        <div style={{ marginTop: 6, fontSize: 11, fontWeight: 500, color: 'var(--warn)' }}>
           Matching constants changed at this version — compare with care.
         </div>
       )}

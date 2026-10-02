@@ -34,16 +34,16 @@ export default function PaceChart({ time, duration, r1End, height = 150, redPace
         </linearGradient>
       </defs>
       <line x1={r1x} y1={padT - 4} x2={r1x} y2={H - padB} stroke="var(--green-500)" strokeOpacity="0.4" strokeDasharray="4 4" />
-      <text x={6} y={padT + 4} fill="var(--text-disabled)" fontSize="10" fontWeight="700">R1</text>
-      <text x={r1x + 6} y={padT + 4} fill="var(--text-disabled)" fontSize="10" fontWeight="700">R2</text>
+      <text x={6} y={padT + 4} fill="var(--text-muted)" fontSize="10" fontFamily="var(--mono)">R1</text>
+      <text x={r1x + 6} y={padT + 4} fill="var(--text-muted)" fontSize="10" fontFamily="var(--mono)">R2</text>
       <path d={area(redPace)} fill="url(#pg-red)" />
       <path d={area(bluePace)} fill="url(#pg-blue)" />
-      <path d={line(redPace)} fill="none" stroke="var(--f-red)" strokeWidth="2.5" />
-      <path d={line(bluePace)} fill="none" stroke="var(--f-blue)" strokeWidth="2.5" />
+      <path d={line(redPace)} fill="none" stroke="var(--f-red)" strokeWidth="2" />
+      <path d={line(bluePace)} fill="none" stroke="var(--f-blue)" strokeWidth="2" />
       {duration > 0 && (
         <>
-          <line x1={nowx} y1={padT - 4} x2={nowx} y2={H - padB} stroke="var(--accent)" strokeWidth="1.5" />
-          <circle cx={nowx} cy={padT - 4} r="3" fill="var(--accent)" />
+          <line x1={nowx} y1={padT - 4} x2={nowx} y2={H - padB} stroke="var(--text-primary)" strokeWidth="1.5" />
+          <circle cx={nowx} cy={padT - 4} r="3" fill="var(--text-primary)" />
         </>
       )}
       <line x1="0" y1={H - padB} x2={W} y2={H - padB} stroke="rgba(255,255,255,0.08)" />

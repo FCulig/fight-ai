@@ -41,7 +41,7 @@ export default function VersionTrendChart({ versions: runs, selectedId, onSelect
         {runs.map((r, i) => (
           i > 0 && r.tolerance_frames !== runs[i - 1].tolerance_frames && (
             <line key={`tol-${r.id}`} x1={x(i)} x2={x(i)} y1={padT} y2={H - padB}
-              stroke="rgba(250,178,25,0.5)" strokeWidth="1" strokeDasharray="3 3" />
+              stroke="color-mix(in srgb, var(--warn) 50%, transparent)" strokeWidth="1" strokeDasharray="3 3" />
           )
         ))}
         <path d={line('precision')} fill="none" stroke="color-mix(in srgb, var(--accent) 30%, transparent)" strokeWidth="1.5" strokeDasharray="3 3" />
@@ -57,7 +57,7 @@ export default function VersionTrendChart({ versions: runs, selectedId, onSelect
                   stroke="var(--cyan-400)" strokeWidth={1.5} opacity={0.4} />
               )}
               <circle cx={x(i)} cy={y(r.f1 ?? 0)} r={isSelected ? 5.5 : 3.5}
-                fill={constantsChanged ? '#0b1417' : 'var(--cyan-400)'}
+                fill={constantsChanged ? 'var(--surface-glass)' : 'var(--cyan-400)'}
                 stroke="var(--cyan-400)" strokeWidth={isSelected ? 2.5 : 1.5}>
                 <title>{versionLabel(r)} · F1 {r.f1}% · P {r.precision}% · R {r.recall}% · scored at {r.git_sha.slice(0, 7)} on {shortDate(r.generated_at)}{constantsChanged ? ' · constants changed' : ''}</title>
               </circle>
@@ -79,10 +79,10 @@ export default function VersionTrendChart({ versions: runs, selectedId, onSelect
               padding: '2px 4px', cursor: 'pointer',
             }}
           >
-            <div style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 10, fontWeight: 700, color: r.id === selectedId ? 'var(--accent-hover)' : 'var(--text-muted)' }}>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: r.id === selectedId ? 600 : 400, color: r.id === selectedId ? 'var(--text-primary)' : 'var(--text-muted)' }}>
               v{r.pipeline_version}
             </div>
-            <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-disabled)' }}>fight #{r.scored_fight_id}</div>
+            <div style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-disabled)' }}>fight #{r.scored_fight_id}</div>
           </button>
         ))}
       </div>
@@ -90,7 +90,7 @@ export default function VersionTrendChart({ versions: runs, selectedId, onSelect
         <Legend c="var(--cyan-400)" name="F1" />
         <Legend c="color-mix(in srgb, var(--accent) 30%, transparent)" name="Precision" />
         <Legend c="rgba(179,157,251,0.5)" name="Recall" />
-        <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 10.5, fontWeight: 500, color: 'var(--text-muted)' }}>
           Hollow point = matching constants changed at that version. Click a point to view its report below.
         </span>
       </div>
@@ -100,8 +100,8 @@ export default function VersionTrendChart({ versions: runs, selectedId, onSelect
 
 function Legend({ c, name }: { c: string; name: string }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 700, color: 'var(--text-tertiary)' }}>
-      <span style={{ width: 9, height: 9, borderRadius: 2, background: c, flexShrink: 0 }} />{name}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 500, color: 'var(--text-secondary)' }}>
+      <span style={{ width: 8, height: 8, borderRadius: 2, background: c, flexShrink: 0 }} />{name}
     </span>
   );
 }

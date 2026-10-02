@@ -14,8 +14,8 @@ const ROLE_HELP: Record<Role, string> = {
 
 const fieldStyle: React.CSSProperties = {
   boxSizing: 'border-box', background: 'rgba(0,0,0,0.35)',
-  border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8,
-  padding: '9px 11px', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, outline: 'none',
+  border: '1px solid var(--border-glass)', borderRadius: 6,
+  padding: '9px 11px', color: 'var(--text-primary)', fontSize: 13, fontWeight: 500, outline: 'none',
   fontFamily: 'inherit',
 };
 
@@ -77,7 +77,7 @@ export default function Users() {
         <h1 className="font-display" style={{ fontSize: isMobile ? 32 : 'clamp(36px, 4.6vw, 60px)', lineHeight: 0.94, margin: '10px 0 0', color: 'var(--text-primary)' }}>
           Users.
         </h1>
-        <p style={{ margin: '10px 0 0', fontSize: 13.5, fontWeight: 600, color: 'var(--text-muted)', maxWidth: 640 }}>
+        <p style={{ margin: '10px 0 0', fontSize: 13.5, fontWeight: 500, color: 'var(--text-muted)', maxWidth: 640 }}>
           Anyone who signs in with Google joins as a viewer. Raise their role here, or add an email
           before their first sign-in so they land with the right role.
         </p>
@@ -96,10 +96,10 @@ export default function Users() {
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </label>
-        <button type="submit" className="btn-primary" disabled={adding || !email.trim()} style={{ height: 38, padding: '0 18px', fontSize: 13, fontWeight: 700, opacity: adding || !email.trim() ? 0.5 : 1 }}>
+        <button type="submit" className="btn-primary" disabled={adding || !email.trim()} style={{ height: 38, padding: '0 18px', fontSize: 13, fontWeight: 600, opacity: adding || !email.trim() ? 0.5 : 1 }}>
           Add user
         </button>
-        <p style={{ flexBasis: '100%', margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+        <p style={{ flexBasis: '100%', margin: 0, fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>
           {role}: {ROLE_HELP[role]}.
         </p>
       </form>
@@ -115,21 +115,21 @@ export default function Users() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={5} style={{ padding: 16, color: 'var(--text-muted)', fontWeight: 600 }}>Loading…</td></tr>
+              <tr><td colSpan={5} style={{ padding: 16, color: 'var(--text-muted)', fontWeight: 500 }}>Loading…</td></tr>
             )}
             {users.map((u) => {
               const isMe = u.id === me.id;
               const busy = savingId === u.id;
               return (
                 <tr key={u.id} style={{ borderBottom: '1px solid var(--border-subtle)', opacity: u.is_active ? 1 : 0.55 }}>
-                  <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                     {u.email}
                     {isMe && <span className="pill active" style={{ marginLeft: 8, padding: '2px 8px', cursor: 'default' }}>You</span>}
                   </td>
                   <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{u.name ?? '—'}</td>
                   <td style={{ padding: '12px 16px' }}>
                     {isMe ? (
-                      <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>{u.role}</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{u.role}</span>
                     ) : (
                       <select
                         value={u.role}
@@ -144,14 +144,14 @@ export default function Users() {
                   </td>
                   <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                     {isMe ? (
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Active</span>
+                      <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Active</span>
                     ) : (
                       <button
                         type="button"
                         className="btn-glass"
                         disabled={busy}
                         onClick={() => change(u, { is_active: !u.is_active })}
-                        style={{ padding: '6px 12px', fontSize: 12, fontWeight: 700 }}
+                        style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600 }}
                       >
                         {u.is_active ? 'Disable' : 'Enable'}
                       </button>

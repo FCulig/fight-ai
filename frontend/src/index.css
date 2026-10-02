@@ -1,37 +1,45 @@
 :root {
-  font-family: 'Manrope', system-ui, sans-serif;
+  font-family: 'Archivo', system-ui, sans-serif;
+  font-stretch: 100%;
   line-height: 1.5;
   font-weight: 400;
   color-scheme: dark;
-  color: #f5f5f4;
-  background-color: #000;
+  color: #f2f1ee;
+  background-color: #0b0b0c;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* ── Brand design tokens (Fightlytics ember palette, Sept 2026) ──── */
-  --bg-base: #000;
-  --surface-glass: #0e0f12;
-  --surface-glass-2: #15171b;
+  /* ── Design tokens, shared with landing/ (Oct 2026) ────────────────
+     Off-black, never #000. Orange is the brand and the one primary action
+     per screen; selection, focus and plain data use ink, so orange never
+     sits beside the red corner as if it were a third fighter.
+     Radii: controls 6px, tiles 8px, panels 12px. */
+  --bg-base: #0b0b0c;
+  --surface-glass: #0f1012;
+  --surface-glass-2: #141518;
   --surface-inner: rgba(255,255,255,0.03);
-  --header-bg: rgba(0,0,0,0.72);
-  --text-primary: #f5f5f4;
-  --text-secondary: #dcdad5;
+  --header-bg: rgba(11,11,12,0.8);
+  --text-primary: #f2f1ee;
+  --text-secondary: #c9c7c1;
   --text-tertiary: #9a9892;
   --text-muted: #9a9892;
-  --text-disabled: #5c5a56;
+  /* 4.5:1 on the panel surface: it labels real data, so it must stay readable */
+  --text-disabled: #7d7b75;
+  --r-ctl: 6px;
+  --r-tile: 8px;
+  --r-panel: 12px;
   --accent: #ff4d1c;
   --accent-hover: #ff6a40;
   --accent-deep: #c1300a;
   --accent-on: #190500;
   --cyan-400: var(--accent);
   --cyan-600: var(--accent-deep);
-  --cyan-on: var(--accent-on);
   --accent-2: var(--accent);
   /* Kept as true distinct hues rather than brand.css's literal collapse onto
      orange/ink — several components (StateDumbbell truth-vs-predicted dots,
-     FighterColumn's Clinch vs Distance bars, SaveStatus, round markers) rely
+     the Player's strikes-by-position bars, SaveStatus, round markers) rely
      on these reading as their own colour, not a shade of the accent. See
      frontend-palette-collisions memory. */
   --purple-600: #7c3aed;
@@ -39,16 +47,18 @@
   --orange-400: #c98500;
   --orange-600: #e64a19;
   --red-500: #ef4444;
+  /* The one warning colour (caveats, unverified data). Always paired with an icon or text. */
+  --warn: #fab219;
   --slate-400: #9a9892;
   --f-red: #ef4444;
   --f-red-dim: rgba(239,68,68,0.16);
   --f-blue: rgb(96,165,250);
   --f-blue-dim: rgba(96,165,250,0.16);
-  --border-glass: rgba(255,255,255,0.10);
+  --border-glass: rgba(255,255,255,0.09);
   --border-subtle: rgba(255,255,255,0.06);
-  --border-cyan: rgba(255,77,28,0.35);
+  --border-strong: rgba(255,255,255,0.16);
   --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-  /* Annotate's STATE lane (STRIKING/CLINCH/GROUND) — validated with the
+  /* Annotate's State lane (STRIKING/CLINCH/GROUND) — validated with the
      dataviz skill's validate_palette.js against surface #0e0f12 and against
      --f-red/--f-blue (dark mode, all-pairs): all checks pass. Do not swap
      GROUND back to --f-red — that was the exact collision this fixes. */
@@ -82,11 +92,18 @@ h1, h2, h3, h4, h5, h6 {
 
 a {
   font-weight: 500;
-  color: var(--accent);
-  text-decoration: none;
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
 }
 a:hover {
-  color: var(--accent-hover);
+  text-decoration-color: currentColor;
+}
+
+::selection {
+  background: rgba(255,77,28,0.3);
+  color: #fff;
 }
 
 button {
@@ -94,23 +111,27 @@ button {
   cursor: pointer;
   border: none;
   outline: none;
-  transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s, background 0.15s;
+  transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s, background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 button:active {
-  transform: scale(0.97);
+  transform: translateY(1px);
 }
 
-/* Corner-select cards: state change (border/bg/glow) must be instant, no scale/transform. */
+/* Corner-select cards: state change (border/bg) must be instant, no transform. */
 .fighter-corner-btn,
 .fighter-corner-btn:active {
   transition: none;
   transform: none;
 }
 
-button:focus-visible {
-  outline: 2px solid var(--accent);
+:focus-visible {
+  outline: 2px solid var(--text-primary);
   outline-offset: 2px;
+}
+
+input, select, textarea {
+  font-family: inherit;
 }
 
 .material-symbols-outlined {
@@ -118,11 +139,23 @@ button:focus-visible {
   user-select: none;
 }
 
-/* ── Display font ──────────────────────────────────── */
+/* ── Type ──────────────────────────────────────────── */
 
+/* Headings: condensed heavy Archivo, written in sentence case. */
 .font-display {
-  font-family: 'Bebas Neue', sans-serif;
-  letter-spacing: 0.02em;
+  font-family: 'Archivo', sans-serif;
+  font-stretch: 72%;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+/* Figures: every stat, count and score, so digits line up and read as data. */
+.font-num {
+  font-family: var(--mono);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Entry animations ──────────────────────────────── */
@@ -133,7 +166,7 @@ button:focus-visible {
 }
 
 .anim-fade-up {
-  animation: fade-up 0.5s ease-out both;
+  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .anim-delay-1 { animation-delay: 0.08s; }
@@ -158,12 +191,12 @@ button:focus-visible {
   to   { opacity: 0;    transform: translate(-50%, -50%) scale(1.35); }
 }
 
-/* ── Hover states ───────────────────────────────────── */
+/* ── Buttons ───────────────────────────────────────── */
 
 .btn-glass {
   background: transparent;
-  border: 1px solid rgba(255,255,255,0.28);
-  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-ctl);
   color: var(--text-primary);
   display: flex;
   align-items: center;
@@ -175,21 +208,31 @@ button:focus-visible {
   color: var(--text-primary);
 }
 
-.btn-primary:hover {
-  background: var(--accent-hover);
-}
-
+/* The one orange action on a screen. */
 .btn-upload,
 .btn-primary {
   background: var(--accent);
   color: var(--accent-on);
   border: none;
-  border-radius: 999px;
-  box-shadow: none;
+  border-radius: var(--r-ctl);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22);
 }
 
-.btn-upload:hover {
+.btn-upload:hover,
+.btn-primary:hover {
   background: var(--accent-hover);
+}
+
+/* A strong action that isn't the screen's primary: ink on dark, no orange. */
+.btn-ink {
+  background: var(--text-primary);
+  color: var(--bg-base);
+  border: none;
+  border-radius: var(--r-ctl);
+}
+
+.btn-ink:hover {
+  background: #fff;
 }
 
 .logo {
@@ -216,29 +259,22 @@ button:focus-visible {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg stroke='%23ff4d1c' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M26 70h56v10c0 4-4 8-8 8H34c-4 0-8-4-8-8z' fill='rgba(255,77,28,.06)' stroke-width='6.5'/%3E%3Cpath d='M24 34h-8c-6 0-11 5-11 11 0 6 5 10 11 10h8z' fill='rgba(255,77,28,.12)' stroke-width='6.5'/%3E%3Cpath d='M38 18h32c8 0 14 6 14 14v24c0 8-6 14-14 14H38c-8 0-14-6-14-14V32c0-8 6-14 14-14z' fill='rgba(255,77,28,.12)' stroke-width='6.5'/%3E%3Cpath d='M40 24v18M54 24v18M68 24v18' fill='none' stroke-width='5.5'/%3E%3Cpath d='M38 76h32M38 83h32' fill='none' stroke-width='4.5'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;
 }
 
+/* A quiet section label above a page title. */
 .eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--accent);
-}
-.eyebrow::before {
-  content: '';
-  width: 15px;
-  height: 15px;
-  background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg stroke='%23000' fill='none' stroke-linejoin='round' stroke-linecap='round' stroke-width='8'%3E%3Cpath d='M26 70h56v10c0 4-4 8-8 8H34c-4 0-8-4-8-8z'/%3E%3Cpath d='M24 34h-8c-6 0-11 5-11 11 0 6 5 10 11 10h8z'/%3E%3Cpath d='M38 18h32c8 0 14 6 14 14v24c0 8-6 14-14 14H38c-8 0-14-6-14-14V32c0-8 6-14 14-14z'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg stroke='%23000' fill='none' stroke-linejoin='round' stroke-linecap='round' stroke-width='8'%3E%3Cpath d='M26 70h56v10c0 4-4 8-8 8H34c-4 0-8-4-8-8z'/%3E%3Cpath d='M24 34h-8c-6 0-11 5-11 11 0 6 5 10 11 10h8z'/%3E%3Cpath d='M38 18h32c8 0 14 6 14 14v24c0 8-6 14-14 14H38c-8 0-14-6-14-14V32c0-8 6-14 14-14z'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .nav-link {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 500;
   color: var(--text-muted);
-  padding: 8px 16px;
-  border-radius: 999px;
+  padding: 8px 14px;
+  border-radius: var(--r-ctl);
   border: 1px solid transparent;
   text-decoration: none;
   cursor: pointer;
@@ -260,18 +296,18 @@ button:focus-visible {
   background: rgba(255,255,255,0.03) !important;
 }
 
-/* ── Glass surfaces & helper classes ───────────────── */
+/* ── Surfaces & helper classes ─────────────────────── */
 
 .glass {
   background: var(--surface-glass);
   border: 1px solid var(--border-glass);
-  border-radius: 16px;
+  border-radius: var(--r-panel);
 }
 
 .inner-tile {
   background: var(--surface-inner);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--r-tile);
 }
 
 .divider {
@@ -282,28 +318,32 @@ button:focus-visible {
 }
 
 .label {
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   text-transform: none;
   letter-spacing: 0;
   color: var(--text-muted);
 }
 
 .pill {
-  font-size: 11.5px;
-  font-weight: 700;
-  padding: 6px 13px;
-  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--r-ctl);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
 }
 
+.pill:hover {
+  color: var(--text-primary);
+}
+
 .pill.active {
   background: var(--surface-glass-2);
   color: var(--text-primary);
-  border-color: var(--border-glass);
+  border-color: var(--border-strong);
   box-shadow: none;
 }
 
@@ -315,7 +355,7 @@ button:focus-visible {
 }
 
 @keyframes pulse-ring {
-  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--text-primary) 40%, transparent); }
   70%  { box-shadow: 0 0 0 8px transparent; }
   100% { box-shadow: 0 0 0 0 transparent; }
 }
@@ -346,15 +386,14 @@ button:focus-visible {
   min-width: 22px;
   height: 22px;
   padding: 0 6px;
-  border-radius: 6px;
+  border-radius: var(--r-ctl);
   background: rgba(255,255,255,0.07);
   border: 1px solid var(--border-glass);
   border-bottom-width: 2px;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
   color: var(--text-secondary);
-  font-family: 'Manrope', sans-serif;
-  letter-spacing: 0.02em;
+  font-family: var(--mono);
   flex-shrink: 0;
 }
 
@@ -364,11 +403,11 @@ button:focus-visible {
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--r-ctl);
   border: 1px solid;
   font-size: 12px;
-  font-weight: 800;
-  font-family: 'Manrope', sans-serif;
+  font-weight: 600;
+  font-family: var(--mono);
   flex-shrink: 0;
 }
 
@@ -391,25 +430,28 @@ button:focus-visible {
 
 /* ── Training Data QA ──────────────────────────────── */
 
-.td-class:hover, .td-row:hover {
-  border-color: var(--border-glass);
+.td-row:hover {
+  border-color: var(--border-strong);
   background: var(--surface-glass-2);
+}
+/* a row inside the class table: only the fill changes, the dividers stay put */
+.td-class:not(:disabled):hover {
+  background: var(--surface-glass-2) !important;
 }
 
 /* ── Fight list ─────────────────────────────────────── */
 
 .fight-card {
-  transition: border-color .15s, background .15s;
+  transition: background .15s;
 }
 .fight-card.is-ready:hover {
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  background: var(--surface-glass-2);
 }
 
 .icon-btn {
   width: 40px;
   height: 40px;
-  border-radius: 999px;
+  border-radius: var(--r-ctl);
   display: grid;
   place-items: center;
   background: transparent;
@@ -421,4 +463,9 @@ button:focus-visible {
 .icon-btn:hover {
   color: var(--text-primary);
   background: var(--surface-glass-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-fade-up { animation: none; }
+  button:active { transform: none; }
 }

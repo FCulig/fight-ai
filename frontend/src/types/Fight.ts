@@ -33,7 +33,7 @@ export const PURPOSE_LABELS: Record<FightPurpose, string> = {
 
 /**
  * Deliberately avoids --f-red/--f-blue (corner colours — a badge in either
- * would read as "red corner"), --red-500 (error) and #f59e0b (the
+ * would read as "red corner"), --red-500 (error) and --warn (the
  * rounds-unverified warning). Violet is new to the palette. Colour is a
  * redundant channel here anyway: every badge carries its text label.
  */

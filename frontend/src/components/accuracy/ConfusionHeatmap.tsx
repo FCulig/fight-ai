@@ -6,8 +6,9 @@ interface ConfusionHeatmapProps {
   emptyLabel?: string;
 }
 
-const ramp = (t: number) => `color-mix(in srgb, var(--accent) ${8 + Math.max(0, Math.min(1, t)) * 84}%, #0b1417)`;
-const rampInk = (t: number) => (t > 0.55 ? '#04181c' : '#f1f5f9');
+// Orange here is the model: these cells count its predictions against the labels.
+const ramp = (t: number) => `color-mix(in srgb, var(--accent) ${8 + Math.max(0, Math.min(1, t)) * 84}%, var(--surface-glass-2))`;
+const rampInk = (t: number) => (t > 0.55 ? 'var(--accent-on)' : 'var(--text-primary)');
 
 /**
  * Shared truth-rows × predicted-columns heatmap — Section E4 (strike family
@@ -19,7 +20,7 @@ const rampInk = (t: number) => (t > 0.55 ? '#04181c' : '#f1f5f9');
 export default function ConfusionHeatmap({ confusion, emptyLabel = 'No matched pairs yet.' }: ConfusionHeatmapProps) {
   const entries = Object.entries(confusion).filter(([, n]) => n > 0);
   if (entries.length === 0) {
-    return <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)' }}>{emptyLabel}</div>;
+    return <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-muted)' }}>{emptyLabel}</div>;
   }
 
   const truths = new Set<string>();
@@ -42,23 +43,23 @@ export default function ConfusionHeatmap({ confusion, emptyLabel = 'No matched p
       <div style={{ display: 'grid', gridTemplateColumns: `84px repeat(${cols.length}, minmax(48px, 1fr))`, gap: 5, minWidth: 84 + cols.length * 52 }}>
         <span />
         {cols.map((c) => (
-          <span key={c} style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textAlign: 'center' }}>{c}</span>
+          <span key={c} style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>{c}</span>
         ))}
         {rows.map((r) => (
           <Fragment key={r}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', alignSelf: 'center' }}>{r}</span>
+            <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', alignSelf: 'center' }}>{r}</span>
             {cols.map((c) => {
               const n = cell.get(`${r}>${c}`) ?? 0;
               const t = max ? n / max : 0;
               const diag = r === c;
               return (
                 <div key={`${r}-${c}`} title={`${r} → ${c}: ${n}`} style={{
-                  height: 32, borderRadius: 6, display: 'grid', placeItems: 'center',
+                  height: 32, borderRadius: 4, display: 'grid', placeItems: 'center',
                   background: n ? ramp(t) : 'rgba(255,255,255,0.02)',
                   border: '1px solid rgba(255,255,255,0.05)',
                 }}>
                   <span style={{
-                    fontSize: 12, fontWeight: diag ? 800 : 600, fontVariantNumeric: 'tabular-nums',
+                    fontFamily: 'var(--mono)', fontSize: 12, fontWeight: diag ? 600 : 400, fontVariantNumeric: 'tabular-nums',
                     color: n ? rampInk(t) : 'var(--text-disabled)',
                   }}>{n || 0}</span>
                 </div>
