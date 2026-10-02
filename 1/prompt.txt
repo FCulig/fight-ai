@@ -1,0 +1,1 @@
+If I implement the graphify into the current project setup, will it be better or worse approach than having the documentation that is currently there and reguarly updated by agents after each change?

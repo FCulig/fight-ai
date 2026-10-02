@@ -1,0 +1,89 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M3XHM1KARNFMG73C8HF8C9FF",
+  "session_id": "49dbd0e9-072e-4120-8ca2-52048f9d9dd9",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-02T05:33:03.34351Z",
+  "branch": "master",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "landing/app/mockup.jsx",
+    "landing/app/sections.css",
+    "landing/app/styles.css",
+    "landing/app/v2.css",
+    "landing/app/v2.jsx",
+    "landing/index.html"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "d28420b2a172",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 6,
+    "cache_creation_tokens": 29042,
+    "cache_read_tokens": 161799,
+    "output_tokens": 2623,
+    "api_call_count": 3
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-02T05:33:03.329687Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 1349,
+    "total_committed": 19,
+    "total_lines_changed": 1349,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 8224,
+      "user_lines_removed": 1349,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".agents/skills/brandkit/SKILL.md": 798,
+        ".agents/skills/design-taste-frontend-v1/SKILL.md": 226,
+        ".agents/skills/design-taste-frontend/SKILL.md": 1206,
+        ".agents/skills/full-output-enforcement/SKILL.md": 49,
+        ".agents/skills/gpt-taste/SKILL.md": 74,
+        ".agents/skills/high-end-visual-design/SKILL.md": 98,
+        ".agents/skills/image-to-code/SKILL.md": 1228,
+        ".agents/skills/imagegen-frontend-mobile/SKILL.md": 1465,
+        ".agents/skills/imagegen-frontend-web/SKILL.md": 987,
+        ".agents/skills/industrial-brutalist-ui/SKILL.md": 92,
+        ".agents/skills/minimalist-ui/SKILL.md": 85,
+        ".agents/skills/redesign-existing-projects/SKILL.md": 178,
+        ".agents/skills/stitch-design-taste/DESIGN.md": 121,
+        ".agents/skills/stitch-design-taste/SKILL.md": 184,
+        ".claude/settings.local.json": 29,
+        ".claude/skills/web-design-guidelines/SKILL.md": 39,
+        "landing/CLAUDE.md": 9,
+        "landing/app/app.jsx": 199,
+        "landing/app/data.js": 6,
+        "landing/app/fight.jsx": 122,
+        "landing/app/pager.js": 139,
+        "landing/app/site.css": 272,
+        "landing/app/stage.jsx": 461,
+        "landing/export_data.py": 58,
+        "landing/index.html": 16,
+        "skills-lock.json": 83
+      },
+      "user_removed_per_file": {
+        "landing/app/mockup.jsx": 133,
+        "landing/app/sections.css": 379,
+        "landing/app/styles.css": 332,
+        "landing/app/v2.css": 150,
+        "landing/app/v2.jsx": 345,
+        "landing/index.html": 10
+      }
+    }
+  ]
+}
