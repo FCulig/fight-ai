@@ -1,0 +1,9 @@
+okay lets start with this setup of deployment, first lets deploy the DB, where can we host this DB for free if possible?
+
+---
+
+But oracle free tier is only for 30 days
+
+---
+
+I am okay with up to 20 GB of storage, if needed, we can move the fight videos to be hosted somewhere else (if we do that, will there be delays with video streaming or something like that?)
