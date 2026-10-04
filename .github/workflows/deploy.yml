@@ -99,8 +99,9 @@ jobs:
         env:
           SITE: https://${{ vars.SITE_ADDRESS }}
         run: |
-          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors -o /dev/null "$SITE/"
+          # Cap each attempt: an unreachable port otherwise waits ~2 min per try.
+          curl -fsS --connect-timeout 10 --max-time 30 --retry 10 --retry-delay 6 --retry-all-errors -o /dev/null "$SITE/"
           # /api must reach FastAPI (JSON), not fall through to the SPA.
-          result=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$SITE/api/auth/me")
+          result=$(curl -s --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code} %{content_type}' "$SITE/api/auth/me")
           echo "GET /api/auth/me -> $result"
           [[ "$result" =~ ^(200|401)\ application/json ]]
