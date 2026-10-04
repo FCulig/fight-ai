@@ -58,6 +58,7 @@ ssh ubuntu@<SERVER_IP> "DEPLOY_PUBKEY='$(cat ~/.ssh/fight_ai_deploy.pub)' bash b
 [`bootstrap-server.sh`](bootstrap-server.sh) does the following:
 - installs Docker;
 - opens 80/443 in the VM's own firewall (Oracle's image blocks everything but SSH);
+- adds a 4 GB swap file;
 - clones the repo and creates the data directories;
 - writes `/opt/fight-ai/.env` with a generated database password and session secret;
 - restricts the deploy key to `remote-deploy.sh`;

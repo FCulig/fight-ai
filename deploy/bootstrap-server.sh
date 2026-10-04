@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# One-time setup of a fresh Oracle Cloud VM (Canonical Ubuntu 24.04, arm64),
-# run as the default `ubuntu` user. Safe to re-run. From your laptop:
+# One-time setup of a fresh Oracle Cloud VM (Canonical Ubuntu, arm64), run as
+# the default `ubuntu` user. Safe to re-run. From your laptop:
 #
 #   scp deploy/bootstrap-server.sh ubuntu@<SERVER_IP>:
 #   ssh ubuntu@<SERVER_IP> "DEPLOY_PUBKEY='$(cat ~/.ssh/fight_ai_deploy.pub)' bash bootstrap-server.sh"
@@ -11,10 +11,15 @@ set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/FCulig/fight-ai.git}"
 
+# Waits for the dpkg lock (unattended-upgrades often holds it) instead of failing.
+apt_get() {
+  sudo DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 "$@"
+}
+
 install_docker() {
   if command -v docker > /dev/null; then return; fi
-  sudo apt-get update
-  sudo apt-get install -y ca-certificates curl git
+  apt_get update
+  apt_get install -y ca-certificates curl git
   sudo install -m 0755 -d /etc/apt/keyrings
   sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
   sudo chmod a+r /etc/apt/keyrings/docker.asc
@@ -22,8 +27,8 @@ install_docker() {
   # shellcheck disable=SC1091
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
     | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-  sudo apt-get update
-  sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  apt_get update
+  apt_get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   # Rotate container logs; the default json-file driver grows without limit.
   echo '{"log-driver": "json-file", "log-opts": {"max-size": "20m", "max-file": "5"}}' \
     | sudo tee /etc/docker/daemon.json > /dev/null
@@ -35,7 +40,7 @@ install_docker() {
 # through, so accept 80/443 ahead of it. The VCN security list must allow them too.
 open_firewall() {
   if ! command -v netfilter-persistent > /dev/null; then
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
+    apt_get install -y iptables-persistent
   fi
   local rule reject_at
   for rule in "-p tcp --dport 80" "-p tcp --dport 443" "-p udp --dport 443"; do
@@ -46,6 +51,17 @@ open_firewall() {
     sudo iptables -I INPUT "${reject_at:-1}" $rule -j ACCEPT
   done
   sudo netfilter-persistent save
+}
+
+# A 4 GB swap file, so a memory spike (an image build, or a request for a long
+# fight's frames) slows the server down instead of getting a process killed.
+add_swap() {
+  if [ -n "$(swapon --show)" ]; then return; fi
+  sudo fallocate -l 4G /swapfile
+  sudo chmod 600 /swapfile
+  sudo mkswap /swapfile > /dev/null
+  sudo swapon /swapfile
+  echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
 }
 
 prepare_dirs() {
@@ -87,6 +103,7 @@ install_backup_cron() {
 main() {
   install_docker
   open_firewall
+  add_swap
   prepare_dirs
   install_deploy_key
   install_backup_cron
