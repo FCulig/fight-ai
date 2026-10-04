@@ -29,7 +29,7 @@ Subsystem rules load when you open matching files:
 ## Running
 - `python main.py` runs batch mode. It registers new files in `fight_videos/` with `ON CONFLICT DO NOTHING`, then processes every fight not in `completed`, `labeling_*`, `validating` or `invalid`. `failed` fights are retried on purpose. A file replaced at the same path isn't picked up again, so use single-file mode for it.
 - `python main.py fight.mp4` runs single-file mode. Its upsert resets `state='queued'`, and existing child rows are treated as stale. With `--skip-events` it stops at `labeling_in_progress` (the manual-labelling track).
-- Uploads don't start here. The backend first runs `eval.cli video --fight-id <id>` (full decode, state `validating`). That marks a truncated file `invalid`, or spawns `main.py` itself and hands over the pid (`_validate_and_dispatch` in `eval/cli.py`).
+- Uploads don't start here. The backend first runs `eval.cli video --fight-id <id>` (full decode, state `validating`). That marks a truncated file `invalid`, or spawns `main.py` itself and hands over the pid (`_validate_and_dispatch` in `eval/cli.py`). With `PIPELINE_DISPATCH=queue`, set on the deployed server because it has no torch, it stops at `queued` instead, for a pipeline worker to pick up.
 
 ## Weights
 - `yolo26x-pose.pt` (working dir): the XL pose model. It supplies every box and skeleton.

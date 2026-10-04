@@ -1,0 +1,8 @@
+# Installed on the server together with db/requirements.txt, into the slim ai/
+# interpreter (see deploy/Dockerfile). It runs only the upload validator
+# (eval.cli video), the backend's video metadata probe and Alembic, so it
+# leaves out torch and the rest of the pipeline. Keep the pins in step with
+# ai/requirements-base.txt.
+numpy==2.4.0
+opencv-python-headless==4.13.0.92
+scipy==1.17.0

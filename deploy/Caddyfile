@@ -1,0 +1,21 @@
+# Caddy gets and renews the TLS certificate for SITE_ADDRESS by itself. That
+# needs the hostname's DNS A record pointing at this server and ports 80 and
+# 443 open in both the Oracle security list and the VM's iptables (README.md).
+{$SITE_ADDRESS} {
+	# Compress JSON (a fight's frames are tens of MB) and the SPA. Never the SSE
+	# stream, where buffering would hold back live state updates, and never
+	# video, which is already compressed.
+	encode {
+		zstd
+		gzip
+		match {
+			header Content-Type application/json*
+			header Content-Type application/javascript*
+			header Content-Type text/javascript*
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type image/svg+xml*
+		}
+	}
+	reverse_proxy backend:8000
+}

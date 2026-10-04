@@ -14,6 +14,7 @@ Run it from `backend/` with `uvicorn app.main:app --reload`. It uses `backend/.v
 - `ADMIN_EMAILS` (comma-separated) makes those addresses admin **when their row is created** on first sign-in. It is not re-applied later.
 - `DEV_LOGIN=1` (local only) mounts `GET /auth/dev-login`. Startup fails if it is set while `PUBLIC_BASE_URL` is anything but `http://localhost` or `http://127.0.0.1`, so it can never be live on a deployed instance.
 - `FRONTEND_DIST` (prod only) serves the built SPA from this origin, with an `index.html` fallback for client routes.
+- `PIPELINE_DISPATCH=queue` (prod only, set in `deploy/Dockerfile`) is inherited by the validator subprocess, which then leaves a valid upload `queued` instead of spawning `main.py`. The server has no torch.
 
 ## Auth
 Route paths elsewhere in this file omit the `/api` prefix.
@@ -46,7 +47,7 @@ Route paths elsewhere in this file omit the `/api` prefix.
 - **Upload flow:**
   1. `POST /fights/upload` creates the row at `validating` and calls `pipeline_runner.run_validation_async()`.
   2. That runs `eval.cli video --fight-id` in the ai venv.
-  3. The validator either marks the fight `invalid` or spawns `main.py` and records its pid, all through `ai/database.py`. The backend never relays state.
+  3. The validator either marks the fight `invalid` or spawns `main.py` and records its pid (or, with `PIPELINE_DISPATCH=queue`, sets `queued`), all through `ai/database.py`. The backend never relays state.
   4. `utils/fight_state_listener.py` fans `pg_notify('fight_state')` out to the `/fights/stream` SSE.
 - **`DELETE /fights/{id}`** kills the running pipeline or validator, unlinks the video, and deletes the row (child rows cascade).
   - It only signals a pid whose command line matches `pipeline_runner._AI_ENTRYPOINTS`, so a recycled OS pid is never killed. **Any new AI-venv job spawned from `pipeline_runner.py` must add its marker there.**

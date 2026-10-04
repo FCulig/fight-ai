@@ -33,3 +33,6 @@ Every layer depends on these. Breaking one in one place breaks the others.
 
 ## Schema
 The source of truth is `db/alembic/versions/` plus `backend/app/models/`. The pipeline writes raw SQL (`ai/fight_processing/`), so check all three when you change a column.
+
+## Deployment
+Production deploys from the `release` branch. Every push runs `.github/workflows/deploy.yml`, which runs the tests and then `deploy/remote-deploy.sh` on the server over SSH. So only push to `release` when a deploy is wanted. The server has no torch: it validates uploads and leaves them `queued` (`PIPELINE_DISPATCH=queue`) for a pipeline worker. Setup and operations are in `deploy/README.md`.

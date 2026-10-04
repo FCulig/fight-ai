@@ -1,0 +1,22 @@
+# The build context is the repo root (see deploy/compose.yml). Keep it to what
+# deploy/Dockerfile copies, and never let a local .env into an image.
+**/.git
+**/.venv
+**/venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+**/.envrc
+**/.claude
+**/.DS_Store
+*.dump
+.agents
+.entire
+landing
+frontend/dist
+ai/fight_videos
+ai/runs
+ai/frames
+ai/*.pt

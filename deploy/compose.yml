@@ -1,0 +1,67 @@
+# Production stack. deploy.sh runs it on the server, from this directory, after
+# symlinking .env -> /opt/fight-ai/.env (template: env.example). Compose reads
+# .env for ${VAR} interpolation, and the backend also gets it as env_file.
+name: fight-ai
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    # Postgres uses /dev/shm for parallel queries; Docker's 64 MB default can
+    # make large ones fail.
+    shm_size: 1g
+    # Loopback only: the pipeline worker, psql and pg_dump reach it through an
+    # SSH tunnel. Never publish it on a public interface.
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: fight-ai-backend
+    restart: unless-stopped
+    # The host user that owns /srv/fight-ai, so videos copied in over SSH and
+    # files the backend writes share an owner. bootstrap-server.sh sets these.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    volumes:
+      - /srv/fight-ai/videos:/app/ai/fight_videos
+      - /srv/fight-ai/runs:/app/ai/runs
+    depends_on:
+      db:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

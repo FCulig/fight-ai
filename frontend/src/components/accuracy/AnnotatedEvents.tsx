@@ -143,7 +143,7 @@ function StateMix({ events }: StateMixProps) {
     };
 
     const famRows = STRIKE_FAMILIES.map((fam) => ({ name: fam, STRIKING: 0, CLINCH: 0, GROUND: 0, NONE: 0 }));
-    const famIndex = new Map(famRows.map((r, i) => [r.name, i]));
+    const famIndex = new Map<string, number>(famRows.map((r, i) => [r.name, i]));
     const ov = { STRIKING: 0, CLINCH: 0, GROUND: 0, NONE: 0 };
 
     events.forEach((e) => {

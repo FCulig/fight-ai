@@ -77,6 +77,7 @@ def _validate_and_dispatch(fight_id: int, video: str, rep, skip_events: bool) ->
     `eval.cli video` alone only prints a report and returns an exit code.
     See plan 0b.
     """
+    import os
     import subprocess
     import sys
     from pathlib import Path
@@ -93,6 +94,12 @@ def _validate_and_dispatch(fight_id: int, video: str, rep, skip_events: bool) ->
     # Clear the validator's own pid before spawning the pipeline so there is
     # no window where `pid` names a process that has already exited.
     set_fight_pid(fight_id, None)
+
+    # The deployed server has no torch, so it never runs the pipeline itself:
+    # the fight waits in `queued` for a pipeline worker (deploy/README.md).
+    if os.getenv("PIPELINE_DISPATCH") == "queue":
+        set_fight_state(fight_id, S.QUEUED)
+        return
 
     ai_dir = Path(__file__).resolve().parents[1]
     log_dir = ai_dir / "runs"
