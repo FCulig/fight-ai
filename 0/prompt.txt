@@ -1,0 +1,45 @@
+In the first step, I am not able to enable automatically assign public IPv4: You must select a public subnet to assign a public IPv4 address.
+
+---
+
+What is dns label, I need to set it.
+
+---
+
+I also need to asign IPv4 CIDR Blocks
+
+---
+
+It says that these overlap
+
+---
+
+I am now getting Out of host capacity error, and not able to select different placement
+
+---
+
+How to login into oracle cloud? I cannot login anymore in any of their services, I know I have to find a region for login but they have really bad UI and not easy to find login
+
+---
+
+Day after I am still getting the error: Out of capacity for shape VM.Standard.A1.Flex in availability domain AD-1. Create the instance in a different availability domain or try again later.If you specified a fault domain, try creating the instance without specifying a fault domain. If that doesn’t work, please try again later.Learn more about host capacity.
+
+---
+
+How much would this cost on oracle per month?
+
+---
+
+When I setup the current stuff I get the following estimated cost €5.93/month
+
+---
+
+I don't see the web ports to setup port and ingress rules
+
+---
+
+Okay I have setup duckDNS: success: ip address for fightlytics.duckdns.org updated to 84.8.250.67
+
+---
+
+Lets do it
