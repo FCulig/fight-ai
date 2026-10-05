@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M45GG91XF370Z1AKMA0VB6TD",
+  "strategy": "manual-commit",
+  "branch": "master",
+  "checkpoints_count": 7,
+  "files_touched": [
+    "CLAUDE.md",
+    "ai/.gitignore",
+    "ai/CLAUDE.md",
+    "ai/database.py",
+    "ai/main.py",
+    "ai/pipeline.py",
+    "backend/CLAUDE.md",
+    "backend/app/api/routes/fights.py",
+    "backend/app/models/fight.py",
+    "backend/app/services/email_service.py",
+    "backend/app/services/fight_service.py",
+    "backend/app/services/notification_service.py",
+    "backend/app/utils/fight_state_listener.py",
+    "backend/tests/test_auth.py",
+    "backend/tests/test_notifications.py",
+    "db/alembic/versions/7f3c2a9d1e04_add_uploaded_by_to_fights.py",
+    "deploy/README.md",
+    "deploy/bootstrap-server.sh",
+    "deploy/env.example",
+    "deploy/worker.sh",
+    "frontend/src/types/Fight.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 626,
+    "cache_creation_tokens": 3557968,
+    "cache_read_tokens": 79376895,
+    "output_tokens": 576862,
+    "api_call_count": 143
+  }
+}
