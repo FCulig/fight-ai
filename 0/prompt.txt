@@ -93,3 +93,13 @@ Okay, now how are we going to solve the video processing? Running the AI pipelin
 ---
 
 Yes, lets do it like that. Could we also implement email notifications as a part of it? Email sent out to admins where it says that there are videos queued for local runs. Also when video is processed, email is sent out to the person who uploaded the video.
+
+---
+
+<task-notification>
+<task-id>bmpldj5uz</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/e9193d98-f9bd-4238-b701-2b6d8617fb24/tasks/bmpldj5uz.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait for the worker to finish the test fight, then report" completed (exit code 0)</summary>
+</task-notification>
