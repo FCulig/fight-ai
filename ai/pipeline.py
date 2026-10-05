@@ -464,12 +464,15 @@ def run_pipeline(
             # the strike/fight-state detection state machine entirely — the
             # user tags those by hand on the Annotate screen. The fight stays
             # in labeling_in_progress until they finish (no COMPLETED here).
-            set_fight_state(fight_id, S.LABELING_IN_PROGRESS)
+            # That state is set only once the frames are committed: it tells
+            # the UI, and the uploader by email, that the fight can be labelled.
+            set_fight_state(fight_id, S.ANALYZING)
             from fight_processing.fight_processing import write_frames_and_rounds
             print("Writing fighter frames + rounds (event detection skipped) …")
             t0 = time.perf_counter()
             write_frames_and_rounds(pose_data, fight_id=fight_id, fps=fps, rounds=rounds)
             timings["fight_processing"] = time.perf_counter() - t0
+            set_fight_state(fight_id, S.LABELING_IN_PROGRESS)
         elif run_fight:
             set_fight_state(fight_id, S.ANALYZING)
             from fight_processing.fight_processing import process_fight
@@ -636,3 +639,125 @@ def run_batch(
                 f"ERROR: Fight {row.id} failed — "
                 "state set to 'failed', will retry on next run."
             )
+
+
+# ---------------------------------------------------------------------------
+# Pipeline worker
+# ---------------------------------------------------------------------------
+
+def run_worker(
+    video_source: str,
+    cache_dir: str   = "worker_cache",
+    poll_secs: int   = 15,
+    debug_level: str = "normal",
+) -> None:
+    """Process queued fights one at a time until Ctrl-C.
+
+    For a machine with a GPU working against a database it doesn't host
+    (deploy/worker.sh). The server validates uploads and leaves them `queued`.
+    This claims each one, copies its video by file name from `video_source`
+    into `cache_dir`, and runs the pipeline the fight's purpose asks for.
+    `video_source` is any directory rsync accepts: `ubuntu@host:/srv/fight-ai/videos`,
+    or a local path.
+    """
+    import traceback
+    from database import WorkerLock, claim_next_queued_fight, requeue_abandoned_fights
+
+    lock = WorkerLock()
+    if not _hold_worker_lock(lock):
+        return
+    requeued = requeue_abandoned_fights()
+    if requeued:
+        print(f"Back in the queue, left unfinished by an earlier run: {requeued}")
+    cache = Path(cache_dir)
+    cache.mkdir(parents=True, exist_ok=True)
+    print(f"Worker ready. Checking for queued fights every {poll_secs}s; Ctrl-C to stop.")
+
+    try:
+        while True:
+            try:
+                if not _hold_worker_lock(lock):
+                    return
+                job = claim_next_queued_fight()
+            except Exception as e:
+                # The tunnel is down (sleep, network change): wait for it.
+                print(f"Database unreachable ({e.__class__.__name__}), retrying in {poll_secs}s")
+                time.sleep(poll_secs)
+                continue
+            if job is None:
+                time.sleep(poll_secs)
+                continue
+            try:
+                ok = _run_job(job, video_source, cache, debug_level)
+            except Exception:
+                traceback.print_exc()
+                ok = False
+            if not ok:
+                time.sleep(poll_secs)
+    except KeyboardInterrupt:
+        print("\nWorker stopped. A fight it was processing goes back in the queue on the next start.")
+    finally:
+        lock.release()
+
+
+def _hold_worker_lock(lock, patience_secs: int = 180) -> bool:
+    """Hold the worker lock. It can still belong to this worker's previous
+    session for about 90 s after the laptop wakes, so wait that out before
+    concluding another worker has the queue."""
+    deadline = time.monotonic() + patience_secs
+    while not lock.ensure():
+        if time.monotonic() > deadline:
+            print("Another worker holds the queue: exiting.")
+            return False
+        print("The worker lock is held, probably by this worker's previous session; waiting …")
+        time.sleep(15)
+    return True
+
+
+def _run_job(job, video_source: str, cache: Path, debug_level: str) -> bool:
+    """Process one claimed fight. Returns False when the caller should back off
+    because the video couldn't be fetched and the fight went back in the queue."""
+    import subprocess
+    import traceback
+
+    name  = Path(job.video_path).name
+    local = cache / name
+    print(f"\n{'=' * 60}\nFight {job.id} ({job.purpose}): {name}")
+
+    fetch = subprocess.run(["rsync", "-a", "--partial", f"{video_source.rstrip('/')}/{name}", str(local)])
+    if fetch.returncode == 23:  # rsync: the file isn't at the source
+        print(f"{name} is missing from {video_source}: marking the fight failed.")
+        set_fight_state(job.id, S.FAILED)
+        return True
+    if fetch.returncode != 0:
+        print(f"Couldn't fetch {name} (rsync exit {fetch.returncode}); back in the queue.")
+        set_fight_state(job.id, S.QUEUED)
+        return False
+
+    skip_events = job.purpose != "ai_labeled"
+    try:
+        run_pipeline(str(local), fight_id=job.id, skip_events=skip_events, debug_level=debug_level)
+    except Exception:
+        # run_pipeline has already marked the fight failed.
+        traceback.print_exc()
+        print(f"Fight {job.id} failed.")
+        return True
+    if not skip_events:
+        # The AI track's final state is the caller's to set (labelling
+        # purposes end in labeling_in_progress inside run_pipeline).
+        _retry(lambda: set_fight_state(job.id, S.COMPLETED))
+    local.unlink(missing_ok=True)
+    print(f"Fight {job.id} done.")
+    return True
+
+
+def _retry(fn, attempts: int = 20, delay_secs: int = 15):
+    """Retry a final DB write while the tunnel reconnects."""
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except Exception as e:
+            if attempt == attempts - 1:
+                raise
+            print(f"Database write failed ({e.__class__.__name__}), retrying in {delay_secs}s")
+            time.sleep(delay_secs)

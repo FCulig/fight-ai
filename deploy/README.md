@@ -15,7 +15,7 @@ On the VM:
 | `/srv/fight-ai/videos` | Fight videos |
 | `/srv/fight-ai/backups` | Nightly database dumps |
 
-**The server never runs the pipeline.** It has no torch. Uploads are validated with a full decode, then stay `queued` (`PIPELINE_DISPATCH=queue`) until a pipeline worker on a machine with a GPU processes them.
+**The server never runs the pipeline.** It has no torch. Uploads are validated with a full decode, then stay `queued` (`PIPELINE_DISPATCH=queue`) until the pipeline worker processes them on a machine with a GPU (see [Processing uploads](#processing-uploads)).
 
 The landing page (`landing/`) is not deployed yet.
 
@@ -29,6 +29,30 @@ Every push to the `release` branch runs [`.github/workflows/deploy.yml`](../.git
 3. A smoke test checks the public URL.
 
 To deploy: `git push origin master:release`.
+
+## Processing uploads
+The server can't run the pipeline, so uploads wait in `queued` until the pipeline worker processes them on a machine with a GPU, such as your laptop. From the repo root:
+```bash
+deploy/worker.sh
+```
+- It opens an SSH tunnel to the server's database, reading the password from the server, and processes queued fights one at a time, oldest first. For each one it copies the video into `ai/worker_cache/`, runs the pipeline the fight's purpose asks for, and writes the results straight to the server's database, so progress shows live on the site.
+- It keeps the Mac awake while it runs. Stop it with Ctrl-C.
+- A fight interrupted mid-pipeline (Ctrl-C, sleep, a network drop) goes back in the queue the next time the worker starts.
+- Only one worker runs at a time. It holds a database lock, which is also how the backend knows not to email admins about the queue while a worker is running.
+- It needs your local `ai/` setup: the root `.venv` and the model weights.
+
+## Email notifications
+The backend emails:
+- every admin, when an upload is waiting for the worker and no worker is running;
+- the uploader, when their fight is ready to review or label, or when it failed.
+
+Emails are off until `SMTP_HOST` is set in `/opt/fight-ai/.env`. To send through Gmail:
+1. Create a Google account just for the app (for example `fightlytics.app@gmail.com`), so the server never holds a password to your own mailbox.
+2. Turn on 2-Step Verification for it, then create an app password at `myaccount.google.com/apppasswords`.
+3. In `/opt/fight-ai/.env`, set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURITY=starttls`, `SMTP_USERNAME` to that address and `SMTP_PASSWORD` to the app password.
+4. Apply it: `cd /opt/fight-ai/app/deploy && docker compose up -d --force-recreate backend`.
+
+Gmail sends up to about 500 emails a day.
 
 ## One-time setup
 The deploy files must be on `master` on GitHub first: the server clones the repo from there.

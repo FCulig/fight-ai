@@ -5,7 +5,7 @@ All business logic lives in pipeline.py.
 
 import argparse
 
-from pipeline import run_batch, run_pipeline
+from pipeline import run_batch, run_pipeline, run_worker
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -107,6 +107,16 @@ The pipeline never writes intermediate files — PostgreSQL is the only data sto
                         "'labeling_in_progress' instead of 'completed'."
                     ))
 
+    # ---- Pipeline worker ----
+    g5 = p.add_argument_group("pipeline worker")
+    g5.add_argument("--worker", action="store_true",
+                    help="Process queued fights from DATABASE_URL one at a time "
+                         "until Ctrl-C. Normally started by deploy/worker.sh.")
+    g5.add_argument("--video-source", type=str, default=None, metavar="SRC",
+                    help="Where --worker copies videos from, by file name: an "
+                         "rsync source like ubuntu@host:/srv/fight-ai/videos, "
+                         "or a local directory.")
+
     # ---- General ----
     p.add_argument("--debug-level", choices=["none", "normal", "verbose"],
                    default="verbose",
@@ -116,9 +126,14 @@ The pipeline never writes intermediate files — PostgreSQL is the only data sto
 
 
 def main() -> None:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
 
-    if args.video_input is None:
+    if args.worker:
+        if not args.video_source:
+            parser.error("--worker needs --video-source")
+        run_worker(args.video_source, debug_level=args.debug_level)
+    elif args.video_input is None:
         run_batch(debug_level=args.debug_level)
     else:
         run_pipeline(

@@ -27,5 +27,6 @@ yolo26x-pose.pt
 runs/
 frames/
 fight_videos/
+worker_cache/
 
 .claude/

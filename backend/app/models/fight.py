@@ -36,6 +36,9 @@ class Fight(Base):
     segmentation_review_reason = Column(Text, nullable=True)
     red_fighter_id = Column(Integer, ForeignKey("fighters.id", ondelete="SET NULL"), nullable=True)
     blue_fighter_id = Column(Integer, ForeignKey("fighters.id", ondelete="SET NULL"), nullable=True)
+    # Who uploaded it. Written once by POST /fights/upload; NULL for older fights
+    # and ones the pipeline registered itself. Gets the "processing finished" email.
+    uploaded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
 
 class FightResponse(BaseModel):
@@ -58,3 +61,4 @@ class FightResponse(BaseModel):
     blue_fighter_id: Optional[int]
     red_fighter_name: Optional[str] = None
     blue_fighter_name: Optional[str] = None
+    uploaded_by: Optional[int] = None

@@ -109,14 +109,14 @@ async def stream_fight_state(request: Request):
     )
 
 
-@router.post("/upload", response_model=FightResponse, status_code=201, dependencies=_ADMIN)
-async def upload_fight(request: Request):
+@router.post("/upload", response_model=FightResponse, status_code=201)
+async def upload_fight(request: Request, user: User = Depends(require_role("admin"))):
     # The form is parsed here rather than declared as File()/Form() params:
     # FastAPI reads declared body params before it runs dependencies, so a
     # viewer could stream a whole video to disk before the admin check ran.
     form = await request.form()
     try:
-        return await _store_upload(form)
+        return await _store_upload(form, uploaded_by=user.id)
     finally:
         await form.close()
 
@@ -130,7 +130,7 @@ def _optional_int(value) -> Optional[int]:
         raise HTTPException(status_code=400, detail=f"Expected an integer fighter id, got {value!r}")
 
 
-async def _store_upload(form):
+async def _store_upload(form, uploaded_by: int):
     file = form.get("file")
     if not isinstance(file, UploadFile):
         raise HTTPException(status_code=400, detail="file is required")
@@ -202,6 +202,7 @@ async def _store_upload(form):
             red_fighter_id=red_fighter_id,
             blue_fighter_id=blue_fighter_id,
             purpose=purpose,
+            uploaded_by=uploaded_by,
         )
     except Exception as e:
         dest.unlink(missing_ok=True)

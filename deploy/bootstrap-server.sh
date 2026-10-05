@@ -53,6 +53,20 @@ open_firewall() {
   sudo netfilter-persistent save
 }
 
+# Drop SSH sessions whose client has vanished after about 90 s, instead of TCP
+# keepalive's two hours. The pipeline worker holds its queue lock through an SSH
+# tunnel, so when the laptop sleeps this releases the lock.
+configure_sshd() {
+  local conf=/etc/ssh/sshd_config.d/fight-ai.conf
+  if [ -f "$conf" ]; then return; fi
+  if ! grep -qE '^Include /etc/ssh/sshd_config.d/' /etc/ssh/sshd_config; then
+    echo 'Include /etc/ssh/sshd_config.d/*.conf' | sudo tee -a /etc/ssh/sshd_config > /dev/null
+  fi
+  printf 'ClientAliveInterval 30\nClientAliveCountMax 3\n' | sudo tee "$conf" > /dev/null
+  sudo sshd -t
+  sudo systemctl reload ssh
+}
+
 # A 4 GB swap file, so a memory spike (an image build, or a request for a long
 # fight's frames) slows the server down instead of getting a process killed.
 add_swap() {
@@ -103,6 +117,7 @@ install_backup_cron() {
 main() {
   install_docker
   open_firewall
+  configure_sshd
   add_swap
   prepare_dirs
   install_deploy_key

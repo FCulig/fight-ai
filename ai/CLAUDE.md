@@ -13,7 +13,7 @@ Subsystem rules load when you open matching files:
 `eval/README.md` covers the eval harness.
 
 ## Architecture rules
-- `main.py` is argparse plus one call to `run_pipeline()` or `run_batch()`. It holds no logic, path building, timing, or processing imports.
+- `main.py` is argparse plus one call to `run_pipeline()`, `run_batch()` or `run_worker()`. It holds no logic, path building, timing, or processing imports.
 - `pipeline.py` owns orchestration: step order, skip and fallback logic, timing, and the manifest.
 - All debug output goes through `debug.py`'s `DebugContext` (`ctx.save_image`, `ctx.save_json`, `ctx.log`). Don't scatter `print` or `cv2.imwrite` calls.
 - Every numeric threshold and frame count lives in `models/constants.py`.
@@ -30,6 +30,9 @@ Subsystem rules load when you open matching files:
 - `python main.py` runs batch mode. It registers new files in `fight_videos/` with `ON CONFLICT DO NOTHING`, then processes every fight not in `completed`, `labeling_*`, `validating` or `invalid`. `failed` fights are retried on purpose. A file replaced at the same path isn't picked up again, so use single-file mode for it.
 - `python main.py fight.mp4` runs single-file mode. Its upsert resets `state='queued'`, and existing child rows are treated as stale. With `--skip-events` it stops at `labeling_in_progress` (the manual-labelling track).
 - Uploads don't start here. The backend first runs `eval.cli video --fight-id <id>` (full decode, state `validating`). That marks a truncated file `invalid`, or spawns `main.py` itself and hands over the pid (`_validate_and_dispatch` in `eval/cli.py`). With `PIPELINE_DISPATCH=queue`, set on the deployed server because it has no torch, it stops at `queued` instead, for a pipeline worker to pick up.
+- `python main.py --worker --video-source SRC` is that worker, normally started by `deploy/worker.sh`. It claims `queued` fights one at a time from `DATABASE_URL`, fetches each video by file name from `SRC`, and runs the pipeline the fight's `purpose` asks for. On start it re-queues fights an interrupted run left mid-pipeline.
+  - It never writes `pid`: the backend fails any fight whose pid isn't one of its own local processes.
+  - `ai/database.py`'s engine batches executemany (`values_plus_batch`), because over the worker's tunnel a per-row round trip costs ~50 minutes per fight. Keep bulk inserts as executemany of one `text()` INSERT.
 
 ## Weights
 - `yolo26x-pose.pt` (working dir): the XL pose model. It supplies every box and skeleton.

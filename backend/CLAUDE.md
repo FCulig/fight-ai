@@ -15,6 +15,7 @@ Run it from `backend/` with `uvicorn app.main:app --reload`. It uses `backend/.v
 - `DEV_LOGIN=1` (local only) mounts `GET /auth/dev-login`. Startup fails if it is set while `PUBLIC_BASE_URL` is anything but `http://localhost` or `http://127.0.0.1`, so it can never be live on a deployed instance.
 - `FRONTEND_DIST` (prod only) serves the built SPA from this origin, with an `index.html` fallback for client routes.
 - `PIPELINE_DISPATCH=queue` (prod only, set in `deploy/Dockerfile`) is inherited by the validator subprocess, which then leaves a valid upload `queued` instead of spawning `main.py`. The server has no torch.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `MAIL_FROM` (optional) turn on email notifications (`services/email_service.py`). With `SMTP_HOST` unset, emails are only logged, which is what dev and tests want.
 
 ## Auth
 Route paths elsewhere in this file omit the `/api` prefix.
@@ -45,7 +46,7 @@ Route paths elsewhere in this file omit the `/api` prefix.
 
 ## Upload, validation and pids
 - **Upload flow:**
-  1. `POST /fights/upload` creates the row at `validating` and calls `pipeline_runner.run_validation_async()`.
+  1. `POST /fights/upload` creates the row at `validating`, stamped with `uploaded_by` (the signed-in admin), and calls `pipeline_runner.run_validation_async()`.
   2. That runs `eval.cli video --fight-id` in the ai venv.
   3. The validator either marks the fight `invalid` or spawns `main.py` and records its pid (or, with `PIPELINE_DISPATCH=queue`, sets `queued`), all through `ai/database.py`. The backend never relays state.
   4. `utils/fight_state_listener.py` fans `pg_notify('fight_state')` out to the `/fights/stream` SSE.
@@ -55,3 +56,9 @@ Route paths elsewhere in this file omit the `/api` prefix.
 
 ## Fighter frames
 `GET /fights/{id}/frames/` without a range returns every row, which is tens of MB for a full fight. Pass `start_frame`/`end_frame` (1-based, inclusive) when you only need a window. `ix_fighter_frames_fight_frame` keeps that query index-only.
+
+## Notifications
+`services/notification_service.py` sends email on `fight_state` notifications. `utils/fight_state_listener.py` hands each one over, and the work runs on a background thread, so SMTP never delays the SSE stream.
+- **`queued`** emails every active admin, unless a pipeline worker is online: it holds the advisory lock `WORKER_LOCK_KEY`, which must equal `ai/database.py`'s.
+- **`completed`, `failed`, `invalid`, and the first `labeling_in_progress`** (`labeled_at` still NULL, because reopening lands there too) email the uploader (`fights.uploaded_by`).
+- Dev-login accounts are never emailed. A new state that should notify someone goes here, with a test in `tests/test_notifications.py`.

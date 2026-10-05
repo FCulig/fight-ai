@@ -16,6 +16,7 @@ export interface Fight {
   blue_fighter_id: number | null;
   red_fighter_name: string | null;
   blue_fighter_name: string | null;
+  uploaded_by: number | null;
 }
 
 /**

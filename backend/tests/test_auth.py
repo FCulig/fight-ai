@@ -241,3 +241,35 @@ def test_created_event_is_stamped_with_the_signed_in_labeller(client, monkeypatc
     response = client.post("/api/fights/1/events/", json={**_EVENT, "labeler": "spoofed"})
     assert response.status_code == 201
     assert captured["labeler"] == "lab@example.com"
+
+
+def test_upload_is_stamped_with_the_signed_in_admin(client, monkeypatch, tmp_path):
+    from app.api.routes import fights as fights_routes
+
+    _as("admin", user_id=5)
+    captured = {}
+
+    def fake_create_fight(**kwargs):
+        from types import SimpleNamespace
+
+        captured.update(kwargs)
+        return SimpleNamespace(
+            id=1, video_path=kwargs["video_path"], fps=30, width=1280, height=720,
+            created_at=datetime(2026, 1, 1), state="validating", labeled_at=None,
+            purpose=kwargs["purpose"], reported_frames=None, decoded_frames=None,
+            red_fighter_id=None, blue_fighter_id=None, uploaded_by=kwargs["uploaded_by"],
+        )
+
+    monkeypatch.setattr(fights_routes, "_VIDEO_BASE_DIR", tmp_path)
+    monkeypatch.setattr(fights_routes, "extract_video_meta", lambda path: (30, 1280, 720))
+    monkeypatch.setattr(fights_routes, "run_validation_async", lambda *args, **kwargs: 123)
+    monkeypatch.setattr(fight_service, "create_fight", fake_create_fight)
+    monkeypatch.setattr(fight_service, "set_fight_pid", lambda fight_id, pid: None)
+
+    response = client.post(
+        "/api/fights/upload",
+        data={"purpose": "ai_labeled"},
+        files={"file": ("clip.mp4", b"not really a video", "video/mp4")},
+    )
+    assert response.status_code == 201
+    assert captured["uploaded_by"] == 5

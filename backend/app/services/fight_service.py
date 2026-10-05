@@ -60,6 +60,7 @@ def create_fight(
     red_fighter_id: int | None = None,
     blue_fighter_id: int | None = None,
     state: str = "validating",
+    uploaded_by: int | None = None,
 ) -> Fight:
     def _query(session):
         fight = Fight(
@@ -71,6 +72,7 @@ def create_fight(
             blue_fighter_id=blue_fighter_id,
             state=state,
             purpose=purpose,
+            uploaded_by=uploaded_by,
         )
         session.add(fight)
         session.flush()

@@ -7,6 +7,8 @@ from typing import Set
 
 import psycopg2
 
+from app.services import notification_service
+
 _loop: asyncio.AbstractEventLoop | None = None
 _thread: threading.Thread | None = None
 _stop_event = threading.Event()
@@ -47,6 +49,7 @@ def _listener_loop() -> None:
                 while conn.notifies:
                     notify = conn.notifies.pop(0)
                     _fan_out(notify.payload)
+                    notification_service.submit(notify.payload)
         except Exception:
             import traceback
             traceback.print_exc()
