@@ -48,4 +48,4 @@ The look is shared with `landing/`. Tokens and shared classes live in `src/index
   - `videoRef.current.pause()` before the request, because the `<video>` is still streaming the file being unlinked.
   - `navigate('/', { replace: true })` afterwards.
 - **`Annotate.tsx`** has a header button. See the Annotate rule for the keyboard guard every modal needs.
-- **`FightList.tsx`** shows delete only on `failed`/`invalid` rows, as a delete-and-re-upload recovery path. It uses one dialog outside the `.map`, driven by `pendingDelete`.
+- **`FightList.tsx`** shows delete only on `failed`/`invalid` rows (a delete-and-re-upload recovery path) and `queued` rows (cancelling a job no worker has claimed). It uses one dialog outside the `.map`, driven by `pendingDelete`.

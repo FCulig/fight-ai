@@ -125,6 +125,9 @@ export default function FightList() {
             const failed = fight.state === 'failed';
             const invalid = isInvalid(fight.state);
             const errored = failed || invalid;
+            // A queued fight hasn't been claimed by a worker yet, so deleting it cancels the job.
+            const queued = fight.state === 'queued';
+            const deleteLabel = queued ? 'Delete queued fight' : 'Delete and re-upload';
             const progress = STATE_PROGRESS[fight.state] ?? 0;
             const stateLabel = labelingReady ? 'Ready to label' : STATE_LABELS[fight.state] ?? fight.state;
             // Viewers can't annotate: Player shows them the "being labelled" state instead.
@@ -174,12 +177,12 @@ export default function FightList() {
                 )}
               </div>
             );
-            const action = errored && can('admin') ? (
+            const action = (errored || queued) && can('admin') ? (
               <button
                 onClick={ev => { ev.stopPropagation(); setDeleteError(null); setPendingDelete(fight); }}
                 disabled={deleting}
-                title="Delete and re-upload"
-                aria-label="Delete and re-upload"
+                title={deleteLabel}
+                aria-label={deleteLabel}
                 style={{
                   width: 30, height: 30, flexShrink: 0, display: 'grid', placeItems: 'center',
                   borderRadius: 6, border: '1px solid var(--f-red-dim)',
