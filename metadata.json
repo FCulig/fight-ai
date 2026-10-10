@@ -3,7 +3,7 @@
   "checkpoint_id": "01M4KBQW33W5YHCZ4DH53FZ7JF",
   "strategy": "manual-commit",
   "branch": "master",
-  "checkpoints_count": 7,
+  "checkpoints_count": 9,
   "files_touched": [
     "deploy/worker.sh",
     "frontend/src/components/annotate/AnnotationPanel.tsx",
@@ -25,13 +25,20 @@
       "compact_transcript": "/1/transcript.jsonl",
       "content_hash": "/1/content_hash.txt",
       "prompt": "/1/prompt.txt"
+    },
+    {
+      "metadata": "/2/metadata.json",
+      "transcript": "/2/full.jsonl",
+      "compact_transcript": "/2/transcript.jsonl",
+      "content_hash": "/2/content_hash.txt",
+      "prompt": "/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 100,
-    "cache_creation_tokens": 277345,
-    "cache_read_tokens": 5363762,
-    "output_tokens": 27158,
-    "api_call_count": 50
+    "input_tokens": 124,
+    "cache_creation_tokens": 313817,
+    "cache_read_tokens": 6229809,
+    "output_tokens": 32394,
+    "api_call_count": 62
   }
 }

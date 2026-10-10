@@ -1,0 +1,5 @@
+I changed my duck dns domain an hour ago. But the site is still not reachable on this new domain
+
+---
+
+New domain is app-fightlytics.duckdns.org
