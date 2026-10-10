@@ -1,0 +1,46 @@
+I have uploaded a fight video to production/live version of the app. Upload dialog has closed, but it says validating video. Where this video validation is being done? On server or it is waiting for my laptop worker? Because I have not yet received an email
+
+---
+
+okay so why email wasn't sent, it is queued
+
+---
+
+How do we debug this?
+
+---
+
+➜  fight-ai git:(master) ✗ ssh ubuntu@84.8.250.67 'cd /opt/fight-ai/app/deploy && docker compose logs --since 48h backend | grep -iE "email|notif|Traceback"'
+backend-1  | INFO:     85.114.55.42:0 - "GET /api/auth/callback?REDACTED&iss=https://accounts.google.com&code=4/REDACTED&scope=email+profile+https://www.googleapis.com/auth/userinfo.profile+https://www.googleapis.com/auth/userinfo.email+openid&authuser=0&prompt=none HTTP/1.1" 303 See Other
+
+---
+
+<pasted_content id="05cc">
+➜  fight-ai git:(master) ✗ ssh ubuntu@84.8.250.67 'grep -E "^(SMTP_HOST|SMTP_PORT|SMTP_SECURITY|SMTP_USERNAME|MAIL_FROM|ADMIN_EMAILS|PUBLIC_BASE_URL)=" /opt/fight-ai/.env; cd /opt/fight-ai/app/deploy && docker compose exec -T db sh -c '"'"'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT email, role, is_active FROM users;" -c "SELECT id, state, uploaded_by FROM fights ORDER BY id DESC LIMIT 3;" -c "SELECT pid, objid FROM pg_locks WHERE locktype = '"'"'"'"'"'"'"'"'advisory'"'"'"'"'"'"'"'"';"'"'"''
+PUBLIC_BASE_URL=https://app-fightlytics.duckdns.org
+ADMIN_EMAILS=filip.culig@gmail.com
+           email            |   role   | is_active 
+----------------------------+----------+-----------
+ dev-labeller@fightai.local | labeller | t
+ dev-admin@fightai.local    | admin    | t
+ filip.culig@gmail.com      | admin    | t
+(3 rows)
+
+ id |       state       | uploaded_by 
+----+-------------------+-------------
+ 65 | completed         |            
+ 62 | completed         |            
+ 60 | labeling_complete |            
+(3 rows)
+
+ pid | objid 
+-----+-------
+(0 rows)
+</pasted_content id="05cc">
+
+➜  fight-ai git:(master) ✗ ssh ubuntu@84.8.250.67 'cd /opt/fight-ai/app/deploy && docker compose exec -T backend python -c "from app.services import email_service as e; e.send(\"filip.culig@gmail.com\", \"smtp test\", \"hello\"); print(\"sent\")"'
+sent
+
+---
+
+Can you do these changes for me?
