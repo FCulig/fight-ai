@@ -1,0 +1,5 @@
+Currently if the fight is queueud, I don't have an option to delete it. I want that option
+
+---
+
+Will the video also get deleted?
