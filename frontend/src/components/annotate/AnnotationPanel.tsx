@@ -40,6 +40,7 @@ interface AnnotationPanelProps {
   onDelete: (id: number) => void;
   onUpdateSpan: (id: number, patch: { frame?: number; end_frame?: number }) => void;
   onDeleteSpan: (id: number) => void;
+  onAddRound: () => void;
   flashId: number | null;
   selectedEventId: number | null;
   onSelectEvent: (id: number | null) => void;
@@ -49,7 +50,7 @@ interface AnnotationPanelProps {
 }
 
 export default function AnnotationPanel({
-  events, spans, rounds, duration, fps, currentFrame, onSeek, onSetPlaying, onDelete, onUpdateSpan, onDeleteSpan,
+  events, spans, rounds, duration, fps, currentFrame, onSeek, onSetPlaying, onDelete, onUpdateSpan, onDeleteSpan, onAddRound,
   flashId, selectedEventId, onSelectEvent, redName, blueName, describe,
 }: AnnotationPanelProps) {
   const [view, setView] = useState<'timeline' | 'list'>(() => (localStorage.getItem('annot-view') as 'timeline' | 'list') || 'timeline');
@@ -89,6 +90,7 @@ export default function AnnotationPanel({
           onSetPlaying={onSetPlaying}
           onUpdateSpan={onUpdateSpan}
           onDeleteSpan={onDeleteSpan}
+          onAddRound={onAddRound}
           flashId={flashId}
           selectedEventId={selectedEventId}
           onSelectEvent={onSelectEvent}

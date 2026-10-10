@@ -10,7 +10,7 @@
 # queued uploads until Ctrl-C. See deploy/README.md, "Processing uploads".
 set -euo pipefail
 
-SERVER="${FIGHT_AI_SERVER:-ubuntu@fightlytics.duckdns.org}"
+SERVER="${FIGHT_AI_SERVER:-ubuntu@app-fightlytics.duckdns.org}"
 PORT="${FIGHT_AI_TUNNEL_PORT:-55432}"
 
 main() {

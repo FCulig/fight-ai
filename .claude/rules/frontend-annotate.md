@@ -21,6 +21,7 @@ paths:
 
 ## Spans (`O` and `P` keys)
 - **`round`** spans are seeded server-side from `rounds` on first fetch. They show as draggable blocks in the Rounds lane, and edge-drag → `onUpdateSpan` → `PUT frame/end_frame`.
+- **`K` (or the Rounds lane `+`) adds a round** at the playhead: it splits the round span it falls in, or else runs to the next round. After any round add or delete, `renumberRounds` rewrites `value` to the span's 1-based order, because eval and export read `value` as the round number.
 - **`corner_swap` and `excluded`** are start/end toggles. `openSpanRef` holds the in-flight id for each kind: the first press creates the span with `end_frame=null`, and the second press `PUT`s `end_frame`. An open span draws dashed up to the playhead.
 
 ## Finish and re-edit

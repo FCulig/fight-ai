@@ -167,11 +167,12 @@ export const EDIT_KEYS: { k: string[]; label: string }[] = [
   { k: ['Click', 'Delete'], label: 'Select a timeline clip, then delete it (Delete = undo if nothing selected)' },
 ];
 
-// Span kinds (round/corner_swap/excluded) are start/end toggles: press once to
-// open a span at the playhead, press again to close it.
+// corner_swap/excluded are start/end toggles: press once to open a span at the
+// playhead, press again to close it. K starts a new round at the playhead.
 export const SPAN_KEYS: { k: string[]; label: string }[] = [
   { k: ['O'], label: 'Toggle corner-swap span' },
   { k: ['P'], label: 'Toggle excluded span' },
+  { k: ['K'], label: 'New round at playhead (splits the round it is in)' },
 ];
 
 /** Frame (1-based) → "m:ss" clock, matching the currentFrame = floor(t*fps)+1 contract. */

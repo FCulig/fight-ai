@@ -119,7 +119,14 @@ export default function Annotate() {
 
   const seekToFrame = (frame: number) => handleSeek(Math.max(0, (frame - 1) / fps));
 
-  const currentRound = rounds.find(r => currentFrame >= r.start_frame && currentFrame <= r.end_frame)?.round_number ?? '-';
+  // The labeller's round spans win over the AI's, which may have collapsed
+  // the fight into one round. The AI rounds cover the moment before the
+  // spans have loaded.
+  const currentRound = spans.find(
+    s => s.kind === 'round' && s.end_frame != null && currentFrame >= s.frame && currentFrame <= s.end_frame,
+  )?.value
+    ?? rounds.find(r => currentFrame >= r.start_frame && currentFrame <= r.end_frame)?.round_number
+    ?? '-';
 
   const redName = selectedFight?.red_fighter_name ?? 'Red corner';
   const blueName = selectedFight?.blue_fighter_name ?? 'Blue corner';
@@ -282,8 +289,61 @@ export default function Annotate() {
       for (const [kind, id] of Object.entries(openSpanRef.current)) {
         if (id === spanId) delete openSpanRef.current[kind as SpanKind];
       }
+      if (spans.find(s => s.id === spanId)?.kind === 'round') {
+        await renumberRounds(spans.filter(s => s.kind === 'round' && s.id !== spanId));
+      }
     } catch {
       showToast('Failed to delete span', 'var(--f-red)', 'error');
+    }
+  };
+
+  // A round span's `value` is its round number, which eval and export read.
+  // Keep it equal to the span's position in time, so adding or deleting a
+  // round renumbers the ones after it.
+  const renumberRounds = async (roundSpans: Event[]) => {
+    if (!fightId) return;
+    const stale = [...roundSpans]
+      .sort((a, b) => a.frame - b.frame)
+      .map((s, i) => ({ s, value: String(i + 1) }))
+      .filter(({ s, value }) => s.value !== value);
+    const updated = await Promise.all(stale.map(({ s, value }) => updateEvent(fightId, s.id, { value })));
+    const byId = new Map(updated.map(u => [u.id, u]));
+    setAllEvents(prev => prev.map(e => byId.get(e.id) ?? e));
+  };
+
+  // K starts a new round at the playhead. Inside a round span it splits that
+  // span there, which is how a fight that segmentation collapsed into one
+  // round gets its real rounds back. Outside every round it adds one running
+  // up to the next round (or the end of the video). Either way the labeller
+  // then drags the edges to cut out the break between rounds.
+  const addRound = async () => {
+    if (!fightId) return;
+    const frame = frameRef.current;
+    const roundSpans = spans.filter(s => s.kind === 'round');
+    const containing = roundSpans.find(s => s.end_frame != null && s.frame <= frame && frame <= s.end_frame);
+    if (containing?.frame === frame) {
+      showToast('A round already starts here', 'var(--f-red)', 'error');
+      return;
+    }
+    const nextStart = Math.min(...roundSpans.filter(s => s.frame > frame).map(s => s.frame));
+    const end = containing?.end_frame
+      ?? (Number.isFinite(nextStart) ? nextStart - 1 : Math.max(frame, Math.floor(duration * fps)));
+    setSavingCount(c => c + 1);
+    try {
+      let next = roundSpans;
+      if (containing) {
+        const shortened = await updateEvent(fightId, containing.id, { end_frame: frame - 1 });
+        next = next.map(s => (s.id === shortened.id ? shortened : s));
+        setAllEvents(prev => prev.map(e => (e.id === shortened.id ? shortened : e)));
+      }
+      const created = await createEvent(fightId, { kind: 'round', frame, end_frame: end });
+      setAllEvents(prev => [...prev, created]);
+      await renumberRounds([...next, created]);
+      showToast(containing ? 'Round split at playhead' : 'Round added', 'var(--green-500)', 'flag');
+    } catch {
+      showToast('Failed to add round', 'var(--f-red)', 'error');
+    } finally {
+      setSavingCount(c => c - 1);
     }
   };
 
@@ -421,8 +481,8 @@ export default function Annotate() {
 
   // stable "latest callback" ref so the global keydown listener (registered once)
   // always calls the current render's closures, without re-registering constantly
-  const fnsRef = useRef({ togglePlay, stepFrame, logTool, undo, setSelected, toggleSpan, removeEvent });
-  fnsRef.current = { togglePlay, stepFrame, logTool, undo, setSelected, toggleSpan, removeEvent };
+  const fnsRef = useRef({ togglePlay, stepFrame, logTool, undo, setSelected, toggleSpan, removeEvent, addRound });
+  fnsRef.current = { togglePlay, stepFrame, logTool, undo, setSelected, toggleSpan, removeEvent, addRound };
 
   useEffect(() => {
     if (!ready) return;
@@ -463,6 +523,7 @@ export default function Annotate() {
       if (lk === 'z') { e.preventDefault(); fns.undo(); return; }
       if (lk === 'o') { e.preventDefault(); fns.toggleSpan('corner_swap'); return; }
       if (lk === 'p') { e.preventDefault(); fns.toggleSpan('excluded'); return; }
+      if (lk === 'k') { e.preventDefault(); fns.addRound(); return; }
 
       // Digit keys need e.code, not e.key: Shift+1 types '!' on a US layout,
       // so reading e.key would break the KEYMAP lookup for the target modifier.
@@ -614,7 +675,8 @@ export default function Annotate() {
             <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
               {selectedFight.segmentation_review_reason
                 ?? 'Segmentation could not confirm these rounds against the scoreboard.'}
-              {' '}Check the Rounds lane below and drag the edges before labelling.
+              {' '}Check the Rounds lane below and drag the edges before labelling. If a round is missing,
+              move the playhead to where it starts and press <span className="kbd">K</span> to split it off.
             </div>
           </div>
         </div>
@@ -687,6 +749,7 @@ export default function Annotate() {
         onDelete={removeEvent}
         onUpdateSpan={updateSpan}
         onDeleteSpan={removeSpan}
+        onAddRound={addRound}
         flashId={flashId}
         selectedEventId={selectedEventId}
         onSelectEvent={setSelectedEventId}

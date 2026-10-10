@@ -84,6 +84,7 @@ interface AnnotationTimelineProps {
   onSetPlaying: (playing: boolean) => void;
   onUpdateSpan: (id: number, patch: { frame?: number; end_frame?: number }) => void;
   onDeleteSpan: (id: number) => void;
+  onAddRound: () => void;
   flashId: number | null;
   selectedEventId: number | null;
   onSelectEvent: (id: number | null) => void;
@@ -94,7 +95,7 @@ interface AnnotationTimelineProps {
 }
 
 export default function AnnotationTimeline({
-  events, spans, rounds, duration, fps, currentFrame, onSeek, onSetPlaying, onUpdateSpan, onDeleteSpan,
+  events, spans, rounds, duration, fps, currentFrame, onSeek, onSetPlaying, onUpdateSpan, onDeleteSpan, onAddRound,
   flashId, selectedEventId, onSelectEvent, filter, redName, blueName, describe,
 }: AnnotationTimelineProps) {
   const [zoom, setZoom] = useState(1);
@@ -320,6 +321,14 @@ export default function AnnotationTimeline({
         <TrackHead top={TL.ruler} h={TL.round}>
           <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--green-500)' }}>flag</span>
           <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-secondary)' }}>Rounds</span>
+          <button
+            className="icon-btn"
+            onClick={onAddRound}
+            title="New round at the playhead (K)"
+            style={{ width: 20, height: 20, marginLeft: 'auto' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>add</span>
+          </button>
         </TrackHead>
         <TrackHead top={TL.ruler + TL.round} h={TL.state}>
           <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--slate-400)' }}>change_circle</span>

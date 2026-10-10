@@ -55,6 +55,19 @@ ROUND_PATTERNS: list[str] = [
 # only ever apply it to a tight scoreboard ROI, not to arbitrary frame text.
 TIMER_PATTERN: str = r"\b(\d{1,2})[:.;](\d{2})\b"
 
+# Fallback for overlays whose colon OCR can't read at all. On KSW's red clock
+# pill EasyOCR drops it ("0344"), or returns it as a symbol ("04x08", "02+08")
+# or even a digit ("04408", "01120"), on most frames and at 0.9+ confidence,
+# so with TIMER_PATTERN alone calibration finds no timer and the video falls
+# back to detection-only rounds.
+#
+# Only a zero-padded clock qualifies: one whitespace-delimited token "0M", an
+# optional single non-space character where the colon was, then "SS" with
+# seconds 00–59. The leading zero is what keeps this from matching years,
+# records and sponsor numerals in the calibration strip ("2024", "388"), and
+# the token boundaries reject longer digit runs.
+_COLONLESS_TIMER = re.compile(r"(?<!\S)0(\d)\S?([0-5]\d)(?!\S)")
+
 # A box holding nothing but a round digit, allowing for OCR noise around it
 # ("1", "|1|", "[1]").
 _BARE_ROUND_DIGIT = re.compile(r"^[^0-9A-Za-z]*([1-5])[^0-9A-Za-z]*$")
@@ -86,7 +99,8 @@ def parse_timer(text: str) -> Optional[int]:
     Return the clock reading as total seconds, or None if not found.
 
     Accepts MM:SS or M:SS (e.g. "4:32" → 272, "0:07" → 7), including the "."
-    and ";" separators OCR substitutes for the colon.
+    and ";" separators OCR substitutes for the colon. Failing that, accepts a
+    zero-padded clock whose colon was lost or misread (see _COLONLESS_TIMER).
     Rejects obviously invalid values (seconds > 59, minutes > 59).
 
     >>> parse_timer("R1 4:32")
@@ -95,16 +109,27 @@ def parse_timer(text: str) -> Optional[int]:
     7
     >>> parse_timer("1 01.23")
     83
+    >>> parse_timer("2 0344 KSF")
+    224
+    >>> parse_timer("04x08")
+    248
+    >>> parse_timer("04408")
+    248
     >>> parse_timer("PURSE 3.85M")
+    >>> parse_timer("KSW 2024")
+    >>> parse_timer("080012")
     >>> parse_timer("no clock here")
     """
     m = re.search(TIMER_PATTERN, text)
-    if not m:
-        return None
-    minutes, seconds = int(m.group(1)), int(m.group(2))
-    if seconds > 59 or minutes > 59:
-        return None
-    return minutes * 60 + seconds
+    if m:
+        minutes, seconds = int(m.group(1)), int(m.group(2))
+        if seconds > 59 or minutes > 59:
+            return None
+        return minutes * 60 + seconds
+    m = _COLONLESS_TIMER.search(text)
+    if m:
+        return int(m.group(1)) * 60 + int(m.group(2))
+    return None
 
 
 def box_aabb(bbox: Sequence) -> tuple[float, float, float, float]:
