@@ -3,7 +3,7 @@
   "checkpoint_id": "01M4KBQW33W5YHCZ4DH53FZ7JF",
   "strategy": "manual-commit",
   "branch": "master",
-  "checkpoints_count": 11,
+  "checkpoints_count": 12,
   "files_touched": [
     "ai/video_processing/scoreboard_overlay/parsers.py",
     "deploy/worker.sh",
@@ -40,13 +40,20 @@
       "compact_transcript": "/3/transcript.jsonl",
       "content_hash": "/3/content_hash.txt",
       "prompt": "/3/prompt.txt"
+    },
+    {
+      "metadata": "/4/metadata.json",
+      "transcript": "/4/full.jsonl",
+      "compact_transcript": "/4/transcript.jsonl",
+      "content_hash": "/4/content_hash.txt",
+      "prompt": "/4/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 768,
-    "cache_creation_tokens": 4364848,
-    "cache_read_tokens": 90139424,
-    "output_tokens": 664720,
-    "api_call_count": 214
+    "input_tokens": 776,
+    "cache_creation_tokens": 4410784,
+    "cache_read_tokens": 90471268,
+    "output_tokens": 665860,
+    "api_call_count": 218
   }
 }
