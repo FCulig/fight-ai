@@ -3,8 +3,9 @@
   "checkpoint_id": "01M4KBQW33W5YHCZ4DH53FZ7JF",
   "strategy": "manual-commit",
   "branch": "master",
-  "checkpoints_count": 9,
+  "checkpoints_count": 11,
   "files_touched": [
+    "ai/video_processing/scoreboard_overlay/parsers.py",
     "deploy/worker.sh",
     "frontend/src/components/annotate/AnnotationPanel.tsx",
     "frontend/src/components/annotate/AnnotationTimeline.tsx",
@@ -32,13 +33,20 @@
       "compact_transcript": "/2/transcript.jsonl",
       "content_hash": "/2/content_hash.txt",
       "prompt": "/2/prompt.txt"
+    },
+    {
+      "metadata": "/3/metadata.json",
+      "transcript": "/3/full.jsonl",
+      "compact_transcript": "/3/transcript.jsonl",
+      "content_hash": "/3/content_hash.txt",
+      "prompt": "/3/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 124,
-    "cache_creation_tokens": 313817,
-    "cache_read_tokens": 6229809,
-    "output_tokens": 32394,
-    "api_call_count": 62
+    "input_tokens": 768,
+    "cache_creation_tokens": 4364848,
+    "cache_read_tokens": 90139424,
+    "output_tokens": 664720,
+    "api_call_count": 214
   }
 }
