@@ -1,0 +1,1 @@
+Socreboard task is running and it seems stuck can you check it out? It is live+local worker
