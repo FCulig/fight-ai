@@ -1,0 +1,113 @@
+Keep server as IS, I have pushed it
+
+---
+
+<task-notification>
+<task-id>b7z1x3f40</task-id>
+<tool-use-id>toolu_01AMaPF9BLzyVvaVy7uX8bux</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/e9193d98-f9bd-4238-b701-2b6d8617fb24/tasks/b7z1x3f40.output</output-file>
+<status>completed</status>
+<summary>Background command "Run the server bootstrap over SSH" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+1. I did it
+2. Yes
+3. I logged in
+4. Lets allow everyone who logs in
+
+
+Should I do 5?
+
+---
+
+what does this do? git push origin master:release what is master:release, I never seen branch format like this
+
+---
+
+while deploy is running, please create a new DB dump for upload to server
+
+---
+
+<task-notification>
+<task-id>b6ko2s2yq</task-id>
+<tool-use-id>toolu_01Vw1aPMt1y7RYCVghEWE83A</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/e9193d98-f9bd-4238-b701-2b6d8617fb24/tasks/b6ko2s2yq.output</output-file>
+<status>completed</status>
+<summary>Background command "Watch the deploy workflow run until it finishes" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+Deploy failed 
+
+<pasted_content id="a6b4">
+Run curl -fsS --retry 10 --retry-delay 6 --retry-all-errors -o /dev/null "$SITE/"
+curl: (28) Failed to connect to fightlytics.duckdns.org port 443 after 135264 ms: Couldn't connect to server
+curl: (28) Failed to connect to fightlytics.duckdns.org port 443 after 137350 ms: Couldn't connect to server
+curl: (28) Failed to connect to fightlytics.duckdns.org port 443 after 133254 ms: Couldn't connect to server
+curl: (28) Failed to connect to fightlytics.duckdns.org port 443 after 133255 ms: Couldn't connect to server
+curl: (28) Failed to connect to fightlytics.duckdns.org port 443 after 133254 ms: Couldn't connect to server
+curl: (28) Failed to connect to fightlytics.duckdns.org port 443 after 133254 ms: Couldn't connect to server
+curl: (28) Failed to connect to fightlytics.duckdns.org port 443 after 133254 ms: Couldn't connect to server
+curl: (28) Failed to connect to fightlytics.duckdns.org port 443 after 133255 ms: Couldn't connect to server
+curl: (28) Failed to connect to fightlytics.duckdns.org port 443 after 133254 ms: Couldn't connect to server
+curl: (28) Failed to connect to fightlytics.duckdns.org port 443 after 133254 ms: Couldn't connect to server
+curl: (28) Failed to connect to fightlytics.duckdns.org port 443 after 133254 ms: Couldn't connect to server
+Error: Process completed with exit code 28.
+</pasted_content id="a6b4">
+
+---
+
+<task-notification>
+<task-id>bvndmsvv7</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/e9193d98-f9bd-4238-b701-2b6d8617fb24/tasks/bvndmsvv7.output</output-file>
+<status>completed</status>
+<summary>Background command "Copy fight videos to the server in the background" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+But I setup the VCN secutrity rules before, whats changed?
+
+---
+
+I have changed that, I added these rules to the VCN i created, but not to the Instance network
+
+---
+
+<task-notification>
+<task-id>bp0gip12n</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/e9193d98-f9bd-4238-b701-2b6d8617fb24/tasks/bp0gip12n.output</output-file>
+<status>completed</status>
+<summary>Background command "Watch the re-run of the deploy job until it finishes" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+Okay, now how are we going to solve the video processing? Running the AI pipeline
+
+---
+
+Yes, lets do it like that. Could we also implement email notifications as a part of it? Email sent out to admins where it says that there are videos queued for local runs. Also when video is processed, email is sent out to the person who uploaded the video.
+
+---
+
+<task-notification>
+<task-id>bmpldj5uz</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-502/-Users-filip-culig-Developer-fight-ai/e9193d98-f9bd-4238-b701-2b6d8617fb24/tasks/bmpldj5uz.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait for the worker to finish the test fight, then report" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+What will happen if I queue multiple videos at once?
+
+---
+
+Browser part is okay to upload them one by one, but I asked what if user uploads one by one multiple times.
