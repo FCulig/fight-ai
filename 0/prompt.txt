@@ -1,0 +1,7 @@
+When running worker script I get the following log output: bind [127.0.0.1]:55432: Address already in use
+channel_setup_fwd_listener_tcpip: cannot listen to port: 55432
+Could not request local forwarding.
+
+---
+
+Can we now add the logging to the worker, something like live log streaming. I want to see current progress of the worker

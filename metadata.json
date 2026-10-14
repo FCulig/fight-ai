@@ -1,0 +1,47 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M4WKME951G179ARETK4W814R",
+  "strategy": "manual-commit",
+  "branch": "master",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "ai/CLAUDE.md",
+    "ai/fight_processing/fight_processing.py",
+    "ai/pipeline.py",
+    "ai/progress.py",
+    "ai/video_processing/corner_assignment/corner_assignment.py",
+    "ai/video_processing/fighter_detection/fighter_detection.py",
+    "ai/video_processing/fighter_tracking/fighter_tracking.py",
+    "ai/video_processing/scoreboard_overlay/calibration.py",
+    "ai/video_processing/scoreboard_overlay/extraction.py",
+    "db/alembic/__pycache__/env.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/92f72188aec1_create_fight_events_table.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/a1b2c3d4e5f6_add_fights_fighter_frames_rounds.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/b2c3d4e5f6a7_fight_events_fight_id_not_null.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/b7e91f2d3a08_add_keypoints_to_fighter_frames.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/c1d2e3f4a5b6_create_fighters_table.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/c2d3e4f5a6b7_add_fight_corner_fighters.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/c3d4e5f6a7b8_restructure_fight_events.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/c4d5e6f7a8b9_rename_fighter_frames_fighter_id_to_corner.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/d1e2f3a4b5c6_replace_processed_with_state.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/e5f6a7b8c9d0_add_pid_to_fights.cpython-314.pyc",
+    "deploy/README.md",
+    "deploy/worker.sh"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 80,
+    "cache_creation_tokens": 110339,
+    "cache_read_tokens": 4528247,
+    "output_tokens": 31162,
+    "api_call_count": 40
+  }
+}
