@@ -15,6 +15,9 @@ const CORNER_NAME = ['Red', 'Blue'];
 const INK = '242,241,238';
 const STRIP_H = 34;             // css px reserved for the sample strip
 const LOOP_START = 10;          // skip the opening close-up, where the broadcast crops red's legs
+const LOOP_END = 102;           // last sample with both fighters detected; blue's track drops out after it
+const MAX_FILL = 25;            // samples (1 s) a limb joint is carried through a pose-model dropout
+const HEAD_K = 0.16;            // head radius as a share of torso length, which a fighter turning doesn't shrink
 const LOOP_HOLD = 0.7;          // seconds to rest on the last frame before restarting
 const LOOP_FADE = 0.4;          // seconds for each half of the fade through black at the restart
 const POSE_TWEEN = 0.8;         // seconds to glide from the live frame into the held pose
@@ -46,6 +49,69 @@ function holdGaps(arr) {
 const mean = (pts) => pts.length ? { x: pts.reduce((s, p) => s + p.x, 0) / pts.length, y: pts.reduce((s, p) => s + p.y, 0) / pts.length } : null;
 const conf = (kp, idx) => idx.map((j) => kp[j]).filter((p) => p.c >= MIN_CONF);
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const smooth1d = (v, R) => v.map((_, i) => {
+  let acc = 0, ws = 0;
+  for (let k = -R; k <= R; k++) {
+    const w = Math.exp(-(k * k) / (2 * (R / 2) ** 2));
+    acc += v[Math.min(v.length - 1, Math.max(0, i + k))] * w; ws += w;
+  }
+  return acc / ws;
+});
+
+// a limb joint the pose model lost for a moment hangs off its parent joint at the angle and length it had either side
+// of the gap, so an arm or leg doesn't blink out; filled joints sit exactly at MIN_CONF
+const PARENT = { 5: 11, 6: 12, 7: 5, 8: 6, 9: 7, 10: 8, 13: 11, 14: 12, 15: 13, 16: 14 };
+function fillLimbs(track) {
+  const out = track.map((r) => ({ ...r, kp: r.kp.map((p) => ({ ...p })) }));
+  const polar = (i, j) => { const p = out[i].kp[j], q = out[i].kp[PARENT[j]]; return { a: Math.atan2(p.y - q.y, p.x - q.x), r: dist(p, q) }; };
+  [5, 6, 7, 8, 9, 10, 13, 14, 15, 16].forEach((j) => { // parents before children
+    const ok = (i) => out[i].kp[j].c >= MIN_CONF && out[i].kp[PARENT[j]].c >= MIN_CONF;
+    for (let i = 0; i < out.length;) {
+      if (ok(i)) { i++; continue; }
+      let k = i;
+      while (k < out.length && !ok(k)) k++;
+      const a = i - 1, b = k < out.length ? k : -1;
+      if (k - i <= MAX_FILL && (a >= 0 || b >= 0)) {
+        const pa = a >= 0 ? polar(a, j) : null, pb = b >= 0 ? polar(b, j) : null;
+        for (let m = i; m < k; m++) {
+          const q = out[m].kp[PARENT[j]];
+          if (q.c < MIN_CONF) continue; // nothing to hang it from
+          let o = pa || pb;
+          if (pa && pb) {
+            const u = (m - a) / (b - a), da = Math.atan2(Math.sin(pb.a - pa.a), Math.cos(pb.a - pa.a));
+            o = { a: pa.a + da * u, r: lerp(pa.r, pb.r, u) };
+          }
+          out[m].kp[j] = { x: q.x + Math.cos(o.a) * o.r, y: q.y + Math.sin(o.a) * o.r, c: MIN_CONF };
+        }
+      }
+      i = k;
+    }
+  });
+  return out;
+}
+
+// the head circle: centre weighted by each face point's confidence, so a point crossing MIN_CONF doesn't jerk it,
+// and radius from smoothed torso length, so it doesn't pulse as shoulder width foreshortens
+function headTrack(track) {
+  let prev = null;
+  const centre = track.map((r) => {
+    let x = 0, y = 0, w = 0;
+    HEAD.forEach((j) => { const p = r.kp[j], k = (p.c / 100) ** 2; x += p.x * k; y += p.y * k; w += k; });
+    if (w > 0.05) prev = { x: x / w, y: y / w };
+    return prev;
+  });
+  const first = centre.find(Boolean);
+  const cx = smooth1d(centre.map((p) => (p || first).x), 2), cy = smooth1d(centre.map((p) => (p || first).y), 2);
+  let lastT = null;
+  const torso = track.map((r) => {
+    const sh = mean(conf(r.kp, [5, 6])), hip = mean(conf(r.kp, [11, 12]));
+    if (sh && hip) lastT = dist(sh, hip);
+    return lastT;
+  });
+  const t0 = torso.find((v) => v != null);
+  const hr = smooth1d(torso.map((v) => (v == null ? t0 : v)), 12).map((v) => v * HEAD_K);
+  return track.map((_, i) => ({ head: { x: cx[i], y: cy[i] }, hr: hr[i] }));
+}
 
 // the broadcast camera zooms and pans; a smoothed union box keeps both fighters framed
 function buildCam(a, b) {
@@ -111,12 +177,14 @@ function pickPose(tracks, events) {
 }
 
 function prepExchange(E) {
-  const tracks = [holdGaps(E.red.map(parseRow)), holdGaps(E.blue.map(parseRow))];
-  const events = E.events.map((ev) => {
-    const e = { f: ev.f, c: ev.c, a: ev.a, t: ev.t, si: (ev.f - E.start) / E.step };
-    return Object.assign(e, strikeGeometry(e, tracks));
-  });
-  return { n: tracks[0].length, start: E.start, step: E.step, tracks, cam: buildCam(tracks[0], tracks[1]), events, pose: pickPose(tracks, events) };
+  // raw keeps the pose model's own confidences for the detect layer's hollow points; tracks is what plays
+  const raw = [E.red, E.blue].map((rows) => holdGaps(rows.slice(0, LOOP_END + 1).map(parseRow)).map((r) => ({ ...r })));
+  const tracks = raw.map(fillLimbs);
+  tracks.forEach((tr, c) => headTrack(tr).forEach((h, i) => { Object.assign(tr[i], h); Object.assign(raw[c][i], h); }));
+  const events = E.events.map((ev) => ({ f: ev.f, c: ev.c, a: ev.a, t: ev.t, si: (ev.f - E.start) / E.step }))
+    .filter((e) => e.si <= LOOP_END)
+    .map((e) => Object.assign(e, strikeGeometry(e, tracks)));
+  return { n: tracks[0].length, start: E.start, step: E.step, raw, tracks, cam: buildCam(tracks[0], tracks[1]), events, pose: pickPose(raw, events) };
 }
 
 /* ---------- drawing ---------- */
@@ -129,6 +197,8 @@ function poseAt(track, t) {
     box: p.box.map((v, k) => lerp(v, q.box[k], a)),
     conf: lerp(p.conf, q.conf, a),
     kp: p.kp.map((k0, j) => ({ x: lerp(k0.x, q.kp[j].x, a), y: lerp(k0.y, q.kp[j].y, a), c: Math.min(k0.c, q.kp[j].c) })),
+    head: { x: lerp(p.head.x, q.head.x, a), y: lerp(p.head.y, q.head.y, a) },
+    hr: lerp(p.hr, q.hr, a),
   };
 }
 // glide between two poses; a joint only glides if it was seen at both ends, otherwise it waits for the lock-on
@@ -140,6 +210,8 @@ function mixPose(a, b, u) {
       const p = a.kp[j], both = p.c >= MIN_CONF && q.c >= MIN_CONF;
       return { x: both ? lerp(p.x, q.x, u) : q.x, y: both ? lerp(p.y, q.y, u) : q.y, c: u < 1 ? Math.min(p.c, q.c) : q.c };
     }),
+    head: { x: lerp(a.head.x, b.head.x, u), y: lerp(a.head.y, b.head.y, u) },
+    hr: lerp(a.hr, b.hr, u),
   };
 }
 const camAt = (S, t) => {
@@ -167,7 +239,7 @@ function drawStage(ctx, S, W, H, view, dpr) {
   const sc = Math.min((W * 0.84) / cam[2], (plotH * 0.8) / cam[3]) * zoom;
   const P = (p) => [W / 2 + (p.x - cam[0]) * sc, plotH / 2 + (p.y - cam[1]) * sc];
   const font = (px, w = 500) => `${w} ${px * dpr}px "JetBrains Mono", ui-monospace, monospace`;
-  const poses = S.tracks.map((tr) => (pose ? mixPose(poseAt(tr, pose.fromT), tr[S.pose], pose.u) : poseAt(tr, t)));
+  const poses = S.tracks.map((tr, c) => (pose ? mixPose(poseAt(tr, pose.fromT), S.raw[c][S.pose], pose.u) : poseAt(tr, t)));
   const locked = pose ? Math.min(17, Math.floor(pose.lock * 17 + 1e-6)) : 17; // joints revealed so far, in COCO order (head to ankles)
 
   poses.forEach((ps, c) => {
@@ -195,13 +267,9 @@ function drawStage(ctx, S, W, H, view, dpr) {
     ctx.strokeStyle = `rgba(${INK_RGB.join(',')},.26)`; ctx.stroke(ghost);
 
     // head
-    const head = mean(conf(kp, HEAD));
-    if (head) {
-      const sh = kp[5].c >= MIN_CONF && kp[6].c >= MIN_CONF ? dist(kp[5], kp[6]) * sc : 40 * dpr;
-      const [hx, hy] = P(head);
-      ctx.strokeStyle = locked >= 5 ? tone(c, colour, lerp(0.85, 1, colour)) : `rgba(${INK_RGB.join(',')},.26)`;
-      ctx.beginPath(); ctx.arc(hx, hy, Math.max(6 * dpr, Math.min(34 * dpr, sh * 0.3)), 0, Math.PI * 2); ctx.stroke();
-    }
+    const [hx, hy] = P(ps.head);
+    ctx.strokeStyle = locked >= 5 ? tone(c, colour, lerp(0.85, 1, colour)) : `rgba(${INK_RGB.join(',')},.26)`;
+    ctx.beginPath(); ctx.arc(hx, hy, Math.max(6 * dpr, Math.min(34 * dpr, ps.hr * sc)), 0, Math.PI * 2); ctx.stroke();
 
     // joints
     kp.forEach((p, j) => {

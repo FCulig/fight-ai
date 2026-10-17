@@ -91,7 +91,7 @@ function Story() {
       <div className="stage">
         <div className="stage-in">
           <ExchangeStage mode={mode} />
-          <p className="stage-cap">Real data: 4.4 seconds of one fight, replayed from the pipeline&rsquo;s pose output. Strikes shown are hand-verified labels.</p>
+          <p className="stage-cap">Real data: 3.7 seconds of one fight, replayed from the pipeline&rsquo;s pose output. Strikes shown are hand-verified labels.</p>
         </div>
       </div>
     </section>
