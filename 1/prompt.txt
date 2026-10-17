@@ -1,0 +1,13 @@
+Currently there is no way to delete a fight state in the self labeling mode. I want the ability to delete a fight state by selecting it and pressing delete
+
+---
+
+Okay now I also want to be able to adjust them by click on the edge of the box and dragging it (like rounds)
+
+---
+
+Can you remove the white highlight when a fight state is selected?
+
+---
+
+When I finish dragging, there is a wierd jump between two adjecent fight states
