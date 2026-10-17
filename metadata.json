@@ -3,9 +3,10 @@
   "checkpoint_id": "01M54JYKQPW0KT7GE3GA54WE7K",
   "strategy": "manual-commit",
   "branch": "master",
-  "checkpoints_count": 5,
+  "checkpoints_count": 8,
   "files_touched": [
     "landing/CLAUDE.md",
+    "landing/app/app.jsx",
     "landing/app/fight.jsx",
     "landing/app/stage.jsx",
     "landing/index.html"
@@ -21,13 +22,20 @@
     {
       "metadata": "/1/metadata.json",
       "prompt": ""
+    },
+    {
+      "metadata": "/2/metadata.json",
+      "transcript": "/2/full.jsonl",
+      "compact_transcript": "/2/transcript.jsonl",
+      "content_hash": "/2/content_hash.txt",
+      "prompt": "/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 70,
-    "cache_creation_tokens": 58290,
-    "cache_read_tokens": 3476337,
-    "output_tokens": 18297,
-    "api_call_count": 35
+    "input_tokens": 102,
+    "cache_creation_tokens": 102363,
+    "cache_read_tokens": 4862174,
+    "output_tokens": 30033,
+    "api_call_count": 51
   }
 }

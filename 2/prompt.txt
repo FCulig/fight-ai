@@ -1,0 +1,11 @@
+Can we add some analytics to the landing page, I want to see who/how they are using my page. What are my options?
+
+---
+
+I don't want to trigger any consent banners. But I want a free serivice
+
+---
+
+Here is the code for tracking <script defer src="https://cloud.umami.is/script.js" data-website-id="66808aca-dcd7-4357-92e6-9c7e80d1d9d6"></script>
+
+Does it need to be to a secret of some sort?
