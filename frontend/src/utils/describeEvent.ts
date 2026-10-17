@@ -33,6 +33,9 @@ export interface DescribeContext {
    * fight), which is an accepted risk, not an oversight.
    */
   swapped?: boolean;
+  /** Label rows only: the labelled fight state at this event's frame is
+   * CLINCH (utils/labelState.ts). Decides whether a `knee` reads as a clinch knee. */
+  inClinch?: boolean;
 }
 
 function nameForCorner(corner: number | null, ctx: DescribeContext): string | null {
@@ -52,7 +55,7 @@ function describeLabel(e: Event, ctx: DescribeContext): string {
   const tool = ACTION_TO_TOOL[e.action];
   if (!tool) return e.description ?? e.action;
   const name = tool.needsFighter ? nameForCorner(e.corner, ctx) ?? '' : '';
-  return tool.text(name, (e.target as Target | null) ?? undefined);
+  return tool.text(name, (e.target as Target | null) ?? undefined, ctx.inClinch);
 }
 
 function outcomeSuffix(success: boolean | null): string {
@@ -82,6 +85,7 @@ function describePrediction(e: Event, ctx: DescribeContext): string {
   if (action === 'clinch_initiated') return `${name} initiates a clinch`;
   if (action === 'clinch_punch') return `${name} punches in the clinch`;
   if (action === 'clinch_knee') return `${name} knees in the clinch`;
+  if (action === 'knee') return `${name} throws a knee${outcomeSuffix(e.success)}`;
   if (action === 'ground_punch') return `${name} lands ground and pound`;
   if (action === 'ground_knee') return `${name} knees from the ground`;
   if (action in KICK_TEXT) return `${name} ${KICK_TEXT[action]}${outcomeSuffix(e.success)}`;

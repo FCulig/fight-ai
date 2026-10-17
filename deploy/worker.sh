@@ -23,6 +23,12 @@ main() {
   db=$(sed -n 's/^POSTGRES_DB=//p' <<< "$creds")
   password=$(sed -n 's/^POSTGRES_PASSWORD=//p' <<< "$creds")
 
+  if nc -z 127.0.0.1 "$PORT" 2> /dev/null; then
+    echo "Port $PORT is already in use, probably a tunnel left by an earlier run." >&2
+    echo "Find it with: lsof -nP -iTCP:$PORT -sTCP:LISTEN" >&2
+    exit 1
+  fi
+
   # Reopen the tunnel whenever it drops (sleep, network change). The worker
   # waits and retries while it is down.
   (
@@ -34,7 +40,9 @@ main() {
     done
   ) &
   tunnel=$!
-  trap 'pkill -P "$tunnel" 2> /dev/null; kill "$tunnel" 2> /dev/null || true' EXIT
+  # Expand $tunnel now: the EXIT trap runs after main's locals are gone, and
+  # under set -u an unexpanded $tunnel aborts the trap and orphans the tunnel.
+  trap "pkill -P $tunnel 2> /dev/null; kill $tunnel 2> /dev/null || true" EXIT
   for _ in $(seq 1 30); do
     nc -z 127.0.0.1 "$PORT" 2> /dev/null && break
     sleep 1

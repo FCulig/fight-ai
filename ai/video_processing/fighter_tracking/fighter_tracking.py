@@ -1,4 +1,5 @@
 from models.FighterTracker import FighterTracker
+from progress import progress
 from models.constants import BOX_SMOOTHING_ENABLED
 from video_processing.fighter_tracking.box_smoothing import smooth_track_boxes
 
@@ -39,16 +40,15 @@ def track_fighters(
     output  = {"fps": fps, "frames": []}
     total   = len(frames)
 
-    for idx, frame in enumerate(frames):
-        frame_num  = frame["frame"]
-        image_name = f"frames/frame_{frame_num}.jpg"
+    with progress("Tracking", total) as bar:
+        for frame in frames:
+            bar.update()
+            frame_num  = frame["frame"]
+            image_name = f"frames/frame_{frame_num}.jpg"
 
-        tracked = tracker.update(frame["detections"])
+            tracked = tracker.update(frame["detections"])
 
-        if (idx + 1) % 500 == 0:
-            print(f"  Tracking: {idx + 1}/{total} frames processed")
-
-        output["frames"].append({"image_name": image_name, "detections": tracked})
+            output["frames"].append({"image_name": image_name, "detections": tracked})
 
     print(f"Tracking complete — {total} frames processed")
 

@@ -19,7 +19,8 @@ export interface ToolItem {
   num?: string;
   action: string;
   name: string;
-  text: (fighterName: string, target?: Target) => string;
+  /** `inClinch`: the labelled fight state at the event's frame is CLINCH (see utils/labelState.ts). */
+  text: (fighterName: string, target?: Target, inClinch?: boolean) => string;
   needsFighter: boolean;
   /** Shift-modified: plain key = head, Shift+key = body. Read via e.code + e.shiftKey. */
   hasTarget?: boolean;
@@ -39,9 +40,10 @@ export interface ToolGroup {
 //
 // jab/cross are lead/rear-relative (boxing terms), not absolute-handed —
 // a southpaw's jab is thrown with their right hand. Hooks/uppercuts stay
-// absolute left/right: that's what you can directly see (which arm moved)
-// without first judging stance, and it's lossless either way since both
-// hands collapse to the same family (`hook`/`uppercut`) at export time.
+// absolute left/right, and so do elbows: that's what you can directly see
+// (which arm moved) without first judging stance, and it's lossless either
+// way since both hands collapse to the same family (`hook`/`uppercut`/
+// `elbow`) at export time.
 const HAND_STRIKE_NAMES: Record<string, string> = {
   jab: 'jab',
   cross: 'cross',
@@ -49,6 +51,8 @@ const HAND_STRIKE_NAMES: Record<string, string> = {
   right_hook: 'right hook',
   left_uppercut: 'left uppercut',
   right_uppercut: 'right uppercut',
+  left_elbow: 'left elbow',
+  right_elbow: 'right elbow',
   elbow: 'elbow',
 };
 
@@ -59,7 +63,7 @@ function handStrikeText(action: string, fighterName: string, target: Target = 'h
 export const TOOL_GROUPS: ToolGroup[] = [
   {
     group: 'Strikes',
-    note: 'Jab/cross = lead/rear hand (works for southpaws) · hooks/uppercuts = literal left/right · Shift = body',
+    note: 'Jab/cross = lead/rear hand (works for southpaws) · hooks/uppercuts/elbows = literal left/right · Shift = body',
     items: [
       { key: '1', num: '1', action: 'jab', name: 'Jab', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('jab', f, t) },
       { key: '2', num: '2', action: 'cross', name: 'Cross', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('cross', f, t) },
@@ -67,12 +71,15 @@ export const TOOL_GROUPS: ToolGroup[] = [
       { key: '4', num: '4', action: 'right_hook', name: 'Right hook', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('right_hook', f, t) },
       { key: '5', num: '5', action: 'left_uppercut', name: 'Left uppercut', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('left_uppercut', f, t) },
       { key: '6', num: '6', action: 'right_uppercut', name: 'Right uppercut', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('right_uppercut', f, t) },
+      { key: '7', num: '7', action: 'left_elbow', name: 'Left elbow', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('left_elbow', f, t) },
+      { key: '8', num: '8', action: 'right_elbow', name: 'Right elbow', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('right_elbow', f, t) },
       { key: 'c', action: 'calf_kick', name: 'Calf kick', needsFighter: true, fixedTarget: 'leg', text: f => `${f} calf kick` },
       { key: 'l', action: 'low_kick', name: 'Low kick', needsFighter: true, fixedTarget: 'leg', text: f => `${f} low kick` },
       { key: 'm', action: 'middle_kick', name: 'Middle kick', needsFighter: true, fixedTarget: 'body', text: f => `${f} middle kick to the body` },
       { key: 'h', action: 'high_kick', name: 'High kick', needsFighter: true, fixedTarget: 'head', text: f => `${f} high kick to the head` },
-      { key: 'e', action: 'elbow', name: 'Elbow', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('elbow', f, t) },
-      { key: 'n', action: 'clinch_knee', name: 'Clinch knee', needsFighter: true, text: f => `${f} knee in the clinch` },
+      // One knee for every position except the ground: whether it was in the
+      // clinch comes from the fight-state marks, not from a separate key.
+      { key: 'n', action: 'knee', name: 'Knee', needsFighter: true, text: (f, _t, inClinch) => (inClinch ? `${f} knee in the clinch` : `${f} knee`) },
     ],
   },
   {
@@ -109,6 +116,16 @@ export const TOOL_GROUPS: ToolGroup[] = [
   },
 ];
 
+// Actions the palette no longer offers but stored labels may still carry.
+// They stay describable and reviewable (Training Data QA can retype them),
+// but have no key, so nothing new is ever logged with them. `elbow` predates
+// the left/right split and its hand is unknown; `clinch_knee` predates `knee`
+// taking its clinch context from the state marks.
+export const LEGACY_TOOLS: ToolItem[] = [
+  { key: '', action: 'elbow', name: 'Elbow (hand unknown)', needsFighter: true, hasTarget: true, text: (f, t) => handStrikeText('elbow', f, t) },
+  { key: '', action: 'clinch_knee', name: 'Clinch knee (old)', needsFighter: true, text: f => `${f} knee in the clinch` },
+];
+
 export const KEYMAP: Record<string, ToolItem> = {};
 TOOL_GROUPS.forEach(g => g.items.forEach(it => { KEYMAP[it.key] = it; }));
 
@@ -137,6 +154,7 @@ export { categoryForAction, colorForAction, iconForAction } from '../../utils/ev
 // stored `description`, so it's never looked up here.
 export const ACTION_TO_TOOL: Record<string, ToolItem> = {};
 TOOL_GROUPS.forEach(g => g.items.forEach(it => { ACTION_TO_TOOL[it.action] = it; }));
+LEGACY_TOOLS.forEach(it => { ACTION_TO_TOOL[it.action] = it; });
 
 export const FILTERS: { key: string; label: string }[] = [
   { key: 'all', label: 'All' },

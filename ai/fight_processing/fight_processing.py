@@ -5,6 +5,7 @@ from typing import Optional
 
 from sqlalchemy import text
 from database import SessionLocal
+from progress import progress
 
 from action_model import inference as strike_model
 from fight_processing.fight_processing_util import (
@@ -88,7 +89,9 @@ def _strike_action(family: str, target: str, state: FightState) -> str:
         return f"{family}_{'head' if target == 'head' else 'body'}"
     if family == "kick":
         return _KICK_ACTIONS[target]
-    return "ground_knee" if state == FightState.GROUND else "clinch_knee"
+    if state == FightState.GROUND:
+        return "ground_knee"
+    return "clinch_knee" if state == FightState.CLINCH else "knee"
 
 
 def _scan_spans(rounds, excluded_ranges) -> list[tuple[int, int]]:
@@ -179,37 +182,39 @@ def write_frames_and_rounds(
 
         frame_batch: list[dict] = []
 
-        for index, frame in enumerate(pose_data["frames"]):
-            frame_number = index + 1
+        with progress("Writing frames", len(pose_data["frames"])) as bar:
+            for index, frame in enumerate(pose_data["frames"]):
+                bar.update()
+                frame_number = index + 1
 
-            if frame_number in round_starts:
-                description = f"Round {round_starts[frame_number]} started"
-                _insert_event(db, frame_number, None, fight_id, action="round_start")
-                print(description + f" at frame {frame_number}")
+                if frame_number in round_starts:
+                    description = f"Round {round_starts[frame_number]} started"
+                    _insert_event(db, frame_number, None, fight_id, action="round_start")
+                    print(description + f" at frame {frame_number}")
 
-            if frame_number in round_ends:
-                description = f"Round {round_ends[frame_number]} ended"
-                _insert_event(db, frame_number, None, fight_id, action="round_end")
-                print(description + f" at frame {frame_number}")
+                if frame_number in round_ends:
+                    description = f"Round {round_ends[frame_number]} ended"
+                    _insert_event(db, frame_number, None, fight_id, action="round_end")
+                    print(description + f" at frame {frame_number}")
 
-            for d in frame["detections"]:
-                if d["class_id"] in (0, 1):
-                    bbox = d.get("bbox_xyxy") or []
-                    if len(bbox) == 4:
-                        raw_kp = d.get("keypoints")
-                        frame_batch.append({
-                            "fight_id":   fight_id,
-                            "frame":      frame_number,
-                            "corner":     d["class_id"],
-                            "x1": float(bbox[0]), "y1": float(bbox[1]),
-                            "x2": float(bbox[2]), "y2": float(bbox[3]),
-                            "confidence": d.get("confidence"),
-                            "keypoints":  json.dumps(raw_kp),
-                        })
+                for d in frame["detections"]:
+                    if d["class_id"] in (0, 1):
+                        bbox = d.get("bbox_xyxy") or []
+                        if len(bbox) == 4:
+                            raw_kp = d.get("keypoints")
+                            frame_batch.append({
+                                "fight_id":   fight_id,
+                                "frame":      frame_number,
+                                "corner":     d["class_id"],
+                                "x1": float(bbox[0]), "y1": float(bbox[1]),
+                                "x2": float(bbox[2]), "y2": float(bbox[3]),
+                                "confidence": d.get("confidence"),
+                                "keypoints":  json.dumps(raw_kp),
+                            })
 
-            if len(frame_batch) >= _FRAME_BATCH_SIZE:
-                _flush_frame_batch(db, frame_batch)
-                frame_batch.clear()
+                if len(frame_batch) >= _FRAME_BATCH_SIZE:
+                    _flush_frame_batch(db, frame_batch)
+                    frame_batch.clear()
 
         if frame_batch:
             _flush_frame_batch(db, frame_batch)
@@ -329,107 +334,109 @@ def process_fight(
 
         frame_batch: list[dict] = []
 
-        for index, frame in enumerate(pose_data["frames"]):
-            frame_number = index + 1
+        with progress("Fight processing", len(pose_data["frames"])) as bar:
+            for index, frame in enumerate(pose_data["frames"]):
+                bar.update()
+                frame_number = index + 1
 
-            if frame_number in round_starts:
-                description = f"Round {round_starts[frame_number]} started"
-                _insert_event(db, frame_number, None, fight_id, action="round_start")
-                print(description + f" at frame {frame_number}")
+                if frame_number in round_starts:
+                    description = f"Round {round_starts[frame_number]} started"
+                    _insert_event(db, frame_number, None, fight_id, action="round_start")
+                    print(description + f" at frame {frame_number}")
 
-            if frame_number in round_ends:
-                description = f"Round {round_ends[frame_number]} ended"
-                _insert_event(db, frame_number, None, fight_id, action="round_end")
-                print(description + f" at frame {frame_number}")
+                if frame_number in round_ends:
+                    description = f"Round {round_ends[frame_number]} ended"
+                    _insert_event(db, frame_number, None, fight_id, action="round_end")
+                    print(description + f" at frame {frame_number}")
 
-            # Collect fighter bboxes (+ keypoints) for fighter_frames table
-            for d in frame["detections"]:
-                if d["class_id"] in (0, 1):
-                    bbox = d.get("bbox_xyxy") or []
-                    if len(bbox) == 4:
-                        raw_kp = d.get("keypoints")
-                        frame_batch.append({
-                            "fight_id":   fight_id,
-                            "frame":      frame_number,
-                            "corner":     d["class_id"],
-                            "x1": float(bbox[0]), "y1": float(bbox[1]),
-                            "x2": float(bbox[2]), "y2": float(bbox[3]),
-                            "confidence": d.get("confidence"),
-                            "keypoints":  json.dumps(raw_kp),  # [[x,y]*17] or null
-                        })
+                # Collect fighter bboxes (+ keypoints) for fighter_frames table
+                for d in frame["detections"]:
+                    if d["class_id"] in (0, 1):
+                        bbox = d.get("bbox_xyxy") or []
+                        if len(bbox) == 4:
+                            raw_kp = d.get("keypoints")
+                            frame_batch.append({
+                                "fight_id":   fight_id,
+                                "frame":      frame_number,
+                                "corner":     d["class_id"],
+                                "x1": float(bbox[0]), "y1": float(bbox[1]),
+                                "x2": float(bbox[2]), "y2": float(bbox[3]),
+                                "confidence": d.get("confidence"),
+                                "keypoints":  json.dumps(raw_kp),  # [[x,y]*17] or null
+                            })
 
-            if len(frame_batch) >= _FRAME_BATCH_SIZE:
-                _flush_frame_batch(db, frame_batch)
-                frame_batch.clear()
+                if len(frame_batch) >= _FRAME_BATCH_SIZE:
+                    _flush_frame_batch(db, frame_batch)
+                    frame_batch.clear()
 
-            # fighter_frames above are written for the whole video (the
-            # frontend overlay needs them); everything below is scanned
-            # frames only.
-            while _span_idx < len(scan_spans) and frame_number > scan_spans[_span_idx][1]:
-                _span_idx += 1
-            if not (_span_idx < len(scan_spans) and scan_spans[_span_idx][0] <= frame_number):
-                continue
+                # fighter_frames above are written for the whole video (the
+                # frontend overlay needs them); everything below is scanned
+                # frames only.
+                while _span_idx < len(scan_spans) and frame_number > scan_spans[_span_idx][1]:
+                    _span_idx += 1
+                if not (_span_idx < len(scan_spans) and scan_spans[_span_idx][0] <= frame_number):
+                    continue
 
-            state_at[frame_number] = current_fight_state
+                state_at[frame_number] = current_fight_state
 
-            if not frame_usable(frame["detections"], current_fight_state):
+                if not frame_usable(frame["detections"], current_fight_state):
+                    if current_fight_state in GRAPPLING_STATES:
+                        frames_spent_grappling += 1
+                    if current_fight_state == FightState.GROUND:
+                        frames_spent_ground += 1
+                    continue
+
+                red_kp = blue_kp = None
+                for d in frame["detections"]:
+                    if d["class_id"] == 0:
+                        red_kp = smooth_red(d["keypoints"], frame_number)
+                    elif d["class_id"] == 1:
+                        blue_kp = smooth_blue(d["keypoints"], frame_number)
+
+                red_scale, blue_scale = get_fighter_scale(red_kp), get_fighter_scale(blue_kp)
+                heads[frame_number] = {
+                    "red":  (get_head_center(red_kp), red_scale),
+                    "blue": (get_head_center(blue_kp), blue_scale),
+                }
+                hip_history.append({
+                    "red":  get_hip_height(red_kp),
+                    "blue": get_hip_height(blue_kp),
+                    "red_scale":  red_scale,
+                    "blue_scale": blue_scale,
+                })
+
+                current_fight_state, state_counters = determine_fight_state(
+                    frame["detections"],
+                    state_counters,
+                    current_fight_state,
+                    fps,
+                )
+
                 if current_fight_state in GRAPPLING_STATES:
                     frames_spent_grappling += 1
                 if current_fight_state == FightState.GROUND:
                     frames_spent_ground += 1
-                continue
 
-            red_kp = blue_kp = None
-            for d in frame["detections"]:
-                if d["class_id"] == 0:
-                    red_kp = smooth_red(d["keypoints"], frame_number)
-                elif d["class_id"] == 1:
-                    blue_kp = smooth_blue(d["keypoints"], frame_number)
+                if previous_fight_state != current_fight_state:
+                    description = f"Fight state changed to {current_fight_state}"
 
-            red_scale, blue_scale = get_fighter_scale(red_kp), get_fighter_scale(blue_kp)
-            heads[frame_number] = {
-                "red":  (get_head_center(red_kp), red_scale),
-                "blue": (get_head_center(blue_kp), blue_scale),
-            }
-            hip_history.append({
-                "red":  get_hip_height(red_kp),
-                "blue": get_hip_height(blue_kp),
-                "red_scale":  red_scale,
-                "blue_scale": blue_scale,
-            })
+                    # Attribute the engagement to a fighter. The fight hitting the
+                    # floor (entering GROUND) is a takedown; locking up while still
+                    # standing (entering CLINCH) is a clinch.
+                    initiator = determine_takedown_initiator(hip_history)
+                    action: Optional[str] = None
+                    if current_fight_state == FightState.GROUND and initiator:
+                        description += f", takedown initiated by {initiator}"
+                        action = "takedown_initiated"
+                    elif current_fight_state == FightState.CLINCH and initiator:
+                        description += f", clinch initiated by {initiator}"
+                        action = "clinch_initiated"
 
-            current_fight_state, state_counters = determine_fight_state(
-                frame["detections"],
-                state_counters,
-                current_fight_state,
-                fps,
-            )
-
-            if current_fight_state in GRAPPLING_STATES:
-                frames_spent_grappling += 1
-            if current_fight_state == FightState.GROUND:
-                frames_spent_ground += 1
-
-            if previous_fight_state != current_fight_state:
-                description = f"Fight state changed to {current_fight_state}"
-
-                # Attribute the engagement to a fighter. The fight hitting the
-                # floor (entering GROUND) is a takedown; locking up while still
-                # standing (entering CLINCH) is a clinch.
-                initiator = determine_takedown_initiator(hip_history)
-                action: Optional[str] = None
-                if current_fight_state == FightState.GROUND and initiator:
-                    description += f", takedown initiated by {initiator}"
-                    action = "takedown_initiated"
-                elif current_fight_state == FightState.CLINCH and initiator:
-                    description += f", clinch initiated by {initiator}"
-                    action = "clinch_initiated"
-
-                _insert_event(db, frame_number, None, fight_id,
-                              action=action, fighter_id=_fighter_id_for(initiator),
-                              state=current_fight_state.name)
-                print(description + f" at frame {frame_number}")
-                previous_fight_state = current_fight_state
+                    _insert_event(db, frame_number, None, fight_id,
+                                  action=action, fighter_id=_fighter_id_for(initiator),
+                                  state=current_fight_state.name)
+                    print(description + f" at frame {frame_number}")
+                    previous_fight_state = current_fight_state
 
         if frame_batch:
             _flush_frame_batch(db, frame_batch)
@@ -439,6 +446,7 @@ def process_fight(
         # Grappling strikes carry no landed/missed (no recoil to read in a
         # tangle); open-range strikes get the head-recoil proxy.
         # ------------------------------------------------------------------
+        print("Scoring strikes …")
         tracks = strike_model.tracks_from_pose_data(pose_data)
         for strike in strike_model.detect_strikes(tracks, fps, scan_spans, _strike_net):
             state = state_at.get(strike.frame, FightState.STRIKING)

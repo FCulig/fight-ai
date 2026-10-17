@@ -1,4 +1,4 @@
-import { ACTION_TO_TOOL, successForAction, TOOL_GROUPS, type Target } from '../components/annotate/taxonomy';
+import { ACTION_TO_TOOL, LEGACY_TOOLS, successForAction, TOOL_GROUPS, type Target } from '../components/annotate/taxonomy';
 
 /**
  * The subset of Annotate's palette that is actually a training class with a
@@ -14,6 +14,8 @@ export interface TrainingClass {
   group: string;
   /** The Annotate palette's keyboard shortcut for this class (ToolItem.key/.num). */
   key: string;
+  /** No longer in the palette (LEGACY_TOOLS): only shown while events still carry it. */
+  legacy?: boolean;
 }
 
 const NOT_A_CLASS = new Set([
@@ -23,11 +25,14 @@ const NOT_A_CLASS = new Set([
   'knockdown',
 ]);
 
-export const TRAINING_CLASSES: TrainingClass[] = TOOL_GROUPS.flatMap((g) =>
-  g.items
-    .filter((it) => it.needsFighter && !NOT_A_CLASS.has(it.action))
-    .map((it) => ({ action: it.action, name: it.name, group: g.group, key: (it.num ?? it.key).toUpperCase() })),
-);
+export const TRAINING_CLASSES: TrainingClass[] = [
+  ...TOOL_GROUPS.flatMap((g) =>
+    g.items
+      .filter((it) => it.needsFighter && !NOT_A_CLASS.has(it.action))
+      .map((it) => ({ action: it.action, name: it.name, group: g.group, key: (it.num ?? it.key).toUpperCase() })),
+  ),
+  ...LEGACY_TOOLS.map((it) => ({ action: it.action, name: it.name, group: 'Legacy', key: '', legacy: true })),
+];
 
 export const TRAINING_ACTIONS = new Set(TRAINING_CLASSES.map((c) => c.action));
 
@@ -61,7 +66,10 @@ export const FAMILY_BY_ACTION: Record<string, string> = {
   right_hook: 'hook',
   left_uppercut: 'uppercut',
   right_uppercut: 'uppercut',
+  left_elbow: 'elbow',
+  right_elbow: 'elbow',
   elbow: 'elbow',
+  knee: 'knee',
   clinch_knee: 'knee',
   ground_knee: 'knee',
   calf_kick: 'kick',

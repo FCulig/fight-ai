@@ -19,6 +19,7 @@ const num: React.CSSProperties = { fontFamily: 'var(--mono)', fontSize: 12.5, fo
 export default function ClassGrid({ eventsByAction, onOpen, narrow }: ClassGridProps) {
   const rows = TRAINING_CLASSES
     .map((c, i) => ({ c, i, s: classStats(eventsByAction.get(c.action) ?? []) }))
+    .filter(({ c, s }) => !c.legacy || s.total > 0)
     .sort((a, b) => Number(b.s.total > 0) - Number(a.s.total > 0) || b.s.pending - a.s.pending || a.i - b.i);
 
   return (

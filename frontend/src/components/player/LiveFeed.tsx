@@ -3,6 +3,7 @@ import type { Event } from '../../types/Event';
 import { categoryForAction, colorForAction, iconForAction } from '../../components/annotate/taxonomy';
 import { describeEvent, type DescribeRound } from '../../utils/describeEvent';
 import { isFrameSwapped, type CornerSwapSpan } from '../../utils/cornerSwap';
+import { labelStateAt, labelStateMarks } from '../../utils/labelState';
 
 interface LiveFeedProps {
   events: Event[];
@@ -45,6 +46,7 @@ export default function LiveFeed({
   const [filter, setFilter] = useState<Filter>('all');
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const stateMarks = useMemo(() => labelStateMarks(events), [events]);
   const enriched = useMemo(() => events.map(e => ({
     ...e,
     cat: categoryForAction(e.action),
@@ -52,8 +54,9 @@ export default function LiveFeed({
     text: describeEvent(e, {
       redName, blueName, redFighterId, rounds,
       swapped: isFrameSwapped(e.frame, cornerSwapSpans ?? []),
+      inClinch: labelStateAt(e.frame, stateMarks) === 'CLINCH',
     }),
-  })), [events, fps, redName, blueName, redFighterId, rounds, cornerSwapSpans]);
+  })), [events, stateMarks, fps, redName, blueName, redFighterId, rounds, cornerSwapSpans]);
 
   const visible = useMemo(() =>
     enriched.filter(e => e.frame <= currentFrame && matchFilter(e.cat, filter)),

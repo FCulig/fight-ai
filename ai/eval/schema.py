@@ -69,6 +69,7 @@ PIPELINE_ACTION_MAP: dict[str, tuple[str, str]] = {
     "head_kick":     ("kick",     "head"),
     "middle_kick":   ("kick",     "body"),
     "low_kick":      ("kick",     "leg"),
+    "knee":          ("knee",     "unknown"),
     # Grappling strikes carry neither a punch family nor a target zone.
     "clinch_punch":  ("punch",    "unknown"),
     "ground_punch":  ("punch",    "unknown"),

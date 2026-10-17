@@ -15,6 +15,7 @@ import { isEditingLabels, isFightViewable, isLabelEditable, isLabelingReady, nee
 import type { Event } from '../types/Event';
 import { describeEvent } from '../utils/describeEvent';
 import { isFrameSwapped } from '../utils/cornerSwap';
+import { labelStateAt, labelStateMarks } from '../utils/labelState';
 import ConfirmDialog from '../components/ConfirmDialog';
 import VideoControls from '../components/VideoControls';
 import FrameInfo from '../components/FrameInfo';
@@ -140,8 +141,10 @@ export default function Annotate() {
     () => spans.filter(s => s.kind === 'corner_swap').map(s => ({ frame: s.frame, end_frame: s.end_frame })),
     [spans],
   );
+  const stateMarks = useMemo(() => labelStateMarks(events), [events]);
   const describe = (e: Event) => describeEvent(e, {
     redName, blueName, swapped: isFrameSwapped(e.frame, cornerSwapSpans),
+    inClinch: labelStateAt(e.frame, stateMarks) === 'CLINCH',
   });
 
   // ---- annotation logging state ----
@@ -373,7 +376,7 @@ export default function Annotate() {
     // fully reconstructable from action/target/corner (see describeEvent.ts),
     // so storing a frozen copy would only go stale the next time a
     // corner_swap span is added or edited.
-    const description = item.text(fighterName, target ?? undefined);
+    const description = item.text(fighterName, target ?? undefined, labelStateAt(frameRef.current, stateMarks) === 'CLINCH');
     const color = colorForAction(item.action);
     const icon = iconForAction(item.action);
     addEvent({

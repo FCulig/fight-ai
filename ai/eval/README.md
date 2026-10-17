@@ -157,7 +157,7 @@ spans — mark the frame where the state genuinely changes and the span is
 derived automatically, running to the next mark (or the end of the round for
 the last one).
 
-**Elbows** have no pipeline equivalent yet. Label them anyway — they will score
+**Elbows** (left/right, both scored as the `elbow` family) have no pipeline equivalent yet. Label them anyway — they will score
 as false negatives, which is the honest reading, and the action model will
 need them.
 

@@ -20,6 +20,7 @@ import numpy as np
 from .parsers import parse_round_from_boxes, parse_timer
 from .debug import save_crop_pair, plot_timer_series
 from debug import DebugContext
+from progress import progress
 from models.constants import (
     SCOREBOARD_OCR_SAMPLE_RATE_HZ,
     SCOREBOARD_OCR_MIN_CONFIDENCE,
@@ -79,89 +80,91 @@ def extract_scoreboard_samples(
     sample_idx  = 0
     frame_num   = 0
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frame_num += 1
+    with progress("Scoreboard OCR", total) as bar:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame_num += 1
+            bar.update()
 
-        if frame_num % stride != 0:
-            continue
+            if frame_num % stride != 0:
+                continue
 
-        # --- Crop & pre-process ---
-        x, y, w, h = roi["x"], roi["y"], roi["w"], roi["h"]
-        crop = frame[y:y+h, x:x+w]
-        if crop.size == 0:
-            ctx.log("extraction", f"frame={frame_num:08d} SKIP: empty crop")
-            continue
+            # --- Crop & pre-process ---
+            x, y, w, h = roi["x"], roi["y"], roi["w"], roi["h"]
+            crop = frame[y:y+h, x:x+w]
+            if crop.size == 0:
+                ctx.log("extraction", f"frame={frame_num:08d} SKIP: empty crop")
+                continue
 
-        upscaled = cv2.resize(
-            crop,
-            (w * SCOREBOARD_OCR_UPSCALE, h * SCOREBOARD_OCR_UPSCALE),
-            interpolation=cv2.INTER_CUBIC,
-        )
-        gray         = cv2.cvtColor(upscaled, cv2.COLOR_BGR2GRAY)
-        preprocessed = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-        )
+            upscaled = cv2.resize(
+                crop,
+                (w * SCOREBOARD_OCR_UPSCALE, h * SCOREBOARD_OCR_UPSCALE),
+                interpolation=cv2.INTER_CUBIC,
+            )
+            gray         = cv2.cvtColor(upscaled, cv2.COLOR_BGR2GRAY)
+            preprocessed = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            )
 
-        # Debug crops at interval
-        if ctx.verbose and sample_idx % SCOREBOARD_DEBUG_CROP_INTERVAL == 0:
-            prefix = sample_ctx.path(f"frame_{frame_num:08d}")
-            save_crop_pair(crop, preprocessed, prefix)
+            # Debug crops at interval
+            if ctx.verbose and sample_idx % SCOREBOARD_DEBUG_CROP_INTERVAL == 0:
+                prefix = sample_ctx.path(f"frame_{frame_num:08d}")
+                save_crop_pair(crop, preprocessed, prefix)
 
-        # --- OCR — use colour upscaled image for best results ---
-        result   = reader.readtext(upscaled)
-        raw_text = ""
-        conf     = 0.0
-        if result:
-            lines    = [(t, float(c)) for (_bbox, t, c) in result]
-            conf     = float(np.mean([c for _, c in lines])) if lines else 0.0
-            raw_text = " ".join(t for t, c in lines if c >= SCOREBOARD_OCR_MIN_CONFIDENCE)
+            # --- OCR — use colour upscaled image for best results ---
+            result   = reader.readtext(upscaled)
+            raw_text = ""
+            conf     = 0.0
+            if result:
+                lines    = [(t, float(c)) for (_bbox, t, c) in result]
+                conf     = float(np.mean([c for _, c in lines])) if lines else 0.0
+                raw_text = " ".join(t for t, c in lines if c >= SCOREBOARD_OCR_MIN_CONFIDENCE)
 
-        # --- Parse ---
-        round_num         = None
-        seconds_remaining = None
-        parse_error       = None
+            # --- Parse ---
+            round_num         = None
+            seconds_remaining = None
+            parse_error       = None
 
-        if conf >= SCOREBOARD_OCR_MIN_CONFIDENCE or raw_text:
-            # Round is read from box geometry, not the joined string: most
-            # overlays render it as a bare digit beside the timer, which no text
-            # pattern can distinguish from a sponsor numeral. Coordinates are in
-            # upscaled-crop space, but every tolerance is relative to the timer
-            # box, so the upscale factor cancels.
-            round_num         = parse_round_from_boxes(result, SCOREBOARD_OCR_MIN_CONFIDENCE)
-            seconds_remaining = parse_timer(raw_text)
-            if   round_num is None and seconds_remaining is None:
-                parse_error = "no_match"
-            elif round_num is None:
-                parse_error = "round_not_found"
-            elif seconds_remaining is None:
-                parse_error = "timer_not_found"
-        else:
-            parse_error = "low_confidence"
+            if conf >= SCOREBOARD_OCR_MIN_CONFIDENCE or raw_text:
+                # Round is read from box geometry, not the joined string: most
+                # overlays render it as a bare digit beside the timer, which no text
+                # pattern can distinguish from a sponsor numeral. Coordinates are in
+                # upscaled-crop space, but every tolerance is relative to the timer
+                # box, so the upscale factor cancels.
+                round_num         = parse_round_from_boxes(result, SCOREBOARD_OCR_MIN_CONFIDENCE)
+                seconds_remaining = parse_timer(raw_text)
+                if   round_num is None and seconds_remaining is None:
+                    parse_error = "no_match"
+                elif round_num is None:
+                    parse_error = "round_not_found"
+                elif seconds_remaining is None:
+                    parse_error = "timer_not_found"
+            else:
+                parse_error = "low_confidence"
 
-        entry = {
-            "frame":             frame_num,
-            "round_num":         round_num,
-            "seconds_remaining": seconds_remaining,
-            "conf":              round(conf, 3),
-            "raw_text":          raw_text,
-            "parse_error":       parse_error,
-        }
-        raw_samples.append(entry)
+            entry = {
+                "frame":             frame_num,
+                "round_num":         round_num,
+                "seconds_remaining": seconds_remaining,
+                "conf":              round(conf, 3),
+                "raw_text":          raw_text,
+                "parse_error":       parse_error,
+            }
+            raw_samples.append(entry)
 
-        # Per-sample log line
-        if parse_error:
-            ctx.log("extraction",
-                    f"frame={frame_num:08d}  error={parse_error}  "
-                    f"conf={conf:.2f}  raw={raw_text!r}")
-        else:
-            ctx.log("extraction",
-                    f"frame={frame_num:08d}  R={round_num}  "
-                    f"timer={seconds_remaining}s  conf={conf:.2f}  raw={raw_text!r}")
+            # Per-sample log line
+            if parse_error:
+                ctx.log("extraction",
+                        f"frame={frame_num:08d}  error={parse_error}  "
+                        f"conf={conf:.2f}  raw={raw_text!r}")
+            else:
+                ctx.log("extraction",
+                        f"frame={frame_num:08d}  R={round_num}  "
+                        f"timer={seconds_remaining}s  conf={conf:.2f}  raw={raw_text!r}")
 
-        sample_idx += 1
+            sample_idx += 1
 
     cap.release()
     ctx.log("extraction", f"Collected {len(raw_samples)} raw samples")

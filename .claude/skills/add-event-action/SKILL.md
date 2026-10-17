@@ -28,6 +28,9 @@ description: Checklist for adding, renaming or removing a fight_events action ac
 4. **`eventTaxonomy.ts` and `liveStats.ts`**, as in A.
 5. Measure it with the `measure-pipeline-change` skill.
 
+## Removing, renaming or splitting a label action
+Move the old `ToolItem` to `LEGACY_TOOLS` in `taxonomy.ts` instead of deleting it, and keep its family mappings. Stored labels still carry the old string, and without the entry they lose their description and drop out of Training Data QA. Legacy items have no key, and QA lists them only while events still use them, so a reviewer can retype them.
+
 ## C. Before finishing
 Grep for an existing sibling action to catch any table this list missed:
 `git grep -n "left_uppercut" -- ai frontend/src`

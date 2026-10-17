@@ -38,6 +38,7 @@ import copy
 import cv2
 import numpy as np
 
+from progress import progress
 from models.constants import (
     TAPE_PATCH_RATIO,
     WRIST_EDGE_MARGIN_RATIO,
@@ -623,68 +624,67 @@ def assign_corners(pose_data: dict, video_path: str) -> dict:
     # Clean-frame descriptor buckets: slot → list of descriptors
     clean_descs: dict[int, list] = {0: [], 1: []}
 
-    for idx, frame in enumerate(frames):
-        fighter_dets = [
-            d for d in frame.get("detections", [])
-            if d.get("class_id") in (0, 1)
-        ]
+    with progress("Corner sampling", total) as bar:
+        for frame in frames:
+            bar.update()
+            fighter_dets = [
+                d for d in frame.get("detections", [])
+                if d.get("class_id") in (0, 1)
+            ]
 
-        if fighter_dets:
-            ret, frame_bgr = cap.read()
-            frame_bgr = frame_bgr if ret else None
-        else:
-            cap.grab()
-            frame_bgr = None
+            if fighter_dets:
+                ret, frame_bgr = cap.read()
+                frame_bgr = frame_bgr if ret else None
+            else:
+                cap.grab()
+                frame_bgr = None
 
-        frame_descriptors = []
+            frame_descriptors = []
 
-        if frame_bgr is not None:
-            for det in fighter_dets:
-                slot = det["class_id"]  # provisional track_id (0 or 1)
+            if frame_bgr is not None:
+                for det in fighter_dets:
+                    slot = det["class_id"]  # provisional track_id (0 or 1)
 
-                kp = det.get("keypoints")
-                if not kp or len(kp) < 11:
-                    continue
+                    kp = det.get("keypoints")
+                    if not kp or len(kp) < 11:
+                        continue
 
-                red_px, blue_px, area_px = _sample_tape(frame_bgr, kp, frame_h, frame_w)
-                red_scores[slot]  += red_px
-                blue_scores[slot] += blue_px
+                    red_px, blue_px, area_px = _sample_tape(frame_bgr, kp, frame_h, frame_w)
+                    red_scores[slot]  += red_px
+                    blue_scores[slot] += blue_px
 
-                hist, hist_weight = _sample_torso_histogram(frame_bgr, kp, frame_h, frame_w)
+                    hist, hist_weight = _sample_torso_histogram(frame_bgr, kp, frame_h, frame_w)
 
-                desc = {
-                    "slot":        slot,
-                    # Coverage fraction of the sampled glove crop, not a raw
-                    # pixel count — comparable between fighters and between
-                    # frames regardless of how close the camera is.
-                    "net_red":     (red_px - blue_px) / area_px if area_px else 0.0,
-                    "tape_total":  red_px + blue_px,
-                    "hist":        hist,
-                    "hist_weight": hist_weight,
-                    "det_ref":     det,   # reference into data for Pass 2 rewrite
-                }
-                frame_descriptors.append(desc)
+                    desc = {
+                        "slot":        slot,
+                        # Coverage fraction of the sampled glove crop, not a raw
+                        # pixel count — comparable between fighters and between
+                        # frames regardless of how close the camera is.
+                        "net_red":     (red_px - blue_px) / area_px if area_px else 0.0,
+                        "tape_total":  red_px + blue_px,
+                        "hist":        hist,
+                        "hist_weight": hist_weight,
+                        "det_ref":     det,   # reference into data for Pass 2 rewrite
+                    }
+                    frame_descriptors.append(desc)
 
-        descriptor_cache.append(frame_descriptors)
+            descriptor_cache.append(frame_descriptors)
 
-        # Paired tape vote: both fighters seen in the same frame under the same
-        # light, so the difference between them is the part that carries colour.
-        if len(frame_descriptors) == 2:
-            d0, d1 = frame_descriptors
-            if (d0["slot"] != d1["slot"]
-                    and abs(d0["net_red"] - d1["net_red"]) >= CORNER_TAPE_VOTE_MIN_MARGIN):
-                redder = d0 if d0["net_red"] > d1["net_red"] else d1
-                tape_votes[redder["slot"]] += 1
+            # Paired tape vote: both fighters seen in the same frame under the same
+            # light, so the difference between them is the part that carries colour.
+            if len(frame_descriptors) == 2:
+                d0, d1 = frame_descriptors
+                if (d0["slot"] != d1["slot"]
+                        and abs(d0["net_red"] - d1["net_red"]) >= CORNER_TAPE_VOTE_MIN_MARGIN):
+                    redder = d0 if d0["net_red"] > d1["net_red"] else d1
+                    tape_votes[redder["slot"]] += 1
 
-        # Accumulate clean-frame descriptors for template bootstrap.
-        if len(frame_descriptors) == 2:
-            dets_this = [d["det_ref"] for d in frame_descriptors]
-            if _is_clean_frame(dets_this, frame_descriptors):
-                for desc in frame_descriptors:
-                    clean_descs[desc["slot"]].append(desc)
-
-        if (idx + 1) % 500 == 0:
-            print(f"  Corner assignment: {idx + 1}/{total} frames sampled")
+            # Accumulate clean-frame descriptors for template bootstrap.
+            if len(frame_descriptors) == 2:
+                dets_this = [d["det_ref"] for d in frame_descriptors]
+                if _is_clean_frame(dets_this, frame_descriptors):
+                    for desc in frame_descriptors:
+                        clean_descs[desc["slot"]].append(desc)
 
     cap.release()
 

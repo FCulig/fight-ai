@@ -59,6 +59,7 @@ from scipy.optimize import linear_sum_assignment
 from ultralytics import YOLO
 
 from fight_processing.fight_processing_util import compute_iou
+from progress import progress
 from models.constants import (
     FIGHTER_MASK_CONF,
     FIGHTER_SELECT_IOU_FLOOR,
@@ -81,14 +82,13 @@ _POSE_WEIGHTS = "yolo26x-pose.pt"
 # on purpose: that is what keeps the referee out of the tracked pair.
 _NANO_FIGHTER_CLASSES = {0, 1}
 
-_LOG_INTERVAL = 50   # log every N pose batches
 
 
 # ---------------------------------------------------------------------------
 # Pass 1 — nano fighter mask
 # ---------------------------------------------------------------------------
 
-def _fighter_mask(video_path: str) -> list[list[list[float]]]:
+def _fighter_mask(video_path: str, total: int) -> list[list[list[float]]]:
     """Per-frame list of boxes marking where the fighters are.
 
     Only the *regions* are used.  Confidence is not carried forward and the
@@ -102,12 +102,14 @@ def _fighter_mask(video_path: str) -> list[list[list[float]]]:
     )
 
     regions: list[list[list[float]]] = []
-    for result in results:
-        regions.append([
-            box.xyxy[0].tolist()
-            for box in result.boxes
-            if int(box.cls[0]) in _NANO_FIGHTER_CLASSES
-        ])
+    with progress("Fighter mask", total) as bar:
+        for result in results:
+            bar.update()
+            regions.append([
+                box.xyxy[0].tolist()
+                for box in result.boxes
+                if int(box.cls[0]) in _NANO_FIGHTER_CLASSES
+            ])
 
     n_with = sum(1 for r in regions if r)
     print(f"  Fighter mask: {len(regions)} frames, "
@@ -179,34 +181,32 @@ def _pose_and_select(video_path: str, regions: list) -> list[dict]:
     model  = YOLO(_POSE_WEIGHTS)
     frames: list[dict] = []
     idx    = 0
-    batch_no = 0
 
-    while True:
-        images:  list = []
-        indices: list[int] = []
-        for _ in range(POSE_BATCH_SIZE):
-            ret, image = cap.read()
-            if not ret:
+    # The mask pass saw every frame, so its length is the frame count.
+    with progress("Pose", len(regions)) as bar:
+        while True:
+            images:  list = []
+            indices: list[int] = []
+            for _ in range(POSE_BATCH_SIZE):
+                ret, image = cap.read()
+                if not ret:
+                    break
+                images.append(image)
+                indices.append(idx)
+                idx += 1
+
+            if not images:
                 break
-            images.append(image)
-            indices.append(idx)
-            idx += 1
 
-        if not images:
-            break
+            results = model(images, device=_DEVICE, verbose=False)
 
-        results  = model(images, device=_DEVICE, verbose=False)
-        batch_no += 1
-
-        for result, i in zip(results, indices):
-            frame_regions = regions[i] if i < len(regions) else []
-            frames.append({
-                "frame":      i + 1,          # 1-based, matches fighter_frames
-                "detections": _select_fighters(result, frame_regions),
-            })
-
-        if batch_no % _LOG_INTERVAL == 0:
-            print(f"  Pose+select: {idx} frames processed")
+            for result, i in zip(results, indices):
+                frame_regions = regions[i] if i < len(regions) else []
+                frames.append({
+                    "frame":      i + 1,          # 1-based, matches fighter_frames
+                    "detections": _select_fighters(result, frame_regions),
+                })
+            bar.update(len(images))
 
     cap.release()
     return frames
@@ -236,13 +236,14 @@ def detect_fighters(video_path: str, on_pose_start=None) -> dict:
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise FileNotFoundError(f"Cannot open video: {video_path}")
-    fps = cap.get(cv2.CAP_PROP_FPS)
+    fps   = cap.get(cv2.CAP_PROP_FPS)
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
     print(f"Detected fps: {fps:.2f}")
 
     print("Running fighter mask (nano) …")
-    regions = _fighter_mask(video_path)
+    regions = _fighter_mask(video_path, total)
 
     if on_pose_start is not None:
         on_pose_start()

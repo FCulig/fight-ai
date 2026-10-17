@@ -31,7 +31,7 @@ Detection lives in the action model (see `ai-action-model.md`). This module maps
 - `_strike_action`:
   - Punches map to `{family}_{head|body}`.
   - Kicks map to `head_kick`, `middle_kick` or `low_kick`.
-  - Knees map to `clinch_knee` or `ground_knee`.
+  - Knees map to `clinch_knee` in CLINCH, `ground_knee` in GROUND, and plain `knee` otherwise (open-range, so it gets a landed verdict).
   - Punches during CLINCH/GROUND map to `clinch_punch` or `ground_punch`, because no verified label is a grappling punch, so the model's family there is untrained.
 - **Landed** (`_landed`) is a recoil proxy. The strike counts as landed if the defender's head moves faster than `RECOIL_VELOCITY_RATIO` × scale per second within `RECOIL_LOOKAHEAD_SECS`. It is `None` if the head isn't readable within 4× the lookahead, and always `None` for grappling strikes. No labels carry landed/missed yet, so this is **unmeasured**.
 - One-Euro smoothing (`make_keypoint_smoother`) feeds only the recoil check and the takedown-initiator hip history. The strike model reads **raw** keypoints, which is what it was trained on. Joints below `KEYPOINT_MIN_CONFIDENCE` pass through without updating the filter state.

@@ -31,6 +31,7 @@ from .parsers import (
 )
 from .debug import draw_roi
 from debug import DebugContext
+from progress import progress
 from models.constants import (
     SCOREBOARD_STRIP_Y_START,
     SCOREBOARD_STRIP_SEARCH_FRAMES,
@@ -193,69 +194,71 @@ def calibrate_scoreboard_overlay(
     reference_frame: Optional[np.ndarray] = None
     log_lines: list[str] = []
 
-    for frame_idx, vid_idx in enumerate(indices):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, vid_idx)
-        ret, frame = cap.read()
-        if not ret:
-            ctx.log("calibration", f"Frame {vid_idx}: could not read, skipping")
-            continue
-        if reference_frame is None:
-            reference_frame = frame.copy()
-
-        strip = frame[strip_y:H, 0:W]
-        results = reader.readtext(strip)
-
-        ctx.log("calibration",
-                f"Frame {frame_idx+1}/{n}  (vid_frame={vid_idx})  "
-                f"→ {len(results)} text regions in strip")
-
-        # Debug: annotate strip with all detections
-        strip_dbg = strip.copy()
-        for (bbox, text, conf) in results:
-            pts = np.array(bbox, dtype=np.int32)
-            is_timer = parse_timer(text) is not None
-            is_round = parse_round(text) is not None
-            colour = (0, 255, 0) if is_timer else ((255, 100, 0) if is_round else (120, 120, 120))
-            cv2.polylines(strip_dbg, [pts], isClosed=True, color=colour, thickness=2)
-            cv2.putText(strip_dbg, f"{text[:20]} ({conf:.2f})",
-                        (int(pts[0][0]), max(0, int(pts[0][1]) - 4)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, colour, 1, cv2.LINE_AA)
-
-        if ctx.verbose:
-            cv2.imwrite(str(cal.path(f"strip_frame_{frame_idx:02d}.jpg")), strip_dbg)
-
-        # Collect timer- and round-matching boxes (adjust y back to full-frame)
-        for (bbox, text, conf) in results:
-            if conf < SCOREBOARD_OCR_MIN_CONFIDENCE:
+    with progress("Scoreboard calibration", n) as bar:
+        for frame_idx, vid_idx in enumerate(indices):
+            bar.update()
+            cap.set(cv2.CAP_PROP_POS_FRAMES, vid_idx)
+            ret, frame = cap.read()
+            if not ret:
+                ctx.log("calibration", f"Frame {vid_idx}: could not read, skipping")
                 continue
-            pts = np.array(bbox, dtype=np.int32)
-            xs  = pts[:, 0]
-            ys  = pts[:, 1] + strip_y   # back to full-frame y
-            aabb = (int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()))
+            if reference_frame is None:
+                reference_frame = frame.copy()
 
-            if parse_timer(text) is not None:
-                timer_boxes.append(aabb)
-                log_lines.append(
-                    f"  TIMER  frame={vid_idx}  text={text!r}  conf={conf:.2f}  box={aabb}"
-                )
-            elif parse_round(text) is not None:
+            strip = frame[strip_y:H, 0:W]
+            results = reader.readtext(strip)
+
+            ctx.log("calibration",
+                    f"Frame {frame_idx+1}/{n}  (vid_frame={vid_idx})  "
+                    f"→ {len(results)} text regions in strip")
+
+            # Debug: annotate strip with all detections
+            strip_dbg = strip.copy()
+            for (bbox, text, conf) in results:
+                pts = np.array(bbox, dtype=np.int32)
+                is_timer = parse_timer(text) is not None
+                is_round = parse_round(text) is not None
+                colour = (0, 255, 0) if is_timer else ((255, 100, 0) if is_round else (120, 120, 120))
+                cv2.polylines(strip_dbg, [pts], isClosed=True, color=colour, thickness=2)
+                cv2.putText(strip_dbg, f"{text[:20]} ({conf:.2f})",
+                            (int(pts[0][0]), max(0, int(pts[0][1]) - 4)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, colour, 1, cv2.LINE_AA)
+
+            if ctx.verbose:
+                cv2.imwrite(str(cal.path(f"strip_frame_{frame_idx:02d}.jpg")), strip_dbg)
+
+            # Collect timer- and round-matching boxes (adjust y back to full-frame)
+            for (bbox, text, conf) in results:
+                if conf < SCOREBOARD_OCR_MIN_CONFIDENCE:
+                    continue
+                pts = np.array(bbox, dtype=np.int32)
+                xs  = pts[:, 0]
+                ys  = pts[:, 1] + strip_y   # back to full-frame y
+                aabb = (int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()))
+
+                if parse_timer(text) is not None:
+                    timer_boxes.append(aabb)
+                    log_lines.append(
+                        f"  TIMER  frame={vid_idx}  text={text!r}  conf={conf:.2f}  box={aabb}"
+                    )
+                elif parse_round(text) is not None:
+                    round_boxes.append(aabb)
+                    log_lines.append(
+                        f"  ROUND  frame={vid_idx}  text={text!r}  conf={conf:.2f}  box={aabb}"
+                    )
+
+            # A bare round digit matches no text pattern, so it is found by its
+            # position beside the timer. It must be unioned into the ROI explicitly:
+            # on a typical overlay it sits just outside a timer-only crop, and a crop
+            # that clips it leaves the round number unreadable for the whole run.
+            digit = find_round_digit_box(results, SCOREBOARD_OCR_MIN_CONFIDENCE)
+            if digit is not None:
+                (dx1, dy1, dx2, dy2), value = digit
+                aabb = (int(dx1), int(dy1) + strip_y, int(dx2), int(dy2) + strip_y)
                 round_boxes.append(aabb)
                 log_lines.append(
-                    f"  ROUND  frame={vid_idx}  text={text!r}  conf={conf:.2f}  box={aabb}"
+                    f"  DIGIT  frame={vid_idx}  round={value}  box={aabb}  (positional)"
                 )
-
-        # A bare round digit matches no text pattern, so it is found by its
-        # position beside the timer. It must be unioned into the ROI explicitly:
-        # on a typical overlay it sits just outside a timer-only crop, and a crop
-        # that clips it leaves the round number unreadable for the whole run.
-        digit = find_round_digit_box(results, SCOREBOARD_OCR_MIN_CONFIDENCE)
-        if digit is not None:
-            (dx1, dy1, dx2, dy2), value = digit
-            aabb = (int(dx1), int(dy1) + strip_y, int(dx2), int(dy2) + strip_y)
-            round_boxes.append(aabb)
-            log_lines.append(
-                f"  DIGIT  frame={vid_idx}  round={value}  box={aabb}  (positional)"
-            )
 
     cap.release()
 

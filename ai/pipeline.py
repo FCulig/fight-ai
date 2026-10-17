@@ -50,6 +50,7 @@ from typing import Optional
 
 from database import set_fight_state, set_segmentation_review
 from debug import DebugContext
+from progress import stamp
 from models.FightProcessingState import FightProcessingState as S
 from video_processing.fighter_detection.fighter_detection import detect_fighters
 from video_processing.fight_segmentation import segment_fights
@@ -79,6 +80,13 @@ def _print_plan(title: str, rows: list[tuple[str, str]]) -> None:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+def _duration(secs: float) -> str:
+    """1h02m, 4m05s or 12s."""
+    m, s = divmod(round(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h}h{m:02d}m" if h else f"{m}m{s:02d}s" if m else f"{s}s"
+
 
 def _extract_video_meta(video_path: str) -> tuple[int, int, int]:
     """Return (fps_int, width, height) from a video file."""
@@ -323,7 +331,7 @@ def run_pipeline(
         t0 = time.perf_counter()
         if run_detection:
             set_fight_state(fight_id, S.DETECTING)
-            print(f"Running fighter detection: {video_file}")
+            stamp(f"Fighter detection: {video_file}")
             detection_data = detect_fighters(
                 video_file,
                 on_pose_start=lambda: set_fight_state(fight_id, S.POSE),
@@ -340,7 +348,7 @@ def run_pipeline(
         if run_tracking:
             set_fight_state(fight_id, S.TRACKING)
             from video_processing.fighter_tracking.fighter_tracking import track_fighters
-            print("Running fighter tracking …")
+            stamp("Fighter tracking")
             track_data = track_fighters(detection_data, video_path=video_file)
         elif track_file:
             print(f"Reusing track results: {track_file}")
@@ -356,7 +364,7 @@ def run_pipeline(
         elif run_corners and track_data is not None:
             set_fight_state(fight_id, S.CORNERS)
             from video_processing.corner_assignment.corner_assignment import assign_corners
-            print("Running corner assignment …")
+            stamp("Corner assignment")
             t0        = time.perf_counter()
             pose_data = assign_corners(track_data, video_path=video_file)
             timings["corner_assignment"] = time.perf_counter() - t0
@@ -369,6 +377,7 @@ def run_pipeline(
 
         if run_ocr:
             set_fight_state(fight_id, S.SCOREBOARD)
+            stamp("Scoreboard OCR")
             from video_processing.scoreboard_overlay import (
                 calibrate_scoreboard_overlay,
                 extract_scoreboard_samples,
@@ -422,6 +431,7 @@ def run_pipeline(
             print(f"Using rounds from DB: {rounds}")
         else:
             set_fight_state(fight_id, S.SEGMENTING)
+            stamp("Segmentation")
             t0         = time.perf_counter()
             seg_result = segment_fights(
                 detection_data,
@@ -468,7 +478,7 @@ def run_pipeline(
             # the UI, and the uploader by email, that the fight can be labelled.
             set_fight_state(fight_id, S.ANALYZING)
             from fight_processing.fight_processing import write_frames_and_rounds
-            print("Writing fighter frames + rounds (event detection skipped) …")
+            stamp("Writing fighter frames + rounds (event detection skipped)")
             t0 = time.perf_counter()
             write_frames_and_rounds(pose_data, fight_id=fight_id, fps=fps, rounds=rounds)
             timings["fight_processing"] = time.perf_counter() - t0
@@ -476,7 +486,7 @@ def run_pipeline(
         elif run_fight:
             set_fight_state(fight_id, S.ANALYZING)
             from fight_processing.fight_processing import process_fight
-            print("Running fight processing …")
+            stamp("Fight processing")
             t0 = time.perf_counter()
             process_fight(pose_data, fight_id=fight_id, fps=fps, rounds=rounds,
                           excluded_ranges=excluded_ranges,
@@ -529,6 +539,9 @@ def run_pipeline(
             output_path=f"{debug_root}/verification.mp4",
         )
         timings["verify_scoreboard"] = time.perf_counter() - t0
+
+    if timings:
+        stamp("Step times: " + "  ".join(f"{k} {_duration(v)}" for k, v in timings.items()))
 
     return {"rounds": rounds, "excluded_ranges": excluded_ranges, "quality": seg_result.get("quality", {})}
 
@@ -666,27 +679,36 @@ def run_worker(
     lock = WorkerLock()
     if not _hold_worker_lock(lock):
         return
-    requeued = requeue_abandoned_fights()
-    if requeued:
-        print(f"Back in the queue, left unfinished by an earlier run: {requeued}")
     cache = Path(cache_dir)
     cache.mkdir(parents=True, exist_ok=True)
-    print(f"Worker ready. Checking for queued fights every {poll_secs}s; Ctrl-C to stop.")
+    stamp(f"Worker ready. Checking for queued fights every {poll_secs}s; Ctrl-C to stop.")
+    waiting = True
 
     try:
         while True:
             try:
                 if not _hold_worker_lock(lock):
                     return
+                # Every poll, not just at start: a fight whose pipeline died
+                # while the tunnel was down couldn't even be marked failed, so
+                # it sits mid-pipeline until something requeues it. Safe here
+                # because this worker runs one job at a time and holds the lock.
+                requeued = requeue_abandoned_fights()
+                if requeued:
+                    stamp(f"Back in the queue, left unfinished by an earlier run: {requeued}")
                 job = claim_next_queued_fight()
             except Exception as e:
                 # The tunnel is down (sleep, network change): wait for it.
-                print(f"Database unreachable ({e.__class__.__name__}), retrying in {poll_secs}s")
+                stamp(f"Database unreachable ({e.__class__.__name__}), retrying in {poll_secs}s")
                 time.sleep(poll_secs)
                 continue
             if job is None:
+                if not waiting:
+                    stamp("Waiting for queued fights …")
+                    waiting = True
                 time.sleep(poll_secs)
                 continue
+            waiting = False
             try:
                 ok = _run_job(job, video_source, cache, debug_level)
             except Exception:
@@ -718,13 +740,19 @@ def _run_job(job, video_source: str, cache: Path, debug_level: str) -> bool:
     """Process one claimed fight. Returns False when the caller should back off
     because the video couldn't be fetched and the fight went back in the queue."""
     import subprocess
+    import sys
     import traceback
 
     name  = Path(job.video_path).name
     local = cache / name
-    print(f"\n{'=' * 60}\nFight {job.id} ({job.purpose}): {name}")
+    started = time.perf_counter()
+    print(f"\n{'=' * 60}")
+    stamp(f"Fight {job.id} ({job.purpose}): {name}")
 
-    fetch = subprocess.run(["rsync", "-a", "--partial", f"{video_source.rstrip('/')}/{name}", str(local)])
+    stamp(f"Fetching {name}")
+    progress_flag = ["--progress"] if sys.stdout.isatty() else []
+    fetch = subprocess.run(["rsync", "-a", "--partial", *progress_flag,
+                            f"{video_source.rstrip('/')}/{name}", str(local)])
     if fetch.returncode == 23:  # rsync: the file isn't at the source
         print(f"{name} is missing from {video_source}: marking the fight failed.")
         set_fight_state(job.id, S.FAILED)
@@ -740,14 +768,14 @@ def _run_job(job, video_source: str, cache: Path, debug_level: str) -> bool:
     except Exception:
         # run_pipeline has already marked the fight failed.
         traceback.print_exc()
-        print(f"Fight {job.id} failed.")
+        stamp(f"Fight {job.id} failed after {_duration(time.perf_counter() - started)}.")
         return True
     if not skip_events:
         # The AI track's final state is the caller's to set (labelling
         # purposes end in labeling_in_progress inside run_pipeline).
         _retry(lambda: set_fight_state(job.id, S.COMPLETED))
     local.unlink(missing_ok=True)
-    print(f"Fight {job.id} done.")
+    stamp(f"Fight {job.id} done in {_duration(time.perf_counter() - started)}.")
     return True
 
 

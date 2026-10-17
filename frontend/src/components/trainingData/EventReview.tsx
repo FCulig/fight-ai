@@ -52,7 +52,8 @@ function TypeSelect({ action, onChange }: { action: string; onChange: (newAction
           borderRadius: 6, padding: '3px 6px', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
         }}
       >
-        {TYPE_GROUPS.map((g) => (
+        {/* A legacy class is listed only for the event that already has it, so a select shows its value but never offers it as a retype target. */}
+        {TYPE_GROUPS.map((g) => ({ ...g, items: g.items.filter((c) => !c.legacy || c.action === action) })).filter((g) => g.items.length > 0).map((g) => (
           <optgroup key={g.name} label={g.name}>
             {g.items.map((c) => (
               <option key={c.action} value={c.action} style={{ color: '#000' }}>{c.name}</option>

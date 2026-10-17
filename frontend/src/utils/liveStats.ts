@@ -1,5 +1,6 @@
 import type { Event } from '../types/Event';
 import type { FighterStats } from '../mocks/fightMock';
+import { labelStateAt, labelStateMarks } from './labelState';
 
 function emptyStats(): FighterStats {
   return { sig: [0, 0], total: [0, 0], head: 0, body: 0, leg: 0, distance: 0, clinch: 0, ground: 0, td: [0, 0], ctrl: 0, kd: 0, sub: 0, acc: 0 };
@@ -33,6 +34,15 @@ function targetFor(e: Event): 'head' | 'body' | 'leg' | null {
 }
 
 const CLINCH_ACTIONS = new Set(['clinch_punch', 'clinch_knee']);
+
+// A label `knee` carries no position of its own: it is a clinch strike when
+// the labelled fight state at its frame is CLINCH, and open-range otherwise.
+// (A prediction `knee` is always open-range: the pipeline writes clinch_knee
+// for the clinch.)
+function isClinchStrike(e: Event, marks: ReturnType<typeof labelStateMarks>): boolean {
+  if (CLINCH_ACTIONS.has(e.action ?? '')) return true;
+  return e.source === 'label' && e.action === 'knee' && labelStateAt(e.frame, marks) === 'CLINCH';
+}
 const GROUND_ACTIONS = new Set(['ground_punch', 'ground_knee']);
 
 // Landed-vs-missed is only ever recorded on prediction rows (`success`);
@@ -50,7 +60,7 @@ function isStrikeAction(action: string | null): boolean {
   if (action.startsWith('round_') || action.startsWith('state_')) return false;
   if (action === 'takedown_initiated' || action === 'clinch_initiated') return false;
   if (action.startsWith('takedown_') || action === 'submission_attempt' || action === 'fight_end') return false;
-  return true; // jab/cross/hook/uppercut(_head|_body)?, kicks, clinch_*/ground_*, elbow, knockdown
+  return true; // jab/cross/hook/uppercut(_head|_body)?, kicks, knee, clinch_*/ground_*, elbows, knockdown
 }
 
 // Aggregates events with startFrame <= e.frame <= endFrame. Used for "Whole Fight"
@@ -74,6 +84,9 @@ export function deriveStatsForRange(
   let groundInitiator: 'red' | 'blue' | null = null;
 
   const filtered = events.filter(e => e.frame >= startFrame && e.frame <= endFrame);
+  // From every event, not just `filtered`: a round's first knee can sit in a
+  // clinch that was marked before the round's start frame.
+  const stateMarks = labelStateMarks(events);
 
   for (const e of filtered) {
     if (e.action === 'round_start' || e.action === 'round_end') continue;
@@ -107,7 +120,7 @@ export function deriveStatsForRange(
     const st = corner === 'red' ? red : blue;
     const action = e.action as string;
 
-    const isClinch = CLINCH_ACTIONS.has(action);
+    const isClinch = isClinchStrike(e, stateMarks);
     const isGroundStrike = GROUND_ACTIONS.has(action);
     const isOpenRange = !isClinch && !isGroundStrike;
     const landed = isLanded(e);

@@ -37,7 +37,7 @@ deploy/worker.sh
 ```
 - It opens an SSH tunnel to the server's database, reading the password from the server, and processes queued fights one at a time, oldest first. For each one it copies the video into `ai/worker_cache/`, runs the pipeline the fight's purpose asks for, and writes the results straight to the server's database, so progress shows live on the site.
 - It keeps the Mac awake while it runs. Stop it with Ctrl-C.
-- A fight interrupted mid-pipeline (Ctrl-C, sleep, a network drop) goes back in the queue the next time the worker starts.
+- A fight interrupted mid-pipeline (Ctrl-C, sleep, a network drop) goes back in the queue at the worker's next poll, or the next time it starts.
 - Only one worker runs at a time. It holds a database lock, which is also how the backend knows not to email admins about the queue while a worker is running.
 - It needs your local `ai/` setup: the root `.venv` and the model weights.
 

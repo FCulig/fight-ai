@@ -48,8 +48,11 @@ LABEL_FAMILY_MAP: dict[str, str] = {
     "low_kick": "kick",
     "middle_kick": "kick",
     "high_kick": "kick",
-    "elbow": "elbow",
-    "clinch_knee": "knee",
+    "left_elbow": "elbow",
+    "right_elbow": "elbow",
+    "elbow": "elbow",  # legacy, from before the left/right split
+    "knee": "knee",
+    "clinch_knee": "knee",  # legacy, from before `knee` took its clinch context from the state marks
     "ground_knee": "knee",
     "clinch_punch": "punch",
     "ground_punch": "punch",
