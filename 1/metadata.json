@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M54JYKQPW0KT7GE3GA54WE7K",
+  "session_id": "3eb3cafe-b6bc-45f0-a275-4738d01116dd",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-17T09:26:40.697331Z",
+  "branch": "master",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "landing/CLAUDE.md",
+    "landing/app/fight.jsx",
+    "landing/app/stage.jsx",
+    "landing/index.html"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "d1f45ec14b1f",
+  "checkpoint_transcript_start": 520,
+  "transcript_lines_at_start": 520,
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-17T09:26:40.695361Z",
+    "agent_lines": 18,
+    "agent_removed": 3,
+    "human_added": 15,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 33,
+    "total_lines_changed": 41,
+    "agent_percentage": 51.21951219512195,
+    "metric_version": 2
+  }
+}
