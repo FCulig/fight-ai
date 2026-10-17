@@ -4,6 +4,11 @@ const { useEffect: aEffect, useState: aState } = React;
 const APP_URL = 'https://app-fightlytics.duckdns.org';
 const SIGN_IN = 'Sign in with Google';
 
+// Umami custom events. Each stored property also counts against the free plan's monthly cap.
+function track(name, data) {
+  if (window.umami) window.umami.track(name, data);
+}
+
 function Nav() {
   return (
     <nav className="nav" aria-label="Main">
@@ -14,7 +19,7 @@ function Nav() {
           <a href="#fight">Output</a>
           <a href="#method">Method</a>
         </div>
-        <a href={APP_URL} className="btn sm">{SIGN_IN}</a>
+        <a href={APP_URL} className="btn sm" data-umami-event="sign-in" data-umami-event-from="nav">{SIGN_IN}</a>
       </div>
     </nav>
   );
@@ -71,7 +76,7 @@ function Story() {
           <h1 className="h1">Every strike, logged to the frame.</h1>
           <p className="lede">Feed it fight video. Fightlytics tracks both fighters, reads the rounds and logs strikes by type, target and fighter.</p>
           <div className="hero-ctas">
-            <a href={APP_URL} className="btn">{SIGN_IN}</a>
+            <a href={APP_URL} className="btn" data-umami-event="sign-in" data-umami-event-from="hero">{SIGN_IN}</a>
             <a href="#how" className="link">How it works <span className="material-symbols-outlined" aria-hidden="true">arrow_forward</span></a>
           </div>
         </header>
@@ -133,7 +138,7 @@ function Method() {
 
 function Live() {
   return (
-    <section className="live" aria-labelledby="live-h">
+    <section className="live" id="live" aria-labelledby="live-h">
       <div className="wrap live-in reveal">
         <span className="live-tag mono">Coming later</span>
         <h2 className="h3" id="live-h">Live broadcast feeds.</h2>
@@ -150,7 +155,7 @@ function Final() {
         <LogoStack size={52} wordSize={28} />
         <h2 className="h1 final-h">Stop charting fights by hand.</h2>
         <p className="lede">Sign in with Google to browse analysed fights. Uploading is by invite.</p>
-        <a href={APP_URL} className="btn">{SIGN_IN}</a>
+        <a href={APP_URL} className="btn" data-umami-event="sign-in" data-umami-event-from="final">{SIGN_IN}</a>
       </div>
     </section>
   );
@@ -174,11 +179,16 @@ function App() {
       if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
     }), { threshold: 0.15 });
     document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+    // how far down people get; the first section is the pageview itself
+    const seen = new IntersectionObserver((es) => es.forEach((e) => {
+      if (e.isIntersecting) { track('section', { id: e.target.id }); seen.unobserve(e.target); }
+    }), { threshold: 0.5 });
+    document.querySelectorAll('main > section:not(:first-child)').forEach((el) => seen.observe(el));
     const pager = window.createPager();
     // the page renders after load, so the browser's own jump to #hash found nothing
     const target = location.hash && document.getElementById(location.hash.slice(1));
     if (target) pager ? pager.goTo(target, true) : target.scrollIntoView({ behavior: 'instant' });
-    return () => { io.disconnect(); if (pager) pager.destroy(); };
+    return () => { io.disconnect(); seen.disconnect(); if (pager) pager.destroy(); };
   }, []);
   return (
     <>

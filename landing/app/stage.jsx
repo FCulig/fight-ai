@@ -436,7 +436,7 @@ function ExchangeStage({ mode }) {
           {layers.map(([k, l]) => <li key={k} className={on(k) ? 'on' : ''}>{l}</li>)}
         </ol>
         <div className="stage-frame mono"><span>frame</span> <b ref={frameRef}>{s.start}</b></div>
-        <button className="stage-play" type="button" onClick={() => setPlaying((p) => !p)} aria-label={playing ? 'Pause replay' : 'Play replay'}>
+        <button className="stage-play" type="button" onClick={() => { track(playing ? 'replay-pause' : 'replay-play'); setPlaying((p) => !p); }} aria-label={playing ? 'Pause replay' : 'Play replay'}>
           <span className="material-symbols-outlined" aria-hidden="true">{playing ? 'pause' : 'play_arrow'}</span>
         </button>
       </div>
@@ -447,7 +447,7 @@ function ExchangeStage({ mode }) {
       <div className="stage-log" aria-hidden={mode === 'full' || mode === 'log' ? undefined : true}>
         {log.length === 0 && <div className="log-empty">Strikes appear here as they land.</div>}
         {log.map((e) => (
-          <button type="button" className="log-row" key={e.f} onClick={() => seek(e)} tabIndex={mode === 'full' || mode === 'log' ? undefined : -1}>
+          <button type="button" className="log-row" key={e.f} onClick={() => { track('log-seek'); seek(e); }} tabIndex={mode === 'full' || mode === 'log' ? undefined : -1}>
             <span className="mono log-f">{e.f}</span>
             <span className={'log-c c' + e.c}>{CORNER_NAME[e.c]}</span>
             <span className="log-d">{STRIKE_LABEL[e.a] || e.a} to the {e.t}</span>

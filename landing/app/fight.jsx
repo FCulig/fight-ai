@@ -95,7 +95,7 @@ function FightLine() {
         <div className="tape-head">
           <div className="tape-tabs" role="group" aria-label="Filter by round">
             {[0, ...F.rounds.map((r) => r[0])].map((n) => (
-              <button key={n} type="button" aria-pressed={round === n} onClick={() => setRound(n)}>{n ? 'Round ' + n : 'All rounds'}</button>
+              <button key={n} type="button" aria-pressed={round === n} onClick={() => { track('round-filter', { round: n || 'all' }); setRound(n); }}>{n ? 'Round ' + n : 'All rounds'}</button>
             ))}
           </div>
           <div className="tape-totals">
