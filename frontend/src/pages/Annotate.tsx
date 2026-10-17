@@ -276,11 +276,20 @@ export default function Annotate() {
 
   const updateSpan = async (spanId: number, patch: { frame?: number; end_frame?: number }) => {
     if (!fightId) return;
+    // Apply the drag result before the PUT returns: the timeline drops its
+    // live drag frame on pointerup, so waiting would snap the edge back to
+    // where it was and then jump it forward.
+    const before = allEvents.find(s => s.id === spanId);
+    setAllEvents(prev => prev.map(s => (s.id === spanId ? { ...s, ...patch } : s)));
+    setSavingCount(c => c + 1);
     try {
       const updated = await updateEvent(fightId, spanId, patch);
       setAllEvents(prev => prev.map(s => (s.id === spanId ? updated : s)));
     } catch {
+      if (before) setAllEvents(prev => prev.map(s => (s.id === spanId ? before : s)));
       showToast('Failed to update span', 'var(--f-red)', 'error');
+    } finally {
+      setSavingCount(c => c - 1);
     }
   };
 

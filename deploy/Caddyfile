@@ -19,3 +19,14 @@
 	}
 	reverse_proxy backend:8000
 }
+
+# The landing page: static files from the checkout's landing/, so every deploy
+# updates it. Unset, compose passes an unpublished port, so nothing is served.
+{$LANDING_ADDRESS} {
+	encode zstd gzip
+	root * /srv/landing
+	# landing/ also holds CLAUDE.md and export_data.py; publish only the page.
+	@private not path / /index.html /app/*
+	respond @private 404
+	file_server
+}

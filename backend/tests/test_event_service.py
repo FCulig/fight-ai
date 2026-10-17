@@ -9,6 +9,7 @@ from app.utils import db
 from app.models.fight import Fight  # noqa: F401 — registers the `fights` table for FK resolution
 from app.models.fighter import Fighter  # noqa: F401 — registers the `fighters` table for FK resolution
 from app.models.round import Round  # noqa: F401 — registers the `rounds` table for FK resolution
+from app.models.user import User  # noqa: F401 — registers the `users` table for FK resolution
 from app.models.fight_event import FightEvent, FightEventCreate, FightEventUpdate
 from app.services import event_service
 
@@ -22,7 +23,7 @@ def session_factory(monkeypatch):
     # registers Postgres-only types (eval_runs' JSONB) that SQLite can't create.
     db.Base.metadata.create_all(
         bind=engine,
-        tables=[Fight.__table__, Fighter.__table__, Round.__table__, FightEvent.__table__],
+        tables=[User.__table__, Fight.__table__, Fighter.__table__, Round.__table__, FightEvent.__table__],
     )
 
     # patch the service's run_db_query helper to use the test session
@@ -150,6 +151,30 @@ def test_update_event_rejects_a_point_row(session_factory):
 
     result = event_service.update_event(
         fight_id=1, event_id=created.id, payload=FightEventUpdate(frame=2),
+    )
+    assert result is None
+
+
+def test_update_event_moves_a_state_mark(session_factory):
+    created = event_service.create_event(
+        fight_id=1, payload=FightEventCreate(frame=10, action="state_clinch"),
+    )
+
+    updated = event_service.update_event(
+        fight_id=1, event_id=created.id, payload=FightEventUpdate(frame=42),
+    )
+    assert updated is not None
+    assert updated.frame == 42
+    assert updated.end_frame is None
+
+
+def test_update_event_rejects_a_range_edit_on_a_state_mark(session_factory):
+    created = event_service.create_event(
+        fight_id=1, payload=FightEventCreate(frame=10, action="state_ground"),
+    )
+
+    result = event_service.update_event(
+        fight_id=1, event_id=created.id, payload=FightEventUpdate(end_frame=50),
     )
     assert result is None
 

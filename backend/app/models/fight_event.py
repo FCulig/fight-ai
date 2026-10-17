@@ -89,8 +89,8 @@ class FightEventCreate(BaseModel):
 
 
 class FightEventUpdate(BaseModel):
-    """Range (round/corner_swap/excluded) edits only — point events are
-    create+delete-only, same as label_events always was."""
+    """Range (round/corner_swap/excluded) edits, plus moving a state_* point
+    mark's `frame`. Every other point event is create+delete-only."""
 
     frame: Optional[int] = None
     end_frame: Optional[int] = None

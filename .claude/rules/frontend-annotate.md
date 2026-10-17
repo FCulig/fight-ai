@@ -18,6 +18,7 @@ paths:
 - **Create payloads have no `description`.** `ToolItem.text()` builds only the toast. `describeEvent` rebuilds text through `ACTION_TO_TOOL`, a reverse index over `TOOL_GROUPS`. Only `fight_end`, built in `confirmFightEnd`, sends a description.
 - `Annotate.tsx` builds one `describe(e)` closure (fighter names plus this fight's `corner_swap` spans) and passes it through `AnnotationPanel` to both `AnnotationList` and `AnnotationTimeline`. Never read `e.description` there. That way, marking a swap instantly corrects strikes that were already logged.
 - **Fight-state marks** (`W`/`F`/`G`) are change points, not spans. The timeline's State lane pairs each mark with the next one. In the UI the last mark runs to the end of the timeline, but `ai/eval/labels_db.py` ends it at the end of its round.
+- A State-lane segment *is* its starting mark: clicking selects that mark (Delete removes it), the left edge drags its `frame` and the right edge drags the next mark's. Drags clamp between neighbouring marks, so the order never changes.
 
 ## Spans (`O` and `P` keys)
 - **`round`** spans are seeded server-side from `rounds` on first fetch. They show as draggable blocks in the Rounds lane, and edge-drag → `onUpdateSpan` → `PUT frame/end_frame`.

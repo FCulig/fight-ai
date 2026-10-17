@@ -2,7 +2,7 @@
 
 Production is one Oracle Cloud **Always Free** VM (Ubuntu 24.04, arm64: 2 OCPUs, 12 GB RAM, 200 GB of disk) running [`compose.yml`](compose.yml):
 
-- **caddy** serves HTTPS on ports 80/443, gets Let's Encrypt certificates automatically, and proxies everything to the backend.
+- **caddy** serves HTTPS on ports 80/443 and gets Let's Encrypt certificates automatically. On `SITE_ADDRESS` it proxies everything to the backend; on `LANDING_ADDRESS` it serves the static landing page straight from the checkout's `landing/`.
 - **backend** is FastAPI. It also serves the built SPA (`FRONTEND_DIST`), so the session cookie stays same-origin.
 - **db** is Postgres 18. It is reachable only from the VM itself, or through an SSH tunnel.
 
@@ -16,8 +16,6 @@ On the VM:
 | `/srv/fight-ai/backups` | Nightly database dumps |
 
 **The server never runs the pipeline.** It has no torch. Uploads are validated with a full decode, then stay `queued` (`PIPELINE_DISPATCH=queue`) until the pipeline worker processes them on a machine with a GPU (see [Processing uploads](#processing-uploads)).
-
-The landing page (`landing/`) is not deployed yet.
 
 ## How a deploy works
 Every push to the `release` branch runs [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml):
@@ -69,6 +67,8 @@ The deploy files must be on `master` on GitHub first: the server clones the repo
 ### 2. Point your domain at it
 Create a DNS **A record** for your hostname (for example `fightai.example.com`) that points at the VM's public IP. Caddy can't get a certificate until the name resolves.
 
+The landing page needs A records of its own for its hostnames (for example the apex `@` and `www`), pointing at the same IP. Remove any parking, URL-redirect or CNAME records your registrar created for those names first, or they will win over yours.
+
 ### 3. Create a deploy key (on your laptop)
 ```bash
 ssh-keygen -t ed25519 -N "" -C github-actions-deploy -f ~/.ssh/fight_ai_deploy
@@ -92,7 +92,7 @@ ssh ubuntu@<SERVER_IP> "DEPLOY_PUBKEY='$(cat ~/.ssh/fight_ai_deploy.pub)' bash b
 ```bash
 ssh ubuntu@<SERVER_IP> nano /opt/fight-ai/.env
 ```
-Set `SITE_ADDRESS`, `PUBLIC_BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `ADMIN_EMAILS`. Never set `DEV_LOGIN` here. The backend refuses to start with it on a public URL anyway.
+Set `SITE_ADDRESS`, `PUBLIC_BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `ADMIN_EMAILS`. To serve the landing page, also set `LANDING_ADDRESS` (for example `fightlytics.com, www.fightlytics.com`). Never set `DEV_LOGIN` here. The backend refuses to start with it on a public URL anyway.
 
 ### 6. Allow the production sign-in
 In Google Cloud console:
@@ -112,6 +112,8 @@ gh secret set DEPLOY_HOST --env production --body '<SERVER_IP>'
 gh secret set DEPLOY_USER --env production --body ubuntu
 ssh-keyscan -t ed25519 <SERVER_IP> | gh secret set DEPLOY_KNOWN_HOSTS --env production
 gh variable set SITE_ADDRESS --env production --body '<your-domain>'
+# Optional: the smoke test also checks the landing page's first host.
+gh variable set LANDING_ADDRESS --env production --body '<landing-domain>'
 ```
 The branch policy lets only workflows running on `release` read these secrets. The repo is public, so this matters.
 

@@ -109,11 +109,19 @@ def update_event(fight_id: int, event_id: int, payload: FightEventUpdate) -> Opt
                 FightEvent.id == event_id,
                 FightEvent.fight_id == fight_id,
                 FightEvent.source == "label",
-                FightEvent.kind != "point",
             )
             .first()
         )
         if event is None:
+            return None
+        # Points are create+delete only, except a fight-state mark, which the
+        # State lane drags: it may move its `frame` and nothing else. Strikes
+        # stay fixed so a QA verdict always refers to the frame it reviewed.
+        if event.kind == "point" and not (
+            (event.action or "").startswith("state_")
+            and payload.end_frame is None
+            and payload.value is None
+        ):
             return None
         if payload.frame is not None:
             event.frame = payload.frame

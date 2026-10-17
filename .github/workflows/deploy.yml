@@ -105,3 +105,12 @@ jobs:
           result=$(curl -s --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code} %{content_type}' "$SITE/api/auth/me")
           echo "GET /api/auth/me -> $result"
           [[ "$result" =~ ^(200|401)\ application/json ]]
+
+      - name: Landing smoke test
+        if: vars.LANDING_ADDRESS != ''
+        env:
+          LANDING: ${{ vars.LANDING_ADDRESS }}
+        run: |
+          # The first host of a comma-separated list.
+          host="${LANDING%%,*}"
+          curl -fsS --connect-timeout 10 --max-time 30 --retry 10 --retry-delay 6 --retry-all-errors -o /dev/null "https://${host// /}/"

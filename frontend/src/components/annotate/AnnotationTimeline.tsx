@@ -116,7 +116,9 @@ export default function AnnotationTimeline({
   const boxH = totalH + 14;
 
   // Live edge being dragged, so the block redraws smoothly before the PUT commits.
-  const dragRef = useRef<{ id: number; edge: 'start' | 'end' } | null>(null);
+  // A state mark drags as edge 'start' (its `frame`), clamped between its
+  // neighbouring marks so the State lane never reorders mid-drag.
+  const dragRef = useRef<{ id: number; edge: 'start' | 'end'; min?: number; max?: number } | null>(null);
   const [dragFrame, setDragFrame] = useState<number | null>(null);
 
   const fil = (e: Event) => matchFilter(categoryForAction(e.action), filter);
@@ -134,13 +136,21 @@ export default function AnnotationTimeline({
     () => events.filter(e => categoryForAction(e.action) === 'state').sort((a, b) => a.frame - b.frame),
     [events],
   );
+  const markFrame = (e: Event) => (dragRef.current?.id === e.id && dragFrame != null ? dragFrame : e.frame);
   const segs = stateEv
     .map((e, i) => {
-      const rawT1 = i + 1 < stateEv.length ? (stateEv[i + 1].frame - 1) / fps : duration;
+      const next = stateEv[i + 1];
+      const rawT1 = next ? (markFrame(next) - 1) / fps : duration;
       const t1 = fightEndFrame != null ? Math.min(rawT1, (fightEndFrame - 1) / fps) : rawT1;
       return {
         id: e.id,
-        t0: (e.frame - 1) / fps,
+        frame: e.frame,
+        // Frames each edge may be dragged between: a segment's start is its
+        // own mark, its end is the next mark's start.
+        startMin: (stateEv[i - 1]?.frame ?? 0) + 1,
+        startMax: (next?.frame ?? Infinity) - 1,
+        next: next ? { id: next.id, min: e.frame + 1, max: (stateEv[i + 2]?.frame ?? Infinity) - 1 } : null,
+        t0: (markFrame(e) - 1) / fps,
         t1,
         state: e.action === 'state_clinch' ? 'CLINCH' : e.action === 'state_ground' ? 'GROUND' : 'STRIKING',
       };
@@ -198,7 +208,8 @@ export default function AnnotationTimeline({
       if (!d || !el) return;
       const r = el.getBoundingClientRect();
       const t = (e.clientX - r.left + el.scrollLeft) / pxPerSec;
-      setDragFrame(frameFor(Math.max(0, Math.min(duration, t))));
+      const f = frameFor(Math.max(0, Math.min(duration, t)));
+      setDragFrame(Math.max(d.min ?? 1, Math.min(d.max ?? Infinity, f)));
     };
     const up = () => {
       const d = dragRef.current;
@@ -213,10 +224,10 @@ export default function AnnotationTimeline({
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pxPerSec, duration, dragFrame]);
-  const startEdgeDrag = (id: number, edge: 'start' | 'end') => (e: React.PointerEvent) => {
+  const startEdgeDrag = (id: number, edge: 'start' | 'end', min?: number, max?: number) => (e: React.PointerEvent) => {
     e.stopPropagation();
     onSetPlaying(false);
-    dragRef.current = { id, edge };
+    dragRef.current = { id, edge, min, max };
   };
 
   useEffect(() => {
@@ -387,19 +398,44 @@ export default function AnnotationTimeline({
           {segs.map(s => {
             const c = s.state === 'GROUND' ? 'var(--state-ground)' : s.state === 'CLINCH' ? 'var(--state-clinch)' : 'var(--state-striking)';
             const w = Math.max(2, s.t1 * pxPerSec - s.t0 * pxPerSec);
+            const selected = s.id === selectedEventId;
+            // A segment is its starting mark: selecting it selects that event,
+            // so Delete removes the mark and the previous state runs on.
             return (
-              <div
+              <button
                 key={'seg' + s.id}
-                title={s.state}
+                onPointerDown={ev => ev.stopPropagation()}
+                onClick={ev => { ev.stopPropagation(); onSeek(s.frame); onSelectEvent(s.id); }}
+                title={selected ? `${s.state} · Delete to remove` : s.state}
                 style={{
                   position: 'absolute', top: TL.ruler + TL.round + 5, left: s.t0 * pxPerSec, width: w, height: TL.state - 10,
-                  borderRadius: 4, zIndex: 2, background: `color-mix(in srgb, ${c} 16%, transparent)`,
-                  border: `1px solid color-mix(in srgb, ${c} 38%, transparent)`, borderLeft: `3px solid ${c}`,
-                  overflow: 'hidden', display: 'flex', alignItems: 'center', paddingLeft: 8,
+                  borderRadius: 4, zIndex: selected ? 6 : 2, background: `color-mix(in srgb, ${c} ${selected ? 30 : 16}%, transparent)`,
+                  border: `1px solid color-mix(in srgb, ${c} ${selected ? 90 : 38}%, transparent)`, borderLeft: `3px solid ${c}`,
+                  overflow: 'hidden', display: 'flex', alignItems: 'center', padding: '0 0 0 8px',
+                  cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
-                {w > 64 && <span style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 500, color: c, whiteSpace: 'nowrap' }}>{s.state}</span>}
-              </div>
+                {w > 64 && <span style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 500, color: c, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{s.state}</span>}
+                <div
+                  onPointerDown={startEdgeDrag(s.id, 'start', s.startMin, s.startMax)}
+                  onClick={ev => ev.stopPropagation()}
+                  title="Drag to move where this state starts"
+                  style={{ position: 'absolute', left: 0, top: 0, width: 8, height: '100%', cursor: 'ew-resize', zIndex: 4 }}
+                />
+                {s.next && (
+                  <div
+                    onPointerDown={startEdgeDrag(s.next.id, 'start', s.next.min, s.next.max)}
+                    onClick={ev => ev.stopPropagation()}
+                    title="Drag to move where the next state starts"
+                    style={{
+                      position: 'absolute', right: 0, top: 0, width: 8, height: '100%', cursor: 'ew-resize', zIndex: 4,
+                      display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 3, boxSizing: 'border-box',
+                    }}
+                  >
+                    <span style={{ width: 2, height: '55%', borderRadius: 1, background: `color-mix(in srgb, ${c} 70%, transparent)` }} />
+                  </div>
+                )}
+              </button>
             );
           })}
 

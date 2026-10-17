@@ -30,7 +30,7 @@ Route paths elsewhere in this file omit the `/api` prefix.
 `services/event_service.py` implements these. See the root CLAUDE.md for the `source`/`kind` model.
 - `GET /fights/{id}/events/` returns every row unless filtered, so callers pass `source`. The first `source=label` fetch for a fight also seeds `kind='round'` labels from `rounds`.
 - `POST …/events/` always writes `source='label'` and stamps `labeler` with the signed-in user's email. `FightEventCreate` has neither field, so a client can't spoof a prediction or another labeller.
-- `PUT …/events/{eid}` edits `frame`, `end_frame` or `value` on **label spans only**. It returns 404 for predictions and for `kind='point'`: points are create and delete only.
+- `PUT …/events/{eid}` edits `frame`, `end_frame` or `value` on **label spans**, and only `frame` on a label `state_*` point (the State lane drags it). It returns 404 for predictions and every other point, because a strike that moved would no longer match its QA verdict.
 - `PUT …/events/{eid}/verify` sets `is_verified` on **label points only**, the opposite scope. It returns 409 when setting true or false on a fight whose purpose isn't `training_data`. Clearing to null is always allowed.
 - `PUT …/events/{eid}/reclassify` (Training Data QA) rewrites `action`, `target` and `success` on **label points only**. It deliberately leaves `corner` and `is_verified` alone. It has no purpose check: the backend stores whatever columns the frontend's `reclassifyPayload()` computes.
 - `DELETE …/events/{eid}` works on label rows only and returns 404 for anything else.
