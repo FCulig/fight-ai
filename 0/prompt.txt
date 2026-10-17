@@ -1,0 +1,1 @@
+Currently I am hosting the app/ + be + db on oracle cloud free tier. I now also want to host landing/ somewhere for free. Can we set that up as well on oracle cloud?
