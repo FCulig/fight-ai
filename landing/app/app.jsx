@@ -1,7 +1,7 @@
 // app/app.jsx — Fightlytics landing: the fight as the model sees it.
 const { useEffect: aEffect, useState: aState } = React;
 
-const APP_URL = 'https://app.fightlytics.com';
+const APP_URL = 'https://app-fightlytics.duckdns.org';
 const SIGN_IN = 'Sign in with Google';
 
 function Nav() {

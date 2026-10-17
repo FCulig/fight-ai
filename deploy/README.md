@@ -67,7 +67,7 @@ The deploy files must be on `master` on GitHub first: the server clones the repo
 ### 2. Point your domain at it
 Create a DNS **A record** for your hostname (for example `fightai.example.com`) that points at the VM's public IP. Caddy can't get a certificate until the name resolves.
 
-The landing page needs A records of its own for its hostnames (for example the apex `@` and `www`), pointing at the same IP. Remove any parking, URL-redirect or CNAME records your registrar created for those names first, or they will win over yours.
+The landing page needs a hostname of its own pointing at the same IP. With DuckDNS, add a second subdomain (for example `fightlytics.duckdns.org`) and set its IP to the VM's. Free accounts get five. The landing page's sign-in button links to the app's hostname, `APP_URL` in `landing/app/app.jsx`, so change that too if the app's hostname changes.
 
 ### 3. Create a deploy key (on your laptop)
 ```bash
@@ -92,7 +92,7 @@ ssh ubuntu@<SERVER_IP> "DEPLOY_PUBKEY='$(cat ~/.ssh/fight_ai_deploy.pub)' bash b
 ```bash
 ssh ubuntu@<SERVER_IP> nano /opt/fight-ai/.env
 ```
-Set `SITE_ADDRESS`, `PUBLIC_BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `ADMIN_EMAILS`. To serve the landing page, also set `LANDING_ADDRESS` (for example `fightlytics.com, www.fightlytics.com`). Never set `DEV_LOGIN` here. The backend refuses to start with it on a public URL anyway.
+Set `SITE_ADDRESS`, `PUBLIC_BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `ADMIN_EMAILS`. To serve the landing page, also set `LANDING_ADDRESS` (for example `fightlytics.duckdns.org`). Never set `DEV_LOGIN` here. The backend refuses to start with it on a public URL anyway.
 
 ### 6. Allow the production sign-in
 In Google Cloud console:
