@@ -1,0 +1,1 @@
+I would like you to fix up the animations for landing/. For example, on the first animation, blue fighter looses a leg at the end of the animation. Red fighter also looses a left hand at the end of the animation. Also red fighters head is getting larger and smaller (oscilating)
