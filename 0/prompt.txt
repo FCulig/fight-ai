@@ -1,0 +1,13 @@
+Currently I am hosting the app/ + be + db on oracle cloud free tier. I now also want to host landing/ somewhere for free. Can we set that up as well on oracle cloud?
+
+---
+
+I am using duckdns
+
+---
+
+How to do a second step? Can you do it?
+
+---
+
+Okay I ran it successfully
