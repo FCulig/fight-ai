@@ -1,0 +1,17 @@
+/design-sync currently the app/ and landing/ are different to the design. I would like to update the designs in the Claude Design collections to reflect the changes that are implemented currently
+
+---
+
+https://claude.ai/design/p/f026815c-9df4-4f33-afd8-2546cd99c220
+
+---
+
+Yes do that
+
+---
+
+Issue is that designs also differed away from the Claude designs, the real implementation also changed some stuff. I want to update that stuff as well. Not only design system
+
+---
+
+Lets do the option 2
