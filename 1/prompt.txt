@@ -1,0 +1,9 @@
+Currently app/ and landing/ designs different from the designs that are in the claude design collections. Is there a way to transfer over this implementation into the claude design collections?
+
+---
+
+design sync just updated the design system, designs differ from the implementation
+
+---
+
+Issue is that designs also differed away from the Claude designs, the real implementation also changed some stuff. I want to update that stuff as well
