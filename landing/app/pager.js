@@ -1,6 +1,6 @@
 // app/pager.js — one wheel/trackpad gesture or key press moves exactly one section.
 // Stops come from each element's CSS `scroll-snap-align` (site.css), so CSS stays the single source.
-// Touch screens use native CSS snapping instead (site.css); this only runs with a mouse or trackpad.
+// The mobile layout and touch screens scroll freely: this pages only the wide layout, with a mouse, trackpad or keys.
 (function () {
   const TARGETS = '.hero, .step, .sec, .final, .footer';
   const MERGE_PX = 100;      // stops closer than this collapse into the later one
@@ -47,9 +47,11 @@
   }
 
   function createPager() {
-    const touchFirst = window.matchMedia('(hover: none), (pointer: coarse)').matches;
+    // checked on every event, so a resize or DevTools device mode (with or without touch) after load is honoured;
+    // 899px is site.css's narrow breakpoint, where the mobile layout takes over
+    const freeMq = window.matchMedia('(max-width: 899px), (hover: none), (pointer: coarse)');
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (touchFirst || reduce) return null;
+    if (reduce) return null;
 
     let raf = 0, animating = false, armed = true, lastWheel = 0, lastMag = 0;
     const ease = (t) => 1 - Math.pow(1 - t, 3);
@@ -82,6 +84,7 @@
     }
 
     const onWheel = (e) => {
+      if (freeMq.matches) return;
       if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // pinch-zoom, sideways swipes
       e.preventDefault();
       const now = performance.now(), mag = Math.abs(e.deltaY);
@@ -92,7 +95,7 @@
     };
 
     const onKey = (e) => {
-      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (freeMq.matches || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
       const t = e.target;
       if (t.closest && t.closest('input, textarea, select, [contenteditable]')) return;
       let dir = 0;
@@ -112,6 +115,7 @@
 
     // in-page links land on the section's stop, not its raw top (the skip link keeps native focus behaviour)
     const onClick = (e) => {
+      if (freeMq.matches) return;
       const a = e.target.closest && e.target.closest('a[href^="#"]');
       if (!a || a.classList.contains('skip') || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
       const el = document.getElementById(a.getAttribute('href').slice(1));

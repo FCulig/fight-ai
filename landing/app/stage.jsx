@@ -401,7 +401,9 @@ function ExchangeStage({ mode }) {
     const size = () => {
       const r = cv.getBoundingClientRect();
       dpr = Math.min(2, window.devicePixelRatio || 1);
-      W = cv.width = Math.round(r.width * dpr); H = cv.height = Math.round(r.height * dpr);
+      const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+      if (w !== cv.width || h !== cv.height) { cv.width = w; cv.height = h; } // setting a size reallocates the canvas, so skip no-ops
+      W = w; H = h;
       paint();
     };
     settle.current = () => {
@@ -416,7 +418,8 @@ function ExchangeStage({ mode }) {
         pose = reducedMotion() ? { fromT: s.pose, u: 1, lock: LOCK_END } : { fromT: tRef.current, u: 0, lock: 0 };
         loop.current = { phase: 'play', time: 0 }; setFade(1);
       } else if (prev === 'detect') {
-        tRef.current = s.pose; // the fight resumes from the held pose
+        // the fight resumes from the held pose, or from where it stopped if a quick scroll left before the glide was halfway
+        tRef.current = pose && pose.u < 0.5 ? pose.fromT : s.pose;
         pose = null;
       }
     };

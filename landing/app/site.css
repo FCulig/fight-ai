@@ -231,15 +231,13 @@ a { color: inherit; }
 .reveal.in { opacity: 1; transform: none; }
 .reveal.d1 { transition-delay: 0.08s; } .reveal.d2 { transition-delay: 0.16s; } .reveal.d3 { transition-delay: 0.24s; }
 
-/* ---------- one section per scroll.
-   These alignments are the stops for both paths: touch screens snap natively, one stop per swipe;
-   mouse, trackpad and keys go through app/pager.js, so CSS snapping stays off there (it would fight the jump). */
-@media (hover: none), (pointer: coarse) { html { scroll-snap-type: y mandatory; } }
-.hero, .sec, .final { scroll-snap-align: start; scroll-snap-stop: always; }
-.step { scroll-snap-align: center; scroll-snap-stop: always; }
+/* ---------- one section per scroll, with a mouse, trackpad or keys only: app/pager.js reads these alignments as its stops.
+   Nothing snaps natively. Touch screens scroll freely, because mandatory snapping kept stopping mid-section on phones. */
+.hero, .sec, .final { scroll-snap-align: start; }
+.step { scroll-snap-align: center; }
 .footer { scroll-snap-align: end; }
 
-/* ---------- narrow: hero, then the replay pinned on top while steps scroll under it ---------- */
+/* ---------- narrow: hero, then the replay pinned on top while the steps scroll under it ---------- */
 @media (max-width: 899px) {
   :root { --nav-h: 56px; }
   .wrap, .nav-in, .story { padding: 0 16px; }
@@ -249,9 +247,15 @@ a { color: inherit; }
   .story-copy { display: contents; }
   .hero { order: 0; min-height: auto; padding: 44px 0 32px; }
   .stage { order: 1; grid-column: 1; grid-row: auto; height: auto; z-index: 2; background: var(--bg); padding: 8px 0 10px; }
-  .step { order: 2; min-height: 78dvh; justify-content: flex-end; padding: 32px 0 14vh; scroll-snap-align: end; }
-  .step:last-child { min-height: 90dvh; }
-  .stage-panel { --canvas-h: 30dvh; --log-h: 81px; }
+  /* each step is at least the screen left below the pinned replay (--pin-h, measured in app.jsx), text at the top of it,
+     so wherever the page stops on a step the whole step can be read. Phones scroll freely: nothing snaps here. */
+  .step, .step:last-child { order: 2; min-height: calc(100svh - var(--nav-h) - var(--pin-h, 60svh)); justify-content: flex-start; padding: 20px 0 40px; }
+  /* svh, not dvh: the URL bar showing and hiding mid-scroll would otherwise resize the canvas.
+     Short phones give the canvas up first, so a step's text still fits under the replay. */
+  .stage-panel { --canvas-h: clamp(120px, min(30svh, 100svh - 530px), 320px); --log-h: 81px; }
+  /* the log keeps its space on every layer and only fades: collapsing it resizes the canvas on every frame of the transition */
+  .mode-detect .stage-log, .mode-corners .stage-log, .mode-strike .stage-log { height: var(--log-h); padding-top: 6px; padding-bottom: 6px; border-top-color: var(--line); }
+  .stage-hud { gap: 10px; padding-left: 12px; }
   .stage-frame span { display: none; }
   .stage-cap { display: none; }
   .stage-layers { gap: 10px; font-size: 11px; }
@@ -264,8 +268,14 @@ a { color: inherit; }
   .foot-links { margin-left: 0; }
 }
 
+/* the smallest phones drop the frame number so the layer buttons and play button fit */
+@media (max-width: 339px) {
+  .stage-frame { display: none; }
+  .stage-play { margin-left: auto; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; scroll-snap-type: none; }
+  html { scroll-behavior: auto; }
   .reveal { opacity: 1; transform: none; transition: none; }
   .hero > *, .log-row { animation: none; }
   .tape-row .bar i { transition: none; }

@@ -59,14 +59,31 @@ const STEPS = [
 
 function Story() {
   const [mode, setMode] = aState('full');
+  // the layer is worked out from the scroll position each time, so a fast flick or a scroll back to the top
+  // never leaves a stale layer behind
   aEffect(() => {
-    const narrow = window.matchMedia('(max-width: 899px)').matches;
-    const io = new IntersectionObserver(
-      (es) => es.forEach((e) => { if (e.isIntersecting) setMode(e.target.dataset.mode); }),
-      { rootMargin: narrow ? '-72% 0px -18% 0px' : '-45% 0px -45% 0px' },
-    );
-    document.querySelectorAll('.story [data-mode]').forEach((el) => io.observe(el));
-    return () => io.disconnect();
+    const els = [...document.querySelectorAll('.story [data-mode]')];
+    const nav = document.querySelector('.nav'), stage = document.querySelector('.story .stage');
+    let raf = 0;
+    const pick = () => {
+      raf = 0;
+      // wide: the section that holds the middle of the screen. Narrow: the replay is pinned on top, so the step
+      // whose heading has risen past the middle of the free space below it
+      const narrow = window.matchMedia('(max-width: 899px)').matches;
+      const top = narrow ? nav.offsetHeight + stage.offsetHeight : 0;
+      const line = (top + window.innerHeight) / 2;
+      let m = els[0].dataset.mode;
+      els.forEach((el) => { if ((narrow ? el.firstElementChild : el).getBoundingClientRect().top < line) m = el.dataset.mode; });
+      setMode(m);
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(pick); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    // narrow: each step is sized to the screen space left below the pinned replay, so CSS needs the replay's height
+    const ro = new ResizeObserver(() => { document.documentElement.style.setProperty('--pin-h', stage.offsetHeight + 'px'); onScroll(); });
+    ro.observe(stage);
+    pick();
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); };
   }, []);
 
   return (
