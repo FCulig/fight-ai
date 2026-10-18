@@ -1,0 +1,29 @@
+Also when page is in the mobile mode, animations also break and mix up when scrolling the page. It is not smooth enough for mobile devices.
+
+---
+
+Titles on the mobile are still hiden under the animation player
+
+---
+
+It is broken, see title Two figthers, ... first row is cut in half
+
+---
+
+The issue is still present for the given case. Also, read 1.2 seconds, name the strike is completley hidden under the animation player.
+
+Every strinke, one click from its frame. also first line is under the video.
+
+Can we maybe completley redesign the mobile page? I see this fixing is going nowhere and you are not capable of doing that
+
+---
+
+Scrolling on mobile is still broken, remove snapping for mobile devices only.
+
+---
+
+I am using brave f12 dev tools and turned on the mobile mode, and it is still there
+
+---
+
+Can we revert change for mobile so that they don't need to tap on a button to see different sections of animations?

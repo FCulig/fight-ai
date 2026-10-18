@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M573AN2RBVM11RTD7E4MXNRQ",
+  "strategy": "manual-commit",
+  "branch": "master",
+  "checkpoints_count": 7,
+  "files_touched": [
+    "landing/CLAUDE.md",
+    "landing/app/app.jsx",
+    "landing/app/pager.js",
+    "landing/app/site.css",
+    "landing/app/stage.jsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 240,
+    "cache_creation_tokens": 280435,
+    "cache_read_tokens": 27046330,
+    "output_tokens": 92620,
+    "api_call_count": 120
+  }
+}
