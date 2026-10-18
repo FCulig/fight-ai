@@ -37,7 +37,7 @@ The look is shared with `landing/`. Tokens and shared classes live in `src/index
 - **Red and blue mean corners only, and text never wears a corner colour.** Put a swatch next to ink text instead, so a name stays readable and the colour stays a mark.
 - **Type:** Archivo everywhere. Headings use `.font-display` (condensed, heavy) and are written in sentence case. Every stat, count and score uses `.font-num` (JetBrains Mono), so digits line up.
 - **Shape:** controls 6px (`--r-ctl`), tiles 8px, panels 12px. No pills, and no glow shadows.
-- **Don't change a data colour by eye.** Corners, the state trio, `--warn`, statuses and `PURPOSE_COLORS` were measured against each other; run the dataviz skill's `validate_palette.js` before touching one. The app's corner blue stays `#60a5fa` (the landing page uses `#4f93ea`), because the darker blue sits even closer to `--state-ground`.
+- **Don't change a data colour by eye.** Corners, the state trio, `--warn`, statuses and `PURPOSE_COLORS` were measured against each other; run the dataviz skill's `validate_palette.js` before touching one. The corner blue stays `#60a5fa`, here and on the landing page, because a darker blue sits even closer to `--state-ground`.
 
 ## Upload (`UploadDialog`)
 **AI annotation** always sends `purpose='ai_labeled'`. **Self-annotate** shows a purpose radio group (`training_data` / `reference`) with **no default**, and Upload stays disabled until one is picked. The gate is deliberate: the training and evaluation sets must never be split by inattention. `uploadFight()` sends `purpose` as the only track selector.

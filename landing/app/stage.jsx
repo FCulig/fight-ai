@@ -8,8 +8,8 @@ const HEAD = [0, 1, 2, 3, 4];
 const MIN_CONF = 30;            // keypoint conf * 100 below this is a guess, not a joint
 const HZ = 25;                  // samples per second (the strike model's rate)
 const WINDOW = 15;              // ±15 samples = the model's 31-sample, 1.2 s window
-const CORNER = ['#ef4444', '#4f93ea'];
-const CORNER_RGB = [[239, 68, 68], [79, 147, 234]];
+const CORNER = ['#ef4444', '#60a5fa'];
+const CORNER_RGB = [[239, 68, 68], [96, 165, 250]];
 const INK_RGB = [242, 241, 238];
 const CORNER_NAME = ['Red', 'Blue'];
 const INK = '242,241,238';
