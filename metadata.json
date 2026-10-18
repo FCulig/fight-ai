@@ -3,7 +3,7 @@
   "checkpoint_id": "01M575G9FNN0VZFAGPEQC6TM6K",
   "strategy": "manual-commit",
   "branch": "master",
-  "checkpoints_count": 9,
+  "checkpoints_count": 14,
   "files_touched": [
     "CLAUDE.md",
     "backend/CLAUDE.md",
@@ -12,6 +12,7 @@
     "backend/app/models/user.py",
     "backend/app/services/user_service.py",
     "backend/tests/test_auth.py",
+    "db/alembic/versions/8a4d1c7e2b90_create_waitlist_table.py",
     "db/alembic/versions/b5c6d7e8f9a0_create_users_table.py",
     "deploy/Caddyfile",
     "deploy/README.md",
@@ -25,6 +26,7 @@
     "landing/CLAUDE.md",
     "landing/app/app.jsx",
     "landing/app/site.css",
+    "landing/dev_server.py",
     "landing/index.html"
   ],
   "sessions": [
@@ -38,13 +40,20 @@
     {
       "metadata": "/1/metadata.json",
       "prompt": ""
+    },
+    {
+      "metadata": "/2/metadata.json",
+      "transcript": "/2/full.jsonl",
+      "compact_transcript": "/2/transcript.jsonl",
+      "content_hash": "/2/content_hash.txt",
+      "prompt": "/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 56,
-    "cache_creation_tokens": 49809,
-    "cache_read_tokens": 2538367,
-    "output_tokens": 11590,
-    "api_call_count": 28
+    "input_tokens": 260,
+    "cache_creation_tokens": 239151,
+    "cache_read_tokens": 19933821,
+    "output_tokens": 78646,
+    "api_call_count": 130
   }
 }

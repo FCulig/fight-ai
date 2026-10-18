@@ -1,0 +1,17 @@
+Can you please make adjustments to the app/ basically I want only white listed emails to be able to sign in via google. Other people should subscribe to email notfications for global availability of the product.
+
+---
+
+When the invitation is successfully sent out, I would like to show some kind of a message, something more prominent.
+
+---
+
+Also add some kind of an animation to subscribing to the waitlist
+
+---
+
+Can you please also fix the role column for the /users, dropdown button has no right padding so it is not symetric
+
+---
+
+Can we now make landing/ to subscribe to wait list. I still want users to have an entrypoint to the app/ But landing should focus on attracting people to the wait list
