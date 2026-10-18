@@ -11,7 +11,7 @@ Run it from `backend/` with `uvicorn app.main:app --reload`. It uses `backend/.v
 - `KEEP_VIDEO_ON_DELETE=1` (dev only) makes `DELETE /fights/{id}` keep the video file. Set it when you test deletes by hand.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `SESSION_SECRET` are required; startup fails without them.
 - `PUBLIC_BASE_URL` (required) is the origin the browser sees: `http://localhost:5173` in dev. The OAuth redirect URI (`<PUBLIC_BASE_URL>/api/auth/callback`, which must be registered in Google Cloud) and the cookie's Secure flag both derive from it, because the Vite proxy rewrites `Host`.
-- `ADMIN_EMAILS` (comma-separated) makes those addresses admin **when their row is created** on first sign-in. It is not re-applied later.
+- `ADMIN_EMAILS` (comma-separated) is the only way an address without a `users` row can sign in: its first sign-in creates it as admin. It is not re-applied later.
 - `DEV_LOGIN=1` (local only) mounts `GET /auth/dev-login`. Startup fails if it is set while `PUBLIC_BASE_URL` is anything but `http://localhost` or `http://127.0.0.1`, so it can never be live on a deployed instance.
 - `FRONTEND_DIST` (prod only) serves the built SPA from this origin, with an `index.html` fallback for client routes.
 - `PIPELINE_DISPATCH=queue` (prod only, set in `deploy/Dockerfile`) is inherited by the validator subprocess, which then leaves a valid upload `queued` instead of spawning `main.py`. The server has no torch.
@@ -22,7 +22,9 @@ Route paths elsewhere in this file omit the `/api` prefix.
 - **`app/main.py` mounts every router under `/api` with `Depends(current_user)`**, except `/api/auth/*`. `tests/test_auth.py` fails if a route escapes it.
 - **Every write route declares its minimum role** with `require_role("labeller")` or `require_role("admin")` in its decorator. Reads need only a session. Add the new route to the role matrix in `tests/test_auth.py`.
 - **The cookie holds only the user id.** `current_user` re-reads the `users` row on every request, so a role change or disable applies immediately.
-- **Users are disabled (`is_active=false`), never deleted.** Auto-join would bring a deleted user straight back as a viewer. `PATCH /users/{id}` refuses self-edits, which guarantees an admin always remains.
+- **Sign-in is invite-only.** `user_service.sign_in` returns None for an email with no `users` row, and the callback redirects to `/?auth_error=not_invited`. `POST /users/` is the invite.
+- **Users are disabled (`is_active=false`), never deleted**, because `fights.uploaded_by` and label `labeler` point at them. `PATCH /users/{id}` refuses self-edits, which guarantees an admin always remains.
+- **`POST /auth/waitlist` is public** and always answers 204, so it can't reveal who has an account. It skips addresses that already have a user, and inviting an address deletes its waitlist row. Admins read it with `GET /users/waitlist`.
 - **`GET /auth/dev-login?role=…` is the only way around Google**, for Claude sessions and curl (usage is in the root CLAUDE.md). It creates a normal session for a synthetic `dev-<role>@fightai.local` user, so every role check still runs. It resets that user's role and active flag on each call, and answers 404 to non-loopback clients because uvicorn may be bound to `0.0.0.0`. Labels created under it are stamped with the dev email as `labeler`.
 - **A role-gated route that accepts a large body must not declare `File()`/`Form()` params.** FastAPI parses the body before it runs dependencies, so a viewer could stream a whole video to disk before the 403. `upload_fight` reads `request.form()` itself.
 

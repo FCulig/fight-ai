@@ -2,7 +2,8 @@
 const { useEffect: aEffect, useState: aState } = React;
 
 const APP_URL = 'https://app-fightlytics.duckdns.org';
-const SIGN_IN = 'Sign in with Google';
+// Same-origin: Caddy (deploy/Caddyfile) and dev_server.py forward this one path to the backend.
+const WAITLIST_URL = '/api/auth/waitlist';
 
 // Umami custom events. Each stored property also counts against the free plan's monthly cap.
 function track(name, data) {
@@ -19,9 +20,89 @@ function Nav() {
           <a href="#fight">Output</a>
           <a href="#method">Method</a>
         </div>
-        <a href={APP_URL} className="btn sm" data-umami-event="sign-in" data-umami-event-from="nav">{SIGN_IN}</a>
+        <div className="nav-ctas">
+          <a href={APP_URL} className="nav-signin" data-umami-event="sign-in" data-umami-event-from="nav">Sign in</a>
+          <a href="#start" className="btn sm" data-umami-event="waitlist-cta" data-umami-event-from="nav">Join the waitlist</a>
+        </div>
       </div>
     </nav>
+  );
+}
+
+// Sign-in is invite-only, so the page's call to action is the waitlist. The email never goes to analytics.
+function WaitlistForm({ from, joined, onJoined }) {
+  const [email, setEmail] = aState('');
+  const [phase, setPhase] = aState('form'); // form | sending | leaving
+  const [error, setError] = aState(null);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const value = email.trim();
+    if (!value.includes('@')) {
+      setError('Enter a valid email address.');
+      e.target.querySelector('input').focus();
+      return;
+    }
+    setError(null);
+    setPhase('sending');
+    try {
+      const res = await fetch(WAITLIST_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: value }),
+      });
+      if (res.status === 422) throw new Error('Enter a valid email address.');
+      if (!res.ok) throw new Error('Something went wrong. Try again in a moment.');
+      track('waitlist', { from });
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { onJoined(value); return; }
+      setPhase('leaving');
+      setTimeout(() => onJoined(value), 200); // the length of .wl-out
+    } catch (err) {
+      setError(err instanceof TypeError ? 'Something went wrong. Try again in a moment.' : err.message);
+      setPhase('form');
+    }
+  };
+
+  if (joined) {
+    return (
+      <div className="wl-done" role="status">
+        <span className="wl-badge" aria-hidden="true">
+          <svg width="44" height="44" viewBox="0 0 48 48" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="24" cy="24" r="22" pathLength="1" />
+            <path d="M15 24.5l6 6 12-13" pathLength="1" />
+          </svg>
+        </span>
+        <div>
+          <p className="wl-done-h">You&rsquo;re on the list.</p>
+          <p className="wl-done-p">We&rsquo;ll email <span className="wl-email">{joined}</span> when Fightlytics opens to everyone.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const sending = phase === 'sending';
+  return (
+    <div className={'wl' + (phase === 'leaving' ? ' wl-out' : '')}>
+      <form className="wl-form" onSubmit={submit} noValidate>
+        <input
+          className="wl-input" type="email" required autoComplete="email" placeholder="you@example.com"
+          aria-label="Email address" value={email} onChange={(e) => setEmail(e.target.value)} disabled={phase !== 'form'}
+        />
+        <button className="btn" type="submit" disabled={phase !== 'form'}>
+          {sending ? <><span className="wl-spin" aria-hidden="true" />Joining&hellip;</> : 'Join the waitlist'}
+        </button>
+      </form>
+      {error && <p className="wl-err" role="alert">{error}</p>}
+    </div>
+  );
+}
+
+function SignInNote() {
+  return (
+    <p className="wl-note">
+      Invite-only for now. Already invited?{' '}
+      <a href={APP_URL} data-umami-event="sign-in" data-umami-event-from="note">Sign in</a>
+    </p>
   );
 }
 
@@ -57,7 +138,7 @@ const STEPS = [
   },
 ];
 
-function Story() {
+function Story({ joined, onJoined }) {
   const [mode, setMode] = aState('full');
   // the layer is worked out from the scroll position each time, so a fast flick or a scroll back to the top
   // never leaves a stale layer behind
@@ -90,11 +171,11 @@ function Story() {
     <section className="story" id="top">
       <div className="story-copy">
         <header className="hero" data-mode="full">
-          <h1 className="h1">Every strike, logged to the frame.</h1>
+          <h1 className="h1">Every strike, analyzed.</h1>
           <p className="lede">Feed it fight video. Fightlytics tracks both fighters, reads the rounds and logs strikes by type, target and fighter.</p>
           <div className="hero-ctas">
-            <a href={APP_URL} className="btn" data-umami-event="sign-in" data-umami-event-from="hero">{SIGN_IN}</a>
-            <a href="#how" className="link">How it works <span className="material-symbols-outlined" aria-hidden="true">arrow_forward</span></a>
+            <WaitlistForm from="hero" joined={joined} onJoined={onJoined} />
+            {!joined && <SignInNote />}
           </div>
         </header>
         {STEPS.map((s) => (
@@ -165,14 +246,15 @@ function Live() {
   );
 }
 
-function Final() {
+function Final({ joined, onJoined }) {
   return (
     <section className="final" id="start">
       <div className="wrap final-in reveal">
         <LogoStack size={52} wordSize={28} />
-        <h2 className="h1 final-h">Stop charting fights by hand.</h2>
-        <p className="lede">Sign in with Google to browse analysed fights. Uploading is by invite.</p>
-        <a href={APP_URL} className="btn" data-umami-event="sign-in" data-umami-event-from="final">{SIGN_IN}</a>
+        <h2 className="h1 final-h">Every round, strike by strike.</h2>
+        <p className="lede">Fightlytics is invite-only while it&rsquo;s in early access. Join the waitlist and we&rsquo;ll email you when it opens to everyone.</p>
+        <WaitlistForm from="final" joined={joined} onJoined={onJoined} />
+        {!joined && <SignInNote />}
       </div>
     </section>
   );
@@ -191,6 +273,8 @@ function Footer() {
 }
 
 function App() {
+  // shared, so joining in the hero also shows "on the list" in the final section
+  const [joined, setJoined] = aState(null);
   aEffect(() => {
     const io = new IntersectionObserver((es) => es.forEach((e) => {
       if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
@@ -212,11 +296,11 @@ function App() {
       <a className="skip" href="#main">Skip to content</a>
       <Nav />
       <main id="main">
-        <Story />
+        <Story joined={joined} onJoined={setJoined} />
         <FightSection />
         <Method />
         <Live />
-        <Final />
+        <Final joined={joined} onJoined={setJoined} />
       </main>
       <Footer />
     </>

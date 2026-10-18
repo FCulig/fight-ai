@@ -24,9 +24,16 @@
 # updates it. Unset, compose passes an unpublished port, so nothing is served.
 {$LANDING_ADDRESS} {
 	encode zstd gzip
-	root * /srv/landing
-	# landing/ also holds CLAUDE.md and export_data.py; publish only the page.
-	@private not path / /index.html /app/*
-	respond @private 404
-	file_server
+	# The page's waitlist form posts here, so its one API call stays
+	# same-origin and the backend needs no CORS. Nothing else under /api.
+	handle /api/auth/waitlist {
+		reverse_proxy backend:8000
+	}
+	handle {
+		root * /srv/landing
+		# landing/ also holds CLAUDE.md and the dev scripts; publish only the page.
+		@private not path / /index.html /app/*
+		respond @private 404
+		file_server
+	}
 }

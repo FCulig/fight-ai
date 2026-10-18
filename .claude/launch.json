@@ -25,11 +25,8 @@
       "name": "landing",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
-        "-m",
-        "http.server",
-        "4321",
-        "--directory",
-        "landing"
+        "landing/dev_server.py",
+        "4321"
       ],
       "port": 4321
     }

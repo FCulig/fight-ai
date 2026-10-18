@@ -9,7 +9,7 @@ requires a session, and the session cookie holds only `users.id`. The backend
 re-reads this row on every request, so changing `role` or `is_active` takes
 effect immediately without touching the cookie.
 
-Any Google account that signs in is created as `viewer`. Admins raise the role
+(Superseded by 8a4d1c7e2b90: sign-in is now invite-only.) Any Google account that signs in is created as `viewer`. Admins raise the role
 on the Users page, or pre-provision an email before its first sign-in.
 Access is revoked with `is_active = false`, never by deleting the row: with
 auto-join, a deleted user would simply come back as a viewer next time.

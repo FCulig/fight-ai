@@ -67,7 +67,7 @@ The deploy files must be on `master` on GitHub first: the server clones the repo
 ### 2. Point your domain at it
 Create a DNS **A record** for your hostname (for example `fightai.example.com`) that points at the VM's public IP. Caddy can't get a certificate until the name resolves.
 
-The landing page needs a hostname of its own pointing at the same IP. With DuckDNS, add a second subdomain (for example `fightlytics.duckdns.org`) and set its IP to the VM's. Free accounts get five. The landing page's sign-in button links to the app's hostname, `APP_URL` in `landing/app/app.jsx`, so change that too if the app's hostname changes.
+The landing page needs a hostname of its own pointing at the same IP. With DuckDNS, add a second subdomain (for example `fightlytics.duckdns.org`) and set its IP to the VM's. Free accounts get five. The landing page's sign-in link points at the app's hostname, `APP_URL` in `landing/app/app.jsx`, so change that too if the app's hostname changes. Its waitlist form posts to `/api/auth/waitlist` on the landing host, which Caddy forwards to the backend.
 
 ### 3. Create a deploy key (on your laptop)
 ```bash

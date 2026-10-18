@@ -2,7 +2,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.models.user import User, UserCreate, UserResponse, UserUpdate
+from app.models.user import User, UserCreate, UserResponse, UserUpdate, WaitlistEntryResponse
 from app.services import user_service
 from app.utils.auth import require_role
 
@@ -12,6 +12,11 @@ router = APIRouter(dependencies=[Depends(require_role("admin"))])
 @router.get("/", response_model=List[UserResponse])
 def list_users():
     return user_service.list_users()
+
+
+@router.get("/waitlist", response_model=List[WaitlistEntryResponse])
+def list_waitlist():
+    return user_service.list_waitlist()
 
 
 @router.post("/", response_model=UserResponse, status_code=201)

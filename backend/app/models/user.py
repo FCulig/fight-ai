@@ -41,21 +41,20 @@ class UserResponse(BaseModel):
     last_login_at: Optional[datetime]
 
 
+def _normalise_email(v: str) -> str:
+    v = v.strip().lower()
+    if "@" not in v or len(v) > 320:
+        raise ValueError("email must be an email address")
+    return v
+
+
 class UserCreate(BaseModel):
-    """Pre-provisions an email before its first sign-in, so the person lands
-    with the right role instead of as a viewer."""
+    """Invites an email: sign-in is refused for any address without a row."""
 
     email: str
     role: str = "viewer"
 
-    @field_validator("email")
-    @classmethod
-    def _normalise_email(cls, v: str) -> str:
-        v = v.strip().lower()
-        if "@" not in v:
-            raise ValueError("email must be an email address")
-        return v
-
+    _email = field_validator("email")(_normalise_email)
     _role = field_validator("role")(_check_role)
 
 
@@ -64,3 +63,27 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
     _role = field_validator("role")(_check_role)
+
+
+class WaitlistEntry(Base):
+    """An address that asked to hear when the product opens to everyone."""
+
+    __tablename__ = "waitlist"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(320), nullable=False, unique=True)
+    created_at = Column(TIMESTAMP, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class WaitlistJoin(BaseModel):
+    email: str
+
+    _email = field_validator("email")(_normalise_email)
+
+
+class WaitlistEntryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    created_at: datetime

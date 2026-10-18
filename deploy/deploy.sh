@@ -15,6 +15,12 @@ main() {
   docker compose run --rm --no-deps backend \
     /opt/venv-ai/bin/alembic -c /app/db/alembic.ini upgrade head
   docker compose up -d --wait --remove-orphans
+  # Caddy reads its config only at start, and a single-file bind mount keeps
+  # serving the old file once git replaces it, so recreate Caddy (a second of
+  # downtime) only when the Caddyfile it sees differs from the checkout's.
+  if ! docker compose exec -T caddy cat /etc/caddy/Caddyfile | cmp -s - Caddyfile; then
+    docker compose up -d --force-recreate --no-deps caddy
+  fi
   docker image prune -f > /dev/null
   echo "Deployed $(git rev-parse --short HEAD)"
 }

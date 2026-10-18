@@ -13,5 +13,12 @@ export interface User {
   last_login_at: string | null;
 }
 
+/** An address waiting to hear when sign-in opens to everyone. */
+export interface WaitlistEntry {
+  id: number;
+  email: string;
+  created_at: string;
+}
+
 export const hasRole = (user: User | null, minRole: Role): boolean =>
   user != null && ROLES.indexOf(user.role) >= ROLES.indexOf(minRole);

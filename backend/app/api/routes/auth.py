@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from app.models.user import ROLES, User, UserResponse
+from app.models.user import ROLES, User, UserResponse, WaitlistJoin
 from app.services import user_service
 from app.utils.auth import current_user, get_config, safe_next
 
@@ -49,6 +49,8 @@ async def callback(request: Request):
 
     user = await run_in_threadpool(user_service.sign_in, info["email"], info.get("name"))
     request.session.clear()
+    if user is None:
+        return _to_app("/?auth_error=not_invited")
     if not user.is_active:
         return _to_app("/?auth_error=disabled")
     request.session["uid"] = user.id
@@ -85,4 +87,13 @@ def me(user: User = Depends(current_user)):
 @router.post("/logout", status_code=204)
 def logout(request: Request):
     request.session.clear()
+    return Response(status_code=204)
+
+
+@router.post("/waitlist", status_code=204)
+def join_waitlist(payload: WaitlistJoin):
+    """Public, like the rest of /auth: the sign-in page offers it to anyone
+    who isn't invited. Always 204, so it can't be used to probe who has an
+    account."""
+    user_service.join_waitlist(payload.email)
     return Response(status_code=204)

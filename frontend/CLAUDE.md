@@ -7,8 +7,8 @@
 - `TrainingDataQA` (`/training-data`).
 - `PipelineAccuracy` (`/accuracy`).
 - `Library`: legacy.
-- `Users` (`/users`, admin): roles and access.
-- `SignIn`: rendered by `AuthProvider` in place of the app while signed out.
+- `Users` (`/users`, admin): invites (the sign-in allowlist), roles, access, and the waitlist.
+- `SignIn`: rendered by `AuthProvider` in place of the app while signed out. It also holds the public waitlist form for people who aren't invited.
 
 Data access goes through `services/api.ts` plus one hook per resource in `hooks/`. Every call uses `apiFetch`, which adds the `/api` prefix and reloads the page on a 401. `<video src>` and `EventSource` must use `videoUrl()` and `FIGHT_STREAM_URL`, and they authenticate through the same-origin session cookie.
 

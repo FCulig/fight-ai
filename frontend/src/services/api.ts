@@ -4,7 +4,7 @@ import type { Fight, FightPurpose } from '../types/Fight';
 import type { Fighter } from '../types/Fighter';
 import type { FighterFrame } from '../types/FighterFrame';
 import type { Round } from '../types/Round';
-import type { Role, User } from '../types/User';
+import type { Role, User, WaitlistEntry } from '../types/User';
 
 const API = '/api';
 
@@ -47,6 +47,18 @@ export const fetchMe = async (): Promise<MeResult> => {
 
 /** A full-page navigation target, not a fetch: the backend redirects to Google. */
 export const loginUrl = (next: string) => `${API}/auth/login?next=${encodeURIComponent(next)}`;
+
+/** Public, like the rest of /auth, so it uses plain fetch. Always 204 for a
+ * valid address, whether or not it was already listed. */
+export const joinWaitlist = async (email: string): Promise<void> => {
+  const response = await fetch(`${API}/auth/waitlist`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (response.status === 422) throw new Error('Enter a valid email address.');
+  if (!response.ok) throw new Error(await errorDetail(response, 'Failed to join the waitlist'));
+};
 
 export const logout = async (): Promise<void> => {
   await fetch(`${API}/auth/logout`, { method: 'POST' });
@@ -301,7 +313,14 @@ export const fetchUsers = async (): Promise<User[]> => {
   return response.json();
 };
 
-/** Pre-provisions an email so its first sign-in lands with this role. */
+export const fetchWaitlist = async (): Promise<WaitlistEntry[]> => {
+  const response = await apiFetch('/users/waitlist');
+  if (!response.ok) throw new Error(await errorDetail(response, 'Failed to fetch the waitlist'));
+  return response.json();
+};
+
+/** Invites an email: sign-in is refused for addresses without a user row.
+ * The backend also takes the address off the waitlist. */
 export const createUser = async (email: string, role: Role): Promise<User> => {
   const response = await apiFetch('/users/', {
     method: 'POST',

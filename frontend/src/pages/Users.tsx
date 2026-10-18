@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { createUser, fetchUsers, updateUser } from '../services/api';
+import { createUser, fetchUsers, fetchWaitlist, updateUser } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { useWindowWidth } from '../hooks/useWindowWidth';
 import { ROLES } from '../types/User';
-import type { Role, User } from '../types/User';
+import type { Role, User, WaitlistEntry } from '../types/User';
 
 const ROLE_HELP: Record<Role, string> = {
   viewer: 'Watch fights and see accuracy',
@@ -13,7 +13,7 @@ const ROLE_HELP: Record<Role, string> = {
 };
 
 const fieldStyle: React.CSSProperties = {
-  boxSizing: 'border-box', background: 'rgba(0,0,0,0.35)',
+  boxSizing: 'border-box', backgroundColor: 'rgba(0,0,0,0.35)',
   border: '1px solid var(--border-glass)', borderRadius: 6,
   padding: '9px 11px', color: 'var(--text-primary)', fontSize: 13, fontWeight: 500, outline: 'none',
   fontFamily: 'inherit',
@@ -21,8 +21,10 @@ const fieldStyle: React.CSSProperties = {
 
 const byEmail = (a: User, b: User) => a.email.localeCompare(b.email);
 
-const formatLogin = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Never';
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
+const formatLogin = (iso: string | null) => (iso ? formatDate(iso) : 'Never');
 
 export default function Users() {
   const { user: me } = useAuth();
@@ -34,13 +36,43 @@ export default function Users() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('labeller');
   const [adding, setAdding] = useState(false);
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [invitingId, setInvitingId] = useState<number | null>(null);
+  const [justInvited, setJustInvited] = useState<User | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   useEffect(() => {
-    fetchUsers()
-      .then((list) => setUsers([...list].sort(byEmail)))
+    Promise.all([fetchUsers(), fetchWaitlist()])
+      .then(([list, waiting]) => {
+        setUsers([...list].sort(byEmail));
+        setWaitlist(waiting);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : 'Unknown error'))
       .finally(() => setLoading(false));
   }, []);
+
+  // The backend takes an invited address off the waitlist in the same write.
+  const invited = (created: User) => {
+    setUsers((prev) => [...prev, created].sort(byEmail));
+    setWaitlist((prev) => prev.filter((w) => w.email !== created.email));
+    setJustInvited(created);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setJustInvited(null), 6000);
+  };
+
+  const invite = async (entry: WaitlistEntry) => {
+    setError(null);
+    setInvitingId(entry.id);
+    try {
+      invited(await createUser(entry.email, 'viewer'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setInvitingId(null);
+    }
+  };
 
   const change = async (target: User, patch: { role?: Role; is_active?: boolean }) => {
     setError(null);
@@ -60,8 +92,7 @@ export default function Users() {
     setError(null);
     setAdding(true);
     try {
-      const created = await createUser(email.trim(), role);
-      setUsers((prev) => [...prev, created].sort(byEmail));
+      invited(await createUser(email.trim(), role));
       setEmail('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -78,8 +109,8 @@ export default function Users() {
           Users.
         </h1>
         <p style={{ margin: '10px 0 0', fontSize: 13.5, fontWeight: 500, color: 'var(--text-muted)', maxWidth: 640 }}>
-          Anyone who signs in with Google joins as a viewer. Raise their role here, or add an email
-          before their first sign-in so they land with the right role.
+          Sign-in is invite-only: Google sign-in works only for an email listed here. Add someone with
+          the role they should land with, and change it or disable them at any time.
         </p>
       </div>
 
@@ -92,12 +123,12 @@ export default function Users() {
         </label>
         <label style={{ flex: '0 1 180px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span className="label">Role</span>
-          <select value={role} onChange={(e) => setRole(e.target.value as Role)} style={fieldStyle}>
+          <select className="select" value={role} onChange={(e) => setRole(e.target.value as Role)} style={fieldStyle}>
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </label>
         <button type="submit" className="btn-primary" disabled={adding || !email.trim()} style={{ height: 38, padding: '0 18px', fontSize: 13, fontWeight: 600, opacity: adding || !email.trim() ? 0.5 : 1 }}>
-          Add user
+          Invite
         </button>
         <p style={{ flexBasis: '100%', margin: 0, fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>
           {role}: {ROLE_HELP[role]}.
@@ -132,6 +163,7 @@ export default function Users() {
                       <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{u.role}</span>
                     ) : (
                       <select
+                        className="select"
                         value={u.role}
                         disabled={busy}
                         onChange={(e) => change(u, { role: e.target.value as Role })}
@@ -163,6 +195,80 @@ export default function Users() {
             })}
           </tbody>
         </table>
+      </div>
+
+      {justInvited && <InvitedToast user={justInvited} onClose={() => setJustInvited(null)} />}
+
+      <h2 className="font-display" style={{ fontSize: 22, margin: '34px 0 6px', color: 'var(--text-primary)' }}>
+        Waitlist <span className="font-num" style={{ fontSize: 15, color: 'var(--text-muted)' }}>{waitlist.length}</span>
+      </h2>
+      <p style={{ margin: '0 0 14px', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)', maxWidth: 640 }}>
+        People who asked from the sign-in page to hear when Fightlytics opens to everyone. Inviting one
+        adds them as a viewer and takes them off this list.
+      </p>
+      <div className="glass" style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ textAlign: 'left' }}>
+              {['Email', 'Joined', ''].map((h) => (
+                <th key={h} className="label" style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-glass)', whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {!loading && waitlist.length === 0 && (
+              <tr><td colSpan={3} style={{ padding: 16, color: 'var(--text-muted)', fontWeight: 500 }}>Nobody is waiting.</td></tr>
+            )}
+            {waitlist.map((w) => (
+              <tr key={w.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{w.email}</td>
+                <td style={{ padding: '12px 16px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatDate(w.created_at)}</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    className="btn-glass"
+                    disabled={invitingId === w.id}
+                    onClick={() => invite(w)}
+                    style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600 }}
+                  >
+                    Invite as viewer
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/** Fixed to the viewport just under the 64px sticky header, so it shows even
+ * when the invite came from the waitlist further down, without covering the
+ * next row's Invite button. */
+function InvitedToast({ user, onClose }: { user: User; onClose: () => void }) {
+  return (
+    <div style={{ position: 'fixed', left: 0, right: 0, top: 80, zIndex: 50, display: 'flex', justifyContent: 'center', padding: '0 16px', pointerEvents: 'none' }}>
+      <div
+        key={user.id}
+        role="status"
+        className="glass anim-fade-up"
+        style={{
+          pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 14, width: '100%', maxWidth: 460,
+          padding: '14px 14px 14px 18px', background: 'var(--surface-glass-2)', border: '1px solid var(--border-strong)',
+          boxShadow: '0 18px 40px rgba(0,0,0,0.55)',
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--green-500)' }}>check_circle</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Invitation added</div>
+          <div style={{ marginTop: 2, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>
+            {user.email} can now sign in with Google as a {user.role}.
+          </div>
+        </div>
+        <button type="button" className="btn-glass" onClick={onClose} aria-label="Dismiss" style={{ padding: 6, display: 'flex' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+        </button>
       </div>
     </div>
   );

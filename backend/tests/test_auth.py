@@ -15,7 +15,7 @@ os.environ.setdefault("PUBLIC_BASE_URL", "http://localhost:5173")
 os.environ["DEV_LOGIN"] = "1"  # mounts /api/auth/dev-login so it can be tested
 
 from app.main import app  # noqa: E402
-from app.models.user import User, UserCreate  # noqa: E402
+from app.models.user import User, UserCreate, WaitlistEntry  # noqa: E402
 from app.services import event_service, fight_service, user_service  # noqa: E402
 from app.utils import db  # noqa: E402
 from app.utils.auth import current_user, get_config, safe_next  # noqa: E402
@@ -30,6 +30,7 @@ def session_factory(monkeypatch):
     )
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     User.__table__.create(bind=engine)
+    WaitlistEntry.__table__.create(bind=engine)
 
     def fake_run_db_query(fn):
         with SessionLocal() as session:
@@ -54,9 +55,16 @@ def _as(role: str, user_id: int = 1, email: str = "someone@example.com") -> None
 
 # --- sign-in -----------------------------------------------------------------
 
-def test_sign_in_creates_a_viewer(session_factory, monkeypatch):
+def test_sign_in_refuses_an_uninvited_email(session_factory, monkeypatch):
     monkeypatch.delenv("ADMIN_EMAILS", raising=False)
-    user = user_service.sign_in("New.Person@Example.com", "New Person")
+    assert user_service.sign_in("New.Person@Example.com", "New Person") is None
+    assert user_service.list_users() == []
+
+
+def test_sign_in_admits_an_invited_email(session_factory, monkeypatch):
+    monkeypatch.delenv("ADMIN_EMAILS", raising=False)
+    user_service.create_user(UserCreate(email="New.Person@Example.com"))
+    user = user_service.sign_in("new.person@example.com", "New Person")
     assert user.email == "new.person@example.com"
     assert user.role == "viewer"
     assert user.is_active is True
@@ -70,7 +78,7 @@ def test_sign_in_bootstraps_admin_emails(session_factory, monkeypatch):
 
 def test_admin_emails_only_apply_on_creation(session_factory, monkeypatch):
     monkeypatch.delenv("ADMIN_EMAILS", raising=False)
-    user_service.sign_in("late@example.com", None)
+    user_service.create_user(UserCreate(email="late@example.com"))
     monkeypatch.setenv("ADMIN_EMAILS", "late@example.com")
     assert user_service.sign_in("late@example.com", None).role == "viewer"
 
@@ -87,6 +95,31 @@ def test_create_user_rejects_duplicate_email(session_factory):
     user_service.create_user(UserCreate(email="dup@example.com"))
     with pytest.raises(user_service.EmailTaken):
         user_service.create_user(UserCreate(email="DUP@example.com"))
+
+
+# --- waitlist -------------------------------------------------------------------
+
+def test_waitlist_join_is_public_and_idempotent(session_factory, client):
+    for email in ("Fan@Example.com", "fan@example.com"):
+        assert client.post("/api/auth/waitlist", json={"email": email}).status_code == 204
+    assert [e.email for e in user_service.list_waitlist()] == ["fan@example.com"]
+
+
+def test_waitlist_skips_an_invited_email(session_factory):
+    user_service.create_user(UserCreate(email="member@example.com"))
+    user_service.join_waitlist("member@example.com")
+    assert user_service.list_waitlist() == []
+
+
+def test_waitlist_join_rejects_a_non_email(session_factory, client):
+    assert client.post("/api/auth/waitlist", json={"email": "nope"}).status_code == 422
+
+
+def test_inviting_an_email_takes_it_off_the_waitlist(session_factory):
+    user_service.join_waitlist("fan@example.com")
+    user_service.join_waitlist("other@example.com")
+    user_service.create_user(UserCreate(email="FAN@example.com"))
+    assert [e.email for e in user_service.list_waitlist()] == ["other@example.com"]
 
 
 # --- dev login -----------------------------------------------------------------
@@ -208,6 +241,7 @@ def test_viewer_cannot_label(client, method, path, body):
     ("post", "/api/eval-runs/", {"reference_fight_id": 1, "scored_fight_id": 2}),
     ("post", "/api/tracking/video", None),
     ("get", "/api/users/", None),
+    ("get", "/api/users/waitlist", None),
     ("post", "/api/users/", {"email": "x@example.com"}),
     ("patch", "/api/users/2", {"role": "admin"}),
 ])

@@ -1,6 +1,6 @@
 # landing/ — marketing page
 
-A static page: React 18 UMD with in-browser Babel, and no build step. Preview it with the `landing` entry in `.claude/launch.json`.
+A static page: React 18 UMD with in-browser Babel, and no build step. Preview it with the `landing` entry in `.claude/launch.json`, which runs `dev_server.py`.
 
 - **A plain reload can run stale `.jsx`.** In-browser Babel fetches it through the HTTP cache. Before reloading, run `fetch(url, {cache: 'reload'})` on each changed file.
 - **On narrow screens the replay is pinned under the nav, and the layer follows the scroll.** Each step is at least as tall as the screen left below the replay (`--pin-h`, measured in `app/app.jsx`), so wherever the page stops on a step its text is readable. This works only because phones scroll freely; don't add snapping back.
@@ -8,6 +8,8 @@ A static page: React 18 UMD with in-browser Babel, and no build step. Preview it
 - **Every claim must match what the code does today.** Don't add accuracy, latency or throughput figures, and don't describe a live mode as shipped. The owner chose facts over marketing numbers.
 - **`app/data.js` is real pipeline data.** `export_data.py` generates it; run `ai/.venv/bin/python landing/export_data.py` from the repo root. Never hand-edit it. It holds keypoints only and no video frames, because the fight footage isn't ours to publish.
 - **Red and blue always mean corners, and orange is only the brand and CTA colour**, so a strike mark never reads as a corner. Corner blue here is `#4f93ea`, not the app's `#60a5fa`, because the lighter blue fails the dataviz lightness band on this dark surface.
-- **Upload is admin-only in the backend**, so the page's only call to action is signing in, not uploading.
+- **The call to action is the waitlist** (`WaitlistForm` in `app/app.jsx`), because sign-in is invite-only. Sign-in stays as a quieter link for people already invited. Never offer uploading: it's admin-only.
+- **The form posts to its own origin, `/api/auth/waitlist`.** In production Caddy forwards that one path from the landing host to the backend (`deploy/Caddyfile`); locally `dev_server.py` does the same, so start the backend to submit. Don't call the app's hostname from the page: that would need CORS on the backend.
+- **Never send the email address to analytics.** The `waitlist` event carries only `from`.
 - **With a mouse, trackpad or keyboard, each scroll moves exactly one section.** `app/pager.js` does this, reading its stops from each element's `scroll-snap-align` in `app/site.css`, so a new section needs one; without it, the pager jumps straight past the section. The mobile layout (up to 899px wide) and touch screens scroll freely, with no snapping and no pager. Mandatory snapping kept stopping mid-section on phones, so don't turn on `scroll-snap-type` for them. The pager checks width as well as touch because DevTools device mode doesn't always emulate touch.
 - **Analytics is Umami Cloud's free plan and must stay cookieless.** The owner won't show a consent banner, so never add GA, Clarity, session replay or anything else that sets cookies. Each stored event property counts against the monthly event cap, so keep properties to one per event. The website ID is in `index.html`, and the script doesn't load on localhost.
