@@ -1,0 +1,6 @@
+{
+  "name": "fightlytics",
+  "version": "0.0.0",
+  "private": true,
+  "types": "dist/types/.design-sync/pkg/index.d.ts"
+}

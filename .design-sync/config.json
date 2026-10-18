@@ -1,0 +1,91 @@
+{
+  "projectId": "c7593619-1e27-4d18-a6a6-6f8ea9af92a4",
+  "shape": "package",
+  "pkg": "fightlytics",
+  "globalName": "Fightlytics",
+  "buildCmd": "node .design-sync/pkg/build.mjs",
+  "srcDir": "../../frontend/src",
+  "cssEntry": "dist/styles.css",
+  "runtimeFontPrefixes": [
+    "Archivo",
+    "Bebas Neue",
+    "JetBrains Mono",
+    "Material Symbols"
+  ],
+  "docsDir": "docs",
+  "provider": {
+    "component": "AppSurface",
+    "props": {
+      "padding": 0,
+      "style": {
+        "boxShadow": "0 0 0 24px var(--bg-base)"
+      }
+    }
+  },
+  "guidelinesGlob": [],
+  "overrides": {
+    "ConfirmDialog": {
+      "cardMode": "single",
+      "viewport": "640x420"
+    },
+    "FightEndModal": {
+      "cardMode": "single",
+      "viewport": "640x560"
+    },
+    "VideoControls": {
+      "cardMode": "column"
+    },
+    "MatchupCard": {
+      "cardMode": "single",
+      "viewport": "1240x640"
+    },
+    "SummaryTiles": {
+      "cardMode": "single",
+      "viewport": "1040x260"
+    },
+    "KeyboardLegend": {
+      "cardMode": "single",
+      "viewport": "1000x540"
+    },
+    "VersionTrendChart": {
+      "cardMode": "column"
+    },
+    "EventPalette": {
+      "cardMode": "column"
+    },
+    "LiveFeed": {
+      "cardMode": "column"
+    },
+    "HeadlineF1": {
+      "cardMode": "column"
+    },
+    "ConfusionHeatmap": {
+      "cardMode": "column"
+    },
+    "StateDumbbell": {
+      "cardMode": "column"
+    },
+    "WorstList": {
+      "cardMode": "column"
+    },
+    "FighterSelectCard": {
+      "cardMode": "column"
+    },
+    "EdgeRow": {
+      "cardMode": "column"
+    },
+    "FighterOverlay": {
+      "cardMode": "column"
+    },
+    "ModeCard": {
+      "cardMode": "column"
+    },
+    "MiniStat": {
+      "cardMode": "column"
+    },
+    "PaceChart": {
+      "cardMode": "column"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}
