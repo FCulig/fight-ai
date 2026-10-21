@@ -1,0 +1,64 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M5EJRNMBYJ2NBB8CZBAFS7EY",
+  "session_id": "efa961f3-a56a-4969-8dbd-9b5e6bbd044a",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-21T06:35:50.838067Z",
+  "branch": "master",
+  "checkpoints_count": 5,
+  "save_step_count": 1,
+  "files_touched": [
+    ".design-sync/screens/record.mjs"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "b7c7fe22d22f",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 328,
+    "cache_creation_tokens": 515245,
+    "cache_read_tokens": 49110127,
+    "output_tokens": 142213,
+    "api_call_count": 164
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "prompt-skill-claude-code-design-sync-2026-10-18T09:46:13.776739Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "design-sync"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "907cafe9e702",
+      "timestamp": "2026-10-18T09:46:13.776739Z",
+      "native": {
+        "command": "/design-sync"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/design-sync",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-21T06:35:49.619851Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 0,
+    "total_lines_changed": 0,
+    "agent_percentage": 0,
+    "metric_version": 2
+  }
+}
