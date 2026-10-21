@@ -3,19 +3,67 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Fightlytics | Every strike, analyzed</title>
-  <meta name="description" content="Fightlytics tracks both fighters in MMA video, reads the rounds and logs strikes by type, target and fighter, each linked to the frame it happened." />
+  <title>Fightlytics: MMA strike tracking and fight video analysis</title>
+  <meta name="description" content="Fightlytics analyzes MMA fight video: it tracks both fighters, reads the rounds and logs every strike by type, target and fighter, linked to its frame." />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <!-- SITE_URL: the production landing host (LANDING_ADDRESS in deploy/). Change every absolute URL here, in robots.txt and in sitemap.xml together. -->
+  <link rel="canonical" href="https://fightlytics.duckdns.org/" />
+  <meta name="theme-color" content="#0b0b0c" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Fightlytics" />
+  <meta property="og:url" content="https://fightlytics.duckdns.org/" />
   <meta property="og:title" content="Fightlytics | Every strike, analyzed" />
   <meta property="og:description" content="MMA fight video in, a strike log out, with every entry linked to its frame. Built on pose tracking and a strike model trained only on hand-verified labels." />
-  <meta property="og:type" content="website" />
-  <meta name="theme-color" content="#0b0b0c" />
+  <meta property="og:image" content="https://fightlytics.duckdns.org/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Fightlytics: every strike, analyzed. MMA fight video in, a strike log out." />
+  <meta property="og:locale" content="en_US" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Fightlytics | Every strike, analyzed" />
+  <meta name="twitter:description" content="MMA fight video in, a strike log out, with every entry linked to its frame." />
+  <meta name="twitter:image" content="https://fightlytics.duckdns.org/og.png" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://fightlytics.duckdns.org/#org",
+        "name": "Fightlytics",
+        "url": "https://fightlytics.duckdns.org/",
+        "logo": "https://fightlytics.duckdns.org/apple-touch-icon.png"
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://fightlytics.duckdns.org/#website",
+        "name": "Fightlytics",
+        "url": "https://fightlytics.duckdns.org/",
+        "inLanguage": "en",
+        "publisher": { "@id": "https://fightlytics.duckdns.org/#org" }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "Fightlytics",
+        "url": "https://fightlytics.duckdns.org/",
+        "applicationCategory": "SportsApplication",
+        "operatingSystem": "Web",
+        "description": "MMA fight video analysis. Fightlytics tracks both fighters with pose estimation, reads the rounds from the broadcast scoreboard and logs every strike by type, target and fighter, each linked to the frame it happened.",
+        "publisher": { "@id": "https://fightlytics.duckdns.org/#org" }
+      }
+    ]
+  }
+  </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..900&family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_forward,pause,play_arrow&display=block" rel="stylesheet" />
 
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M26 70h56v10c0 4-4 8-8 8H34c-4 0-8-4-8-8z' fill='rgba(255,77,28,0.06)' stroke='%23ff4d1c' stroke-width='6.5' stroke-linejoin='round'/%3E%3Cpath d='M24 34h-8c-6 0-11 5-11 11 0 6 5 10 11 10h8z' fill='rgba(255,77,28,0.12)' stroke='%23ff4d1c' stroke-width='6.5' stroke-linejoin='round'/%3E%3Cpath d='M38 18h32c8 0 14 6 14 14v24c0 8-6 14-14 14H38c-8 0-14-6-14-14V32c0-8 6-14 14-14z' fill='rgba(255,77,28,0.12)' stroke='%23ff4d1c' stroke-width='6.5' stroke-linejoin='round'/%3E%3Cpath d='M40 24v18' stroke='%23ff4d1c' stroke-width='5.5' stroke-linecap='round'/%3E%3Cpath d='M54 24v18' stroke='%23ff4d1c' stroke-width='5.5' stroke-linecap='round'/%3E%3Cpath d='M68 24v18' stroke='%23ff4d1c' stroke-width='5.5' stroke-linecap='round'/%3E%3Cpath d='M38 76h32' stroke='%23ff4d1c' stroke-width='4.5' stroke-linecap='round'/%3E%3Cpath d='M38 83h32' stroke='%23ff4d1c' stroke-width='4.5' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="stylesheet" href="app/site.css" />
 
   <script>
@@ -34,6 +82,38 @@
 </head>
 <body>
   <div id="root"></div>
+  <!-- For crawlers and readers that don't run JavaScript, which see an empty #root otherwise.
+       Mirrors the copy in app/app.jsx; change both together. -->
+  <noscript>
+    <main class="noscript wrap">
+      <h1 class="h1">Every strike, analyzed.</h1>
+      <p class="lede">Feed it fight video. Fightlytics tracks both fighters, reads the rounds and logs strikes by type, target and fighter.</p>
+
+      <h2 class="h3">Two fighters, 17 points each.</h2>
+      <p class="body">A pose model finds both fighters in every frame and places 17 keypoints on each. The referee is filtered out.</p>
+      <h2 class="h3">Red corner, blue corner, every frame.</h2>
+      <p class="body">Corners are read from glove tape and torso colour, not from which side of the cage a fighter is on.</p>
+      <h2 class="h3">Read 1.2 seconds, name the strike.</h2>
+      <p class="body">The strike model reads both skeletons across a 1.2 second window, then names the shot (jab, cross, hook, uppercut, kick or knee) and where it was aimed (head, body or leg).</p>
+      <h2 class="h3">Every strike, one click from its frame.</h2>
+      <p class="body">Each strike lands on the fight timeline with its fighter and frame number. Click one and the video jumps there.</p>
+
+      <h2 class="h3">A whole fight on one line.</h2>
+      <p class="body">Rounds come from the broadcast scoreboard, and walkouts, breaks and replays are left out of the count.</p>
+
+      <h2 class="h3">Trained only on strikes a person confirmed.</h2>
+      <ul class="body">
+        <li><strong>Label:</strong> labellers mark each strike on the frame it happens, with the fighter, type and target.</li>
+        <li><strong>Verify:</strong> a QA pass accepts or rejects every label. Only accepted strikes are used for training.</li>
+        <li><strong>Measure:</strong> each new model is scored on hand-labelled fights it never trained on.</li>
+      </ul>
+
+      <h2 class="h3">Live broadcast feeds, coming later.</h2>
+      <p class="body">Today Fightlytics works on recorded fights. A version that runs on a live feed, for broadcasters, is on the way.</p>
+
+      <p class="body">Fightlytics is invite-only while it&rsquo;s in early access. Turn on JavaScript to join the waitlist. Already invited? <a href="https://app-fightlytics.duckdns.org">Sign in</a>.</p>
+    </main>
+  </noscript>
 
   <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>

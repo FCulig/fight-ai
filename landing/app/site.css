@@ -74,6 +74,12 @@ a { color: inherit; }
 .skip { position: absolute; left: 16px; top: -60px; z-index: var(--z-skip); background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: var(--r-ctl); font-weight: 600; }
 .skip:focus { top: 12px; }
 
+/* index.html's <noscript> copy, for readers and crawlers without JavaScript */
+.noscript { padding-top: 64px; padding-bottom: 64px; }
+.noscript .h3 { margin: 48px 0 12px; }
+.noscript .lede { margin-top: 20px; }
+.noscript ul { padding-left: 1.2em; }
+
 /* ---------- brand lockup (logo.jsx) ---------- */
 .brand { display: inline-flex; align-items: center; gap: 10px; }
 .brand-word { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.055em; text-transform: uppercase; line-height: 0.95; color: var(--ink); }

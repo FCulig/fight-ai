@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<!--
+  Draws og.png (the 1200x630 link-preview card) and apple-touch-icon.png from the page's fonts and real pose
+  output in app/data.js. Dev-only: Caddy doesn't publish it. Open http://localhost:4321/make_images.html, then
+  save each canvas (right click > Save image as) over the file of the same name in landing/.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Fightlytics share images</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..900&family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  body { margin: 24px; background: #222; color: #ccc; font: 14px system-ui; }
+  canvas { display: block; margin: 8px 0 24px; outline: 1px solid #444; }
+</style>
+</head>
+<body>
+<p>og.png</p><canvas id="og" width="1200" height="630"></canvas>
+<p>apple-touch-icon.png</p><canvas id="icon" width="180" height="180"></canvas>
+<script src="app/data.js"></script>
+<script>
+const BG = '#0b0b0c', INK = '#f2f1ee', INK2 = '#c9c7c1', MUTE = '#9a9892', ACCENT = '#ff4d1c', LINE = 'rgba(255,255,255,0.09)';
+const CORNER = ['#ef4444', '#60a5fa'];
+const GLOVE = {
+  fill: ['M26 70h56v10c0 4-4 8-8 8H34c-4 0-8-4-8-8z', 'M24 34h-8c-6 0-11 5-11 11 0 6 5 10 11 10h8z', 'M38 18h32c8 0 14 6 14 14v24c0 8-6 14-14 14H38c-8 0-14-6-14-14V32c0-8 6-14 14-14z'],
+  lines: ['M40 24v18', 'M54 24v18', 'M68 24v18', 'M38 76h32', 'M38 83h32'],
+};
+const BONES = [[5, 7], [7, 9], [6, 8], [8, 10], [5, 6], [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16]];
+const MIN_CONF = 30;
+
+function glove(ctx, x, y, size) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(size / 100, size / 100);
+  ctx.strokeStyle = ACCENT; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  GLOVE.fill.forEach((d, i) => {
+    const p = new Path2D(d);
+    ctx.fillStyle = i === 0 ? 'rgba(255,77,28,0.06)' : 'rgba(255,77,28,0.12)';
+    ctx.fill(p); ctx.lineWidth = 5.5; ctx.stroke(p);
+  });
+  GLOVE.lines.forEach((d, i) => { ctx.lineWidth = i < 3 ? 5 : 4.5; ctx.stroke(new Path2D(d)); });
+  ctx.restore();
+}
+
+function kp(row) {
+  const out = [];
+  for (let j = 0; j < 17; j++) out.push({ x: row[5 + j * 3], y: row[6 + j * 3], c: row[7 + j * 3] });
+  return out;
+}
+
+// the sample where both fighters have the most confident joints
+function bestSample() {
+  const { red, blue } = window.EXCHANGE;
+  let best = 0, score = -1;
+  for (let i = 10; i < Math.min(red.length, blue.length); i++) {
+    if (!red[i] || !blue[i]) continue;
+    const s = [...kp(red[i]), ...kp(blue[i])].filter((p) => p.c >= MIN_CONF).length;
+    if (s > score) { score = s; best = i; }
+  }
+  return best;
+}
+
+function skeleton(ctx, pts, color, map, lw) {
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineCap = 'round'; ctx.lineWidth = lw;
+  BONES.forEach(([a, b]) => {
+    if (pts[a].c < MIN_CONF || pts[b].c < MIN_CONF) return;
+    const p = map(pts[a]), q = map(pts[b]);
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+  });
+  // head: a ring sized from the torso, centred on the confident face points
+  const face = [0, 1, 2, 3, 4].map((j) => pts[j]).filter((p) => p.c >= MIN_CONF);
+  const sh = [pts[5], pts[6]], hip = [pts[11], pts[12]];
+  if (face.length) {
+    const c = map({ x: face.reduce((s, p) => s + p.x, 0) / face.length, y: face.reduce((s, p) => s + p.y, 0) / face.length });
+    const mid = (a) => ({ x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2 });
+    const t = Math.hypot(map(mid(sh)).x - map(mid(hip)).x, map(mid(sh)).y - map(mid(hip)).y);
+    ctx.beginPath(); ctx.arc(c.x, c.y, Math.max(8, t * 0.16), 0, Math.PI * 2); ctx.stroke();
+  }
+  pts.forEach((p, j) => {
+    if (j < 5 || p.c < MIN_CONF) return;
+    const q = map(p);
+    ctx.beginPath(); ctx.arc(q.x, q.y, lw * 0.9, 0, Math.PI * 2); ctx.fill();
+  });
+}
+
+function drawOG() {
+  const ctx = document.getElementById('og').getContext('2d');
+  const W = 1200, H = 630;
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+
+  // brand
+  glove(ctx, 72, 64, 56);
+  ctx.fillStyle = INK; ctx.font = '40px "Bebas Neue"'; ctx.letterSpacing = '2.2px'; ctx.textBaseline = 'middle';
+  ctx.fillText('FIGHTLYTICS', 140, 94);
+  ctx.letterSpacing = '0px';
+
+  // headline
+  // the font shorthand resets fontStretch, so the width goes in the shorthand (75%, near the page's 72%)
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = '800 condensed 112px Archivo';
+  ctx.fillStyle = INK;
+  ctx.fillText('Every strike,', 72, 300);
+  ctx.fillText('analyzed.', 72, 404);
+  ctx.font = '400 30px Archivo'; ctx.fillStyle = INK2;
+  ctx.fillText('MMA fight video in, a strike log out,', 72, 476);
+  ctx.fillText('every entry linked to its frame.', 72, 516);
+
+  // corner key
+  ctx.font = '500 18px "JetBrains Mono"';
+  let x = 72;
+  [['Red corner', CORNER[0]], ['Blue corner', CORNER[1]]].forEach(([label, c]) => {
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x + 6, 568, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = MUTE; ctx.fillText(label, x + 20, 574);
+    x += 20 + ctx.measureText(label).width + 32;
+  });
+
+  // panel with one real frame of pose output
+  const px = 680, py = 64, pw = 448, ph = 502;
+  ctx.fillStyle = '#0f1012'; ctx.strokeStyle = LINE; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(px + 0.5, py + 0.5, pw, ph, 12); ctx.fill(); ctx.stroke();
+  const i = bestSample(), { red, blue } = window.EXCHANGE;
+  const fighters = [kp(red[i]), kp(blue[i])];
+  const all = fighters.flat().filter((p) => p.c >= MIN_CONF);
+  const minX = Math.min(...all.map((p) => p.x)), maxX = Math.max(...all.map((p) => p.x));
+  const minY = Math.min(...all.map((p) => p.y)), maxY = Math.max(...all.map((p) => p.y));
+  const pad = 48, cap = 40;
+  const s = Math.min((pw - pad * 2) / (maxX - minX), (ph - pad * 2 - cap) / (maxY - minY));
+  const ox = px + (pw - (maxX - minX) * s) / 2, oy = py + pad + (ph - pad * 2 - cap - (maxY - minY) * s) / 2;
+  const map = (p) => ({ x: ox + (p.x - minX) * s, y: oy + (p.y - minY) * s });
+  fighters.forEach((pts, c) => skeleton(ctx, pts, CORNER[c], map, 5));
+  ctx.font = '400 15px "JetBrains Mono"'; ctx.fillStyle = MUTE;
+  const frame = window.EXCHANGE.start + i * window.EXCHANGE.step;
+  ctx.fillText('Pose output, frame ' + frame.toLocaleString('en-US'), px + 24, py + ph - 24);
+}
+
+function drawIcon() {
+  const ctx = document.getElementById('icon').getContext('2d');
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, 180, 180);
+  glove(ctx, 26, 22, 132);
+}
+
+document.fonts.load('800 condensed 112px Archivo').then(() => Promise.all([
+  document.fonts.load('40px "Bebas Neue"'), document.fonts.load('400 30px Archivo'), document.fonts.load('500 18px "JetBrains Mono"'),
+])).then(() => { drawOG(); drawIcon(); document.body.dataset.ready = '1'; });
+</script>
+</body>
+</html>

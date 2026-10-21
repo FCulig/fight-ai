@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://fightlytics.duckdns.org/sitemap.xml

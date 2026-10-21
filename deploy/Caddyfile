@@ -2,6 +2,9 @@
 # needs the hostname's DNS A record pointing at this server and ports 80 and
 # 443 open in both the Oracle security list and the VM's iptables (README.md).
 {$SITE_ADDRESS} {
+	# The app is behind sign-in; keep its sign-in page out of search so results
+	# point at the landing page.
+	header X-Robots-Tag "noindex, nofollow"
 	# Compress JSON (a fight's frames are tens of MB) and the SPA. Never the SSE
 	# stream, where buffering would hold back live state updates, and never
 	# video, which is already compressed.
@@ -31,8 +34,9 @@
 	}
 	handle {
 		root * /srv/landing
-		# landing/ also holds CLAUDE.md and the dev scripts; publish only the page.
-		@private not path / /index.html /app/*
+		# landing/ also holds CLAUDE.md and the dev scripts; publish only the page
+		# and the files search engines and link previews fetch.
+		@private not path / /index.html /app/* /robots.txt /sitemap.xml /favicon.svg /apple-touch-icon.png /og.png
 		respond @private 404
 		file_server
 	}
