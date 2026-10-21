@@ -1,0 +1,1 @@
+Should I be using low FPS fight footage as training data? I have couple of 25fps fights and they are horrendeus looking when labeling

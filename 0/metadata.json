@@ -1,0 +1,88 @@
+{
+  "cli_version": "0.10.6",
+  "checkpoint_id": "01M54GH2P8AWR46S8Y2NA2QJ6E",
+  "session_id": "a248f310-2207-46c0-aa67-58fe92d8d557",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-21T06:35:48.11977Z",
+  "branch": "master",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "ai/CLAUDE.md",
+    "ai/fight_processing/fight_processing.py",
+    "ai/pipeline.py",
+    "ai/video_processing/corner_assignment/corner_assignment.py",
+    "ai/video_processing/fighter_detection/fighter_detection.py",
+    "ai/video_processing/fighter_tracking/fighter_tracking.py",
+    "ai/video_processing/scoreboard_overlay/calibration.py",
+    "ai/video_processing/scoreboard_overlay/extraction.py",
+    "db/alembic/__pycache__/env.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/92f72188aec1_create_fight_events_table.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/a1b2c3d4e5f6_add_fights_fighter_frames_rounds.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/b2c3d4e5f6a7_fight_events_fight_id_not_null.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/b7e91f2d3a08_add_keypoints_to_fighter_frames.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/c1d2e3f4a5b6_create_fighters_table.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/c2d3e4f5a6b7_add_fight_corner_fighters.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/c3d4e5f6a7b8_restructure_fight_events.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/c4d5e6f7a8b9_rename_fighter_frames_fighter_id_to_corner.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/d1e2f3a4b5c6_replace_processed_with_state.cpython-314.pyc",
+    "db/alembic/versions/__pycache__/e5f6a7b8c9d0_add_pid_to_fights.cpython-314.pyc",
+    "deploy/README.md",
+    "deploy/worker.sh"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "d593430a516a",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 10,
+    "cache_creation_tokens": 35883,
+    "cache_read_tokens": 332460,
+    "output_tokens": 2288,
+    "api_call_count": 5
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 748,
+      "user_lines_removed": 352,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/settings.local.json": 29,
+        ".claude/skills/add-db-column/SKILL.md": 30,
+        ".claude/skills/add-event-action/SKILL.md": 34,
+        ".claude/skills/check-processed-fight/SKILL.md": 39,
+        ".claude/skills/measure-pipeline-change/SKILL.md": 49,
+        ".claude/skills/retrain-strike-model/SKILL.md": 48,
+        ".claude/skills/web-design-guidelines/SKILL.md": 39,
+        "ai/CLAUDE.md": 2,
+        "ai/fight_processing/fight_processing.py": 120,
+        "ai/pipeline.py": 42,
+        "ai/progress.py": 78,
+        "ai/video_processing/corner_assignment/corner_assignment.py": 52,
+        "ai/video_processing/fighter_detection/fighter_detection.py": 35,
+        "ai/video_processing/fighter_tracking/fighter_tracking.py": 8,
+        "ai/video_processing/scoreboard_overlay/calibration.py": 57,
+        "ai/video_processing/scoreboard_overlay/extraction.py": 76,
+        "deploy/README.md": 1,
+        "deploy/worker.sh": 9
+      },
+      "user_removed_per_file": {
+        "ai/CLAUDE.md": 1,
+        "ai/fight_processing/fight_processing.py": 114,
+        "ai/pipeline.py": 14,
+        "ai/video_processing/corner_assignment/corner_assignment.py": 52,
+        "ai/video_processing/fighter_detection/fighter_detection.py": 34,
+        "ai/video_processing/fighter_tracking/fighter_tracking.py": 8,
+        "ai/video_processing/scoreboard_overlay/calibration.py": 54,
+        "ai/video_processing/scoreboard_overlay/extraction.py": 73,
+        "deploy/README.md": 1,
+        "deploy/worker.sh": 1
+      }
+    }
+  ]
+}
