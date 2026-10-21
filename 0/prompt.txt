@@ -1,0 +1,5 @@
+I would like you to extend the possible strikes by splitting the elbow into left and right elbow
+
+---
+
+Can you also change clinch knee to be just a knee? When fight state is clich then it will be a clinch, when not, then it will be a regular knee
