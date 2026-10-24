@@ -1,0 +1,1 @@
+Currently I am not able to delete the excluded corner span in the labeling player. Make it so that I can do it. I think BE supports it, but FE does not.
