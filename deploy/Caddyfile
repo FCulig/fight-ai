@@ -36,7 +36,7 @@
 		root * /srv/landing
 		# landing/ also holds CLAUDE.md and the dev scripts; publish only the page
 		# and the files search engines and link previews fetch.
-		@private not path / /index.html /app/* /robots.txt /sitemap.xml /favicon.svg /apple-touch-icon.png /og.png
+		@private not path / /index.html /app/* /privacy.html /robots.txt /sitemap.xml /favicon.svg /apple-touch-icon.png /og.png
 		respond @private 404
 		file_server
 	}

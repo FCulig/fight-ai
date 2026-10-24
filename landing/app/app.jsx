@@ -266,7 +266,7 @@ function Footer() {
       <div className="wrap foot-in">
         <LogoLockup size={20} wordSize={15} />
         <span>&copy; 2026 Fightlytics</span>
-        <div className="foot-links"><a href="#how">How it works</a><a href="#fight">Output</a><a href="#method">Method</a></div>
+        <div className="foot-links"><a href="#how">How it works</a><a href="#fight">Output</a><a href="#method">Method</a><a href="/privacy.html">Privacy</a></div>
       </div>
     </footer>
   );

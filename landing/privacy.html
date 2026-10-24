@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy | Fightlytics</title>
+  <meta name="description" content="What Fightlytics collects, why, where it's kept, and how to get it deleted." />
+  <!-- SITE_URL: keep in step with index.html, robots.txt and sitemap.xml. -->
+  <link rel="canonical" href="https://fightlytics.duckdns.org/privacy.html" />
+  <meta name="theme-color" content="#0b0b0c" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..900&family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="app/site.css" />
+  <link rel="stylesheet" href="app/privacy.css" />
+
+  <script>
+    // Same cookieless Umami snippet as index.html; local previews never load it.
+    (function () {
+      var UMAMI_WEBSITE_ID = '66808aca-dcd7-4357-92e6-9c7e80d1d9d6';
+      if (!UMAMI_WEBSITE_ID || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return;
+      var s = document.createElement('script');
+      s.defer = true;
+      s.src = 'https://cloud.umami.is/script.js';
+      s.setAttribute('data-website-id', UMAMI_WEBSITE_ID);
+      document.head.appendChild(s);
+    })();
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <nav class="nav" aria-label="Main">
+    <div class="nav-in">
+      <a href="/" class="nav-brand" aria-label="Fightlytics home">
+        <span class="brand"><img src="/favicon.svg" width="26" height="26" alt="" /><span class="brand-word" style="font-size: 19px">fightlytics</span></span>
+      </a>
+      <a href="/" class="pv-nav-back">Back to home</a>
+    </div>
+  </nav>
+
+  <main class="pv" id="main">
+    <div class="pv-hero">
+      <span class="pv-eyebrow">Last updated 19 October 2026</span>
+      <h1 class="pv-h1">Privacy.</h1>
+      <p>Fightlytics is a free-time project, not a company. This page explains what it collects, why, where it&rsquo;s kept, and how to get it deleted. The short version: only what&rsquo;s needed to run the waitlist and the app. No ads, no selling data, and your fight videos are never used for training unless you say yes.</p>
+    </div>
+
+    <nav class="pv-toc" aria-label="On this page">
+      <span class="pv-toc-label">On this page</span>
+      <a href="#glance">At a glance</a>
+      <a href="#collect">What we collect</a>
+      <a href="#why">Why, and legal basis</a>
+      <a href="#videos">Fight videos</a>
+      <a href="#who">Who handles it</a>
+      <a href="#keep">How long we keep it</a>
+      <a href="#rights">Your rights</a>
+      <a href="#cookies">Cookies</a>
+      <a href="#age">Age</a>
+      <a href="#changes">Changes</a>
+      <a href="#contact">Contact</a>
+    </nav>
+
+    <div class="pv-body">
+      <div class="pv-glance" id="glance">
+        <div><b>Waitlist</b><span>Your email address, and whether you ticked monthly updates.</span></div>
+        <div><b>Account</b><span>Your name, email and profile picture from Google sign-in. No passwords stored.</span></div>
+        <div><b>Videos</b><span>Private to you. Kept until you delete them. Used for training only if you opt in.</span></div>
+        <div><b>Where</b><span>Servers in the EU. Analytics are cookieless and don&rsquo;t identify you.</span></div>
+      </div>
+
+      <section id="collect">
+        <span class="pv-num">01</span>
+        <h2>What we collect.</h2>
+        <ul>
+          <li><strong>Waitlist:</strong> email address, signup date, and your monthly-updates choice.</li>
+          <li><strong>Account:</strong> when you sign in with Google, we receive your name, email address and profile picture. Google handles your password; we never see it.</li>
+          <li><strong>Your content:</strong> fight videos you upload, and the analyses, labels and notes created from them.</li>
+          <li><strong>Technical data:</strong> IP address and browser details in server logs, kept briefly for security.</li>
+          <li><strong>Usage statistics:</strong> anonymous page views via Umami. No cookies, and no way to tell who you are.</li>
+        </ul>
+      </section>
+
+      <section id="why">
+        <span class="pv-num">02</span>
+        <h2>Why, and legal basis.</h2>
+        <p>Under the GDPR, every use of your data needs a legal basis. Here&rsquo;s ours:</p>
+        <table class="pv-tbl">
+          <thead><tr><th>Purpose</th><th>Legal basis</th></tr></thead>
+          <tbody>
+            <tr><td>Waitlist and invite emails</td><td>Steps you asked us to take before using the service (Art. 6(1)(b))</td></tr>
+            <tr><td>Running your account and analysing your videos</td><td>Providing the service you signed up for (Art. 6(1)(b))</td></tr>
+            <tr><td>Monthly product updates</td><td>Your consent (Art. 6(1)(a)). Unsubscribe from any email.</td></tr>
+            <tr><td>Improving models with your videos</td><td>Your consent (Art. 6(1)(a)). Off unless you turn it on.</td></tr>
+            <tr><td>Security logs and anonymous statistics</td><td>Legitimate interest in keeping the site safe and working (Art. 6(1)(f))</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="videos">
+        <span class="pv-num">03</span>
+        <h2>Fight videos.</h2>
+        <p>Videos and analyses are <strong>private to your account</strong>. There&rsquo;s no sharing or public profile.</p>
+        <p>We use them only to produce your analysis. If you turn on <strong>&ldquo;Help improve Fightlytics&rdquo;</strong>, your videos and labels may also be used to train our detection models. You can turn it off any time; future training then excludes your data.</p>
+        <p>Videos often show other people. Only upload footage you have the right to use. If you appear in a video someone else uploaded and want it removed, contact us.</p>
+      </section>
+
+      <section id="who">
+        <span class="pv-num">04</span>
+        <h2>Who handles it.</h2>
+        <p>We don&rsquo;t sell or share your data. These services process it on our behalf:</p>
+        <table class="pv-tbl">
+          <thead><tr><th>Service</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Oracle Cloud</td><td>Hosts the app, database, videos and our own email server. EU region.</td></tr>
+            <tr><td>Google</td><td>Sign-in. Google&rsquo;s own privacy policy applies to your Google account.</td></tr>
+            <tr><td>Umami Cloud</td><td>Anonymous, cookieless page statistics.</td></tr>
+          </tbody>
+        </table>
+        <p>Emails are sent from our own mail server, not a third-party newsletter tool.</p>
+      </section>
+
+      <section id="keep">
+        <span class="pv-num">05</span>
+        <h2>How long we keep it.</h2>
+        <ul>
+          <li><strong>Waitlist email:</strong> until you unsubscribe or ask us to delete it.</li>
+          <li><strong>Account data:</strong> until you close your account.</li>
+          <li><strong>Videos and analyses:</strong> until you delete them, or close your account.</li>
+          <li><strong>Server logs:</strong> a short period for security, then deleted.</li>
+        </ul>
+        <p>If the project shuts down, everything is deleted.</p>
+      </section>
+
+      <section id="rights">
+        <span class="pv-num">06</span>
+        <h2>Your rights.</h2>
+        <p>You can ask to <strong>see</strong>, <strong>correct</strong>, <strong>delete</strong> or <strong>download</strong> your data, to <strong>restrict</strong> or <strong>object</strong> to how it&rsquo;s used, and to <strong>withdraw consent</strong> at any time. Email us and we&rsquo;ll reply within 30 days.</p>
+        <p>If you&rsquo;re unhappy with how we handle your data, you can complain to the data protection authority in your EU country.</p>
+      </section>
+
+      <section id="cookies">
+        <span class="pv-num">07</span>
+        <h2>Cookies.</h2>
+        <p>We set one essential cookie to keep you signed in. No tracking or advertising cookies, so there&rsquo;s no cookie banner.</p>
+      </section>
+
+      <section id="age">
+        <span class="pv-num">08</span>
+        <h2>Age.</h2>
+        <p>There&rsquo;s no minimum age to use Fightlytics. If you&rsquo;re under 16 (or your country&rsquo;s age of digital consent), ask a parent or guardian before signing up or uploading videos.</p>
+      </section>
+
+      <section id="changes">
+        <span class="pv-num">09</span>
+        <h2>Changes.</h2>
+        <p>If this page changes in a way that matters, we&rsquo;ll update the date at the top and email account holders before it takes effect.</p>
+      </section>
+
+      <div class="pv-contact" id="contact">
+        <p><b>Questions or requests?</b>Write to us and a real person will answer.</p>
+        <a class="btn" href="mailto:filip.culig@gmail.com">filip.culig@gmail.com</a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap foot-in">
+      <span>&copy; 2026 Fightlytics</span>
+      <div class="foot-links"><a href="/">Home</a><a href="#main">Back to top</a></div>
+    </div>
+  </footer>
+</body>
+</html>

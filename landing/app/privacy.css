@@ -1,0 +1,52 @@
+/* app/privacy.css — privacy.html, on top of site.css's tokens, nav and footer. */
+.pv-nav-back {
+  display: inline-flex; align-items: center; min-height: 34px; padding: 0 14px; margin-left: auto;
+  border: 1px solid var(--line-2); border-radius: var(--r-ctl); color: var(--ink);
+  font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap; transition: background 0.15s;
+}
+.pv-nav-back:hover { background: rgba(255, 255, 255, 0.06); }
+
+.pv { max-width: 1120px; margin: 0 auto; padding: 72px 28px 120px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 72px; }
+.pv-hero { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 18px; max-width: 760px; }
+.pv-eyebrow { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 12px; font-weight: 500; color: var(--mute); }
+.pv-h1 { margin: 0; font-size: clamp(56px, 8vw, 96px); line-height: 1; font-weight: 800; font-stretch: 72%; letter-spacing: -0.01em; color: var(--ink); }
+.pv-hero p { margin: 0; font-size: 17px; line-height: 1.6; color: var(--ink-2); text-wrap: pretty; }
+
+.pv-toc { position: sticky; top: calc(var(--nav-h) + 28px); align-self: start; display: flex; flex-direction: column; gap: 2px; }
+.pv-toc-label { margin-bottom: 10px; font-size: 11px; font-weight: 500; color: var(--mute); }
+.pv-toc a { font-size: 13.5px; font-weight: 500; color: var(--mute); text-decoration: none; padding: 6px 0 6px 12px; margin-left: -14px; border-left: 2px solid transparent; transition: color 0.15s; }
+.pv-toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+
+.pv-body { display: flex; flex-direction: column; gap: 56px; max-width: 720px; }
+.pv-glance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-panel); overflow: hidden; }
+.pv-glance div { background: var(--panel); padding: 22px 24px; display: flex; flex-direction: column; gap: 6px; }
+.pv-glance b { font-size: 15px; font-weight: 600; color: var(--ink); }
+.pv-glance span { font-size: 14px; line-height: 1.55; color: var(--ink-2); }
+
+.pv section { display: flex; flex-direction: column; gap: 14px; }
+.pv-num { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 12px; color: var(--accent); }
+.pv h2 { margin: 0; font-size: 34px; line-height: 1; font-weight: 800; font-stretch: 72%; letter-spacing: -0.01em; color: var(--ink); text-wrap: balance; }
+.pv section p, .pv section li { margin: 0; font-size: 15.5px; line-height: 1.7; color: var(--ink-2); text-wrap: pretty; }
+.pv section ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.pv strong { color: var(--ink); font-weight: 600; }
+
+.pv-tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.pv-tbl th { text-align: left; font: 500 12px/1.4 'JetBrains Mono', ui-monospace, Menlo, monospace; color: var(--mute); padding: 0 16px 10px 0; border-bottom: 1px solid var(--line-2); }
+.pv-tbl td { vertical-align: top; padding: 14px 16px 14px 0; border-bottom: 1px solid var(--line); color: var(--ink-2); line-height: 1.55; }
+.pv-tbl td:first-child { color: var(--ink); font-weight: 600; width: 30%; }
+
+.pv-contact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 28px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-panel); }
+.pv-contact p { margin: 0; font-size: 15px; color: var(--ink-2); }
+.pv-contact b { display: block; font-size: 20px; color: var(--ink); margin-bottom: 4px; }
+.pv-contact .btn { height: 40px; font-size: 13.5px; }
+
+@media (max-width: 899px) {
+  .pv-nav-back { margin-left: 0; }
+}
+@media (max-width: 860px) {
+  .pv { grid-template-columns: minmax(0, 1fr); gap: 48px; padding: 48px 16px 80px; }
+  .pv-toc { display: none; }
+  .pv-glance { grid-template-columns: minmax(0, 1fr); }
+  .pv-tbl td:first-child { width: 38%; }
+  .pv-contact .btn { white-space: normal; overflow-wrap: anywhere; }
+}
