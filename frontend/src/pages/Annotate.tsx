@@ -298,6 +298,7 @@ export default function Annotate() {
     try {
       await deleteEvent(fightId, spanId);
       setAllEvents(prev => prev.filter(s => s.id !== spanId));
+      if (selectedEventIdRef.current === spanId) setSelectedEventId(null);
       for (const [kind, id] of Object.entries(openSpanRef.current)) {
         if (id === spanId) delete openSpanRef.current[kind as SpanKind];
       }
@@ -493,8 +494,12 @@ export default function Annotate() {
 
   // stable "latest callback" ref so the global keydown listener (registered once)
   // always calls the current render's closures, without re-registering constantly
-  const fnsRef = useRef({ togglePlay, stepFrame, logTool, undo, setSelected, toggleSpan, removeEvent, addRound });
-  fnsRef.current = { togglePlay, stepFrame, logTool, undo, setSelected, toggleSpan, removeEvent, addRound };
+  // The timeline selects point events and span blocks alike; a span goes
+  // through removeSpan so a deleted round renumbers the rest.
+  const removeSelected = (id: number) => (spans.some(s => s.id === id) ? removeSpan(id) : removeEvent(id));
+
+  const fnsRef = useRef({ togglePlay, stepFrame, logTool, undo, setSelected, toggleSpan, removeSelected, addRound });
+  fnsRef.current = { togglePlay, stepFrame, logTool, undo, setSelected, toggleSpan, removeSelected, addRound };
 
   useEffect(() => {
     if (!ready) return;
@@ -528,7 +533,7 @@ export default function Annotate() {
       // one binding that branches on selection, not two separate keys.
       if (k === 'Backspace' || k === 'Delete') {
         e.preventDefault();
-        if (selectedEventIdRef.current != null) fns.removeEvent(selectedEventIdRef.current);
+        if (selectedEventIdRef.current != null) fns.removeSelected(selectedEventIdRef.current);
         else fns.undo();
         return;
       }

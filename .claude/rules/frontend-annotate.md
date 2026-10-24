@@ -24,6 +24,7 @@ paths:
 - **`round`** spans are seeded server-side from `rounds` on first fetch. They show as draggable blocks in the Rounds lane, and edge-drag → `onUpdateSpan` → `PUT frame/end_frame`.
 - **`K` (or the Rounds lane `+`) adds a round** at the playhead: it splits the round span it falls in, or else runs to the next round. After any round add or delete, `renumberRounds` rewrites `value` to the span's 1-based order, because eval and export read `value` as the round number.
 - **`corner_swap` and `excluded`** are start/end toggles. `openSpanRef` holds the in-flight id for each kind: the first press creates the span with `end_frame=null`, and the second press `PUT`s `end_frame`. An open span draws dashed up to the playhead.
+- **Every span block is deletable, open or closed**: its ✕ button, or click to select it and press Delete. The Delete key routes through `removeSelected`, which sends spans to `removeSpan` so deleting a round renumbers the rest. Short spans are too narrow for the ✕ at fit zoom, so selection is the path that always works.
 
 ## Finish and re-edit
 - **Finish Labeling** is gated server-side: it returns 409 until every round has a confirmed `round` label. Don't duplicate the check client-side. On success it returns to Player with `replace`, so Back can't land on Annotate's "already labeled" screen.

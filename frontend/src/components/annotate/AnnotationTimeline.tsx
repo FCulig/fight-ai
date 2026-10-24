@@ -250,10 +250,13 @@ export default function AnnotationTimeline({
 
   const playX = xFor(currentFrame);
 
-  // A span block with draggable edges (round/corner_swap) or a plain block
-  // with a delete button (corner_swap/excluded). `end_frame == null` means
-  // the start/end toggle is still open — draw it running to the playhead.
-  const SpanBlock = ({ s, top, h, deletable }: { s: Event; top: number; h: number; deletable: boolean }) => {
+  // A span block with draggable edges and a delete button. Clicking it
+  // selects it, so Delete removes it even when it's too narrow to show the
+  // button. `end_frame == null` means the start/end toggle is still open —
+  // draw it running to the playhead. Called as a function, not rendered as
+  // <SpanBlock>: a component defined in render remounts every frame during
+  // playback, and a remounted button never receives its click.
+  const spanBlock = ({ s, top, h }: { s: Event; top: number; h: number }) => {
     const dragging = dragRef.current?.id === s.id;
     const start = dragging && dragRef.current?.edge === 'start' && dragFrame != null ? dragFrame : s.frame;
     const end = dragging && dragRef.current?.edge === 'end' && dragFrame != null
@@ -265,16 +268,22 @@ export default function AnnotationTimeline({
     // SpanBlock only ever receives round/corner_swap/excluded rows (see the
     // `spans` prop, always pre-filtered to kind !== 'point' by the caller).
     const c = SPAN_COLOR[s.kind as SpanKind];
+    const selected = s.id === selectedEventId;
+    const label = s.value ? `${s.kind} — ${s.value}` : s.kind;
     return (
       <div
+        key={s.kind + s.id}
+        onPointerDown={ev => ev.stopPropagation()}
+        onClick={ev => { ev.stopPropagation(); onSelectEvent(s.id); }}
         style={{
-          position: 'absolute', top, left: x0, width: w, height: h, borderRadius: 5, zIndex: 3,
+          position: 'absolute', top, left: x0, width: w, height: h, borderRadius: 5, zIndex: selected ? 6 : 3,
           background: `color-mix(in srgb, ${c} ${open ? 10 : 16}%, transparent)`,
           border: `1px solid color-mix(in srgb, ${c} ${open ? 55 : 38}%, transparent)`,
           borderStyle: open ? 'dashed' : 'solid',
-          display: 'flex', alignItems: 'center', overflow: 'hidden',
+          boxShadow: selected ? `0 0 0 2px #fff, 0 0 0 3.5px ${c}` : 'none',
+          display: 'flex', alignItems: 'center', overflow: 'hidden', cursor: 'pointer',
         }}
-        title={s.value ? `${s.kind} — ${s.value}` : s.kind}
+        title={selected ? `${label} · Delete to remove` : label}
       >
         <div
           onPointerDown={startEdgeDrag(s.id, 'start')}
@@ -303,20 +312,18 @@ export default function AnnotationTimeline({
             {s.kind === 'round' ? `R${s.value ?? ''}` : s.value ?? s.kind.toUpperCase()}{open ? '…' : ''}
           </span>
         )}
-        {deletable && !open && (
-          <button
-            onPointerDown={ev => ev.stopPropagation()}
-            onClick={ev => { ev.stopPropagation(); onDeleteSpan(s.id); }}
-            title="Delete"
-            style={{
-              position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14,
-              borderRadius: 4, border: 'none', background: 'rgba(0,0,0,0.35)', color: c, cursor: 'pointer',
-              display: 'grid', placeItems: 'center', padding: 0, zIndex: 5,
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 10 }}>close</span>
-          </button>
-        )}
+        <button
+          onPointerDown={ev => ev.stopPropagation()}
+          onClick={ev => { ev.stopPropagation(); onDeleteSpan(s.id); }}
+          title="Delete"
+          style={{
+            position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14,
+            borderRadius: 4, border: 'none', background: 'rgba(0,0,0,0.35)', color: c, cursor: 'pointer',
+            display: 'grid', placeItems: 'center', padding: 0, zIndex: 5,
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 10 }}>close</span>
+        </button>
       </div>
     );
   };
@@ -391,9 +398,7 @@ export default function AnnotationTimeline({
 
           <div onPointerDown={startScrub} style={{ position: 'absolute', top: TL.ruler, left: 0, width: '100%', height: totalH - TL.ruler, cursor: 'ew-resize', zIndex: 1 }} />
 
-          {roundSpans.map(s => (
-            <SpanBlock key={'rs' + s.id} s={s} top={TL.ruler + 4} h={TL.round - 8} deletable />
-          ))}
+          {roundSpans.map(s => spanBlock({ s, top: TL.ruler + 4, h: TL.round - 8}))}
 
           {segs.map(s => {
             const c = s.state === 'GROUND' ? 'var(--state-ground)' : s.state === 'CLINCH' ? 'var(--state-clinch)' : 'var(--state-striking)';
@@ -439,12 +444,8 @@ export default function AnnotationTimeline({
             );
           })}
 
-          {cornerSwapSpans.map(s => (
-            <SpanBlock key={'cs' + s.id} s={s} top={spansTop + 3} h={TL.span - 6} deletable />
-          ))}
-          {excludedSpans.map(s => (
-            <SpanBlock key={'ex' + s.id} s={s} top={spansTop + TL.span + 3} h={TL.span - 6} deletable />
-          ))}
+          {cornerSwapSpans.map(s => spanBlock({ s, top: spansTop + 3, h: TL.span - 6}))}
+          {excludedSpans.map(s => spanBlock({ s, top: spansTop + TL.span + 3, h: TL.span - 6}))}
 
           {roundEv.map(e => {
             const fe = e.action === 'fight_end';
